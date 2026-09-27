@@ -25,6 +25,8 @@ import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 import '../widgets/button.dart';
 import '../../common/widgets/login.dart';
+import '../../common/support_ticket_listener.dart';
+import '../../common/widgets/support_dialog.dart';
 
 class DesktopHomePage extends StatefulWidget {
   const DesktopHomePage({Key? key}) : super(key: key);
@@ -60,15 +62,26 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget build(BuildContext context) {
     super.build(context);
     final isIncomingOnly = bind.isIncomingOnly();
-    return _buildBlock(
-        child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        buildLeftPane(context),
-        if (!isIncomingOnly) const VerticalDivider(width: 1),
-        if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
-      ],
-    ));
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.keyH,
+            control: true, alt: true): () {
+          _openSupportDialog();
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: _buildBlock(
+            child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            buildLeftPane(context),
+            if (!isIncomingOnly) const VerticalDivider(width: 1),
+            if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
+          ],
+        )),
+      ),
+    );
   }
 
   Widget _buildBlock({required Widget child}) {
@@ -278,8 +291,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             child: Icon(
               Icons.more_vert_outlined,
               size: 20,
-              color:
-                  hover.value ? textColor : textColor?.withOpacity(0.5),
+              color: hover.value ? textColor : textColor?.withOpacity(0.5),
             ),
           ),
         ),
@@ -426,27 +438,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   void _openSupportDialog() {
-    if (Platform.isWindows) {
-      final candidates = [
-        '${Platform.environment['ProgramFiles']}\\RustDesk\\support_dialog.ps1',
-        '${Platform.environment['ProgramFiles(x86)']}\\RustDesk\\support_dialog.ps1',
-        'C:\\Program Files\\RustDesk\\support_dialog.ps1',
-        'C:\\Program Files (x86)\\RustDesk\\support_dialog.ps1',
-      ];
-      for (final p in candidates) {
-        if (File(p).existsSync()) {
-          Process.start('powershell.exe', [
-            '-WindowStyle',
-            'Hidden',
-            '-ExecutionPolicy',
-            'Bypass',
-            '-File',
-            p,
-          ]);
-          return;
-        }
-      }
-    }
+    showSupportRequestDialog(context);
   }
 
   buildTip(BuildContext context) {
@@ -756,6 +748,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void initState() {
     super.initState();
+    SupportTicketListener.instance.initClientWatcher();
     _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
       await gFFI.serverModel.fetchID();
       final error = await bind.mainGetError();
