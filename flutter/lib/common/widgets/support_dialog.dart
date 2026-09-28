@@ -260,6 +260,22 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
     });
 
     try {
+      if (_deviceId.isEmpty) {
+        try {
+          final id = await bind.mainGetMyId();
+          _deviceId = id.replaceAll(' ', '');
+        } catch (_) {}
+      }
+
+      if (_deviceId.isEmpty) {
+        setState(() {
+          _isSubmitting = false;
+          _errorMessage =
+              'Chưa lấy được ID máy trạm RustDesk. Vui lòng thử lại sau vài giây!';
+        });
+        return;
+      }
+
       var apiServer = await bind.mainGetApiServer();
       if (apiServer.isEmpty) {
         apiServer = 'http://172.16.3.28:21114';
@@ -271,6 +287,11 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
 
       final url = Uri.parse('$apiServer/api/support/ticket');
       final request = http.MultipartRequest('POST', url);
+
+      final token = bind.mainGetLocalOption(key: 'access_token');
+      if (token.isNotEmpty) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
 
       request.fields['device_id'] = _deviceId;
       request.fields['hostname'] = _hostname;
@@ -291,10 +312,12 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
       }
 
       for (final file in _attachedFiles) {
-        request.files.add(await http.MultipartFile.fromPath(
-          'attachments',
-          file.path,
-        ));
+        if (file.existsSync()) {
+          request.files.add(await http.MultipartFile.fromPath(
+            'attachments',
+            file.path,
+          ));
+        }
       }
 
       final streamedResponse =
