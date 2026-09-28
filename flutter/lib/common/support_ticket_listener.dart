@@ -123,9 +123,13 @@ class SupportTicketListener {
     _isAdminChecking = true;
 
     try {
-      final apiServer = await bind.mainGetApiServer();
+      var apiServer = await bind.mainGetApiServer();
       if (apiServer.isEmpty) {
         return;
+      }
+      if (!apiServer.startsWith('http://') &&
+          !apiServer.startsWith('https://')) {
+        apiServer = 'http://$apiServer';
       }
 
       final queryParam =
@@ -264,8 +268,12 @@ class SupportTicketListener {
     _isClientChecking = true;
 
     try {
-      final apiServer = await bind.mainGetApiServer();
+      var apiServer = await bind.mainGetApiServer();
       if (apiServer.isEmpty) return;
+      if (!apiServer.startsWith('http://') &&
+          !apiServer.startsWith('https://')) {
+        apiServer = 'http://$apiServer';
+      }
 
       final myId = await bind.mainGetMyId();
       if (myId.isEmpty) return;
