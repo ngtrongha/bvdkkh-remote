@@ -1,4 +1,16 @@
-# RustDesk Guide
+# BVĐKKH - Remoter Guide (RustDesk)
+
+## Project Context & Developer
+- **Project:** BVĐKKH - Remoter
+- **Lead Developer:** Nguyễn Trọng Hà
+- **Email / Contact:** trongha.dev@gmail.com
+- **Organization / Unit:** Tổ CNTT - Bệnh viện Đa khoa tỉnh Khánh Hòa
+- **Copyright Header Convention:** Every new or updated source file must have the copyright header:
+  ```text
+  // Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+  // Project: BVĐKKH - Remoter
+  // Author: Nguyễn Trọng Hà
+  ```
 
 ## Project Layout
 
