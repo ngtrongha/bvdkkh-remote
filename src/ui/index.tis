@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 if (is_osx) view.windowBlurbehind = #light;
 stdout.println("current platform:", OS);
 stdout.println("is_xfce: ", is_xfce);
@@ -598,20 +602,23 @@ class MyIdMenu: Reactor.Component {
 
     function showAbout() {
         var name = handler.get_app_name();
-        msgbox("custom-nocancel-nook-hasclose", translate("About") + " " + name, "<div style='line-height: 2em'> \
-            <div>Version: " + handler.get_version() + " \
-            <div>Fingerprint: " + handler.get_fingerprint() + " \
-            <div .link .custom-event url='https://rustdesk.com/privacy.html'>" + translate("Privacy Statement") + "</div> \
-            <div .link .custom-event url='https://rustdesk.com'>" + translate("Website") + "</div> \
-	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2026 Purslane Tech Pte. Ltd.\
-            <br />" + handler.get_license() + " \
-            <p style='font-weight: bold'>" + translate("Slogan_tip") + "</p>\
-            </div>\
+        msgbox("custom-nocancel-nook-hasclose", translate("About") + " " + name, "<div style='line-height: 1.8em'> \
+            <div>Version: " + handler.get_version() + "</div> \
+            <div>Fingerprint: " + handler.get_fingerprint() + "</div> \
+	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em; border-radius: 4px;'> \
+                <div style='font-size: 14px; font-weight: bold;'>BỆNH VIỆN ĐA KHOA KHÁNH HÒA</div> \
+                <div>Đơn vị: Tổ Công nghệ thông tin</div> \
+                <div>Phần mềm điều khiển máy tính từ xa nội bộ (BVĐKKH - Remoter)</div> \
+                <hr style='border: 0; border-top: 1px solid rgba(255,255,255,0.3); margin: 8px 0;' /> \
+                <div><b>Lead Developer:</b> Nguyễn Trọng Hà</div> \
+                <div><b>Email:</b> trongha.dev@gmail.com</div> \
+                <div style='margin-top: 6px; font-size: 11px; opacity: 0.8;'>Copyright &copy; 2026 Nguyễn Trọng Hà. All rights reserved.</div> \
+            </div> \
         </div>", "", function(el) {
             if (el && el.attributes) {
                 handler.open_url(el.attributes['url']);
             };
-        }, 400, get_msgbox_width());
+        }, 450, get_msgbox_width());
     }
 
     event click $(menu#config-options>li) (_, me) {

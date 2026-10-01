@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -2658,9 +2662,12 @@ class _AboutState extends State<_About> {
                   child: Text('${translate('ID')}: $myId')
                       .marginSymmetric(vertical: 4.0)),
               Container(
-                decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2c8cff),
+                  borderRadius: BorderRadius.circular(6),
+                ),
                 padding:
-                    const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                    const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
                 child: SelectionArea(
                     child: Row(
                   children: [
@@ -2675,18 +2682,41 @@ class _AboutState extends State<_About> {
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white),
                           ),
-                          const SizedBox(height: 4.0),
+                          const SizedBox(height: 2.0),
                           const Text(
-                            'Phần mềm điều khiển máy tính từ xa nội bộ (BVĐKKH - Remote)',
+                            'Đơn vị: Tổ Công nghệ thông tin',
+                            style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white),
+                          ),
+                          const SizedBox(height: 6.0),
+                          const Text(
+                            'Phần mềm điều khiển máy tính từ xa nội bộ (BVĐKKH - Remoter)',
                             style: TextStyle(
                                 fontSize: 13,
                                 color: Colors.white),
                           ),
-                          const SizedBox(height: 8.0),
-                          Text(
-                            'Copyright © ${DateTime.now().toString().substring(0, 4)} BVĐK Khánh Hòa. All rights reserved.',
-                            style: const TextStyle(
+                          const Divider(color: Colors.white30, height: 16),
+                          const Text(
+                            'Lead Developer: Nguyễn Trọng Hà',
+                            style: TextStyle(
                                 fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white),
+                          ),
+                          const SizedBox(height: 2.0),
+                          const Text(
+                            'Email: trongha.dev@gmail.com',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white),
+                          ),
+                          const SizedBox(height: 6.0),
+                          Text(
+                            'Copyright © ${DateTime.now().year} Nguyễn Trọng Hà. All rights reserved.',
+                            style: const TextStyle(
+                                fontSize: 11,
                                 color: Colors.white70),
                           ),
                         ],

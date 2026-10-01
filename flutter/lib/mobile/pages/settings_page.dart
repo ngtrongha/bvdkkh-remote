@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -1262,13 +1266,43 @@ void showAbout(OverlayDialogManager dialogManager) {
   dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
       title: Text(translate('About RustDesk')),
-      content: Wrap(direction: Axis.vertical, spacing: 12, children: [
-        Text('Version: $version'),
-        const Text(
-          'Bệnh viện Đa khoa Khánh Hòa\nBVĐKKH - Remote',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ]),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Version: $version'),
+          const SizedBox(height: 10),
+          const Text(
+            'BỆNH VIỆN ĐA KHOA KHÁNH HÒA',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            'Đơn vị: Tổ Công nghệ thông tin',
+            style: TextStyle(fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Phần mềm điều khiển máy tính từ xa nội bộ (BVĐKKH - Remoter)',
+            style: TextStyle(fontSize: 12),
+          ),
+          const Divider(height: 16),
+          const Text(
+            'Lead Developer: Nguyễn Trọng Hà',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 2),
+          const Text(
+            'Email: trongha.dev@gmail.com',
+            style: TextStyle(fontSize: 12),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Copyright © ${DateTime.now().year} Nguyễn Trọng Hà. All rights reserved.',
+            style: const TextStyle(fontSize: 11, color: Colors.grey),
+          ),
+        ],
+      ),
       actions: [],
     );
   }, clickMaskDismiss: true, backDismiss: true);
