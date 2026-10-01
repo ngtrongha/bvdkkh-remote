@@ -1,4 +1,8 @@
-﻿import 'dart:async';
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
+import 'dart:async';
 
 import 'package:auto_size_text_field/auto_size_text_field.dart';
 import 'package:flutter/material.dart';
@@ -124,16 +128,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
         ? const SizedBox(height: 0)
         : InkWell(
             onTap: () async {
-              final url = 'https://rustdesk.com/download';
-              // https://pub.dev/packages/url_launcher#configuration
-              // https://developer.android.com/training/package-visibility/use-cases#open-urls-custom-tabs
-              //
-              // `await launchUrl(Uri.parse(url))` can also run if skip
-              // 1. The following check
-              // 2. `<action android:name="android.support.customtabs.action.CustomTabsService" />` in AndroidManifest.xml
-              //
-              // But it is better to add the check.
-              await launchUrl(Uri.parse(url));
+              if (updateUrl.isNotEmpty) {
+                await launchUrl(Uri.parse(updateUrl));
+              }
             },
             child: Container(
                 alignment: AlignmentDirectional.center,
