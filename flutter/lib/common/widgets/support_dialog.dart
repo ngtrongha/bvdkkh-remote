@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -66,6 +70,27 @@ Future<bool?> showSupportRequestDialog(BuildContext context) async {
   });
 }
 
+enum SupportCategory {
+  hisLis('his_lis', 'Phần mềm Bệnh viện (HIS / LIS / PACS)'),
+  printer('printer', 'Lỗi Máy In / Không in được phiếu'),
+  network('network', 'Mất mạng / Không kết nối được Internet'),
+  slowPc('slow_pc', 'Máy tính bị chậm / Treo máy'),
+  softwareInstall('software_install', 'Cần cài đặt phần mềm mới'),
+  hardwareOther('hardware_other', 'Sự cố phần cứng / Khác');
+
+  final String key;
+  final String label;
+  const SupportCategory(this.key, this.label);
+
+  static SupportCategory fromKey(String? key) {
+    if (key == null || key.isEmpty) return SupportCategory.hardwareOther;
+    return SupportCategory.values.firstWhere(
+      (c) => c.key == key || c.label == key,
+      orElse: () => SupportCategory.hardwareOther,
+    );
+  }
+}
+
 class SupportDialogBody extends StatefulWidget {
   final VoidCallback onClose;
 
@@ -88,21 +113,13 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
   String _ipAddress = '';
   String _os = '';
 
-  String _selectedCategory = 'Mạng / Internet';
+  SupportCategory _selectedCategory = SupportCategory.hisLis;
   String _selectedPriority = 'normal';
   bool _includeLogs = true;
   bool _isSubmitting = false;
   String _errorMessage = '';
 
   final List<File> _attachedFiles = [];
-
-  static const List<String> _categories = [
-    'Mạng / Internet',
-    'Máy in / Máy quét',
-    'Phần mềm HIS / LIS',
-    'Phần cứng máy tính',
-    'Khác',
-  ];
 
   @override
   void initState() {
@@ -298,7 +315,7 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
       request.fields['username'] = _username;
       request.fields['ip_address'] = _ipAddress;
       request.fields['os'] = _os;
-      request.fields['category'] = _selectedCategory;
+      request.fields['category'] = _selectedCategory.key;
       request.fields['priority'] = _selectedPriority;
       request.fields['description'] = desc;
       request.fields['contact_name'] = _contactNameController.text.trim();
@@ -477,14 +494,17 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
+                            child: DropdownButton<SupportCategory>(
                               isExpanded: true,
                               value: _selectedCategory,
-                              items: _categories.map((cat) {
-                                return DropdownMenuItem(
+                              items: SupportCategory.values.map((cat) {
+                                return DropdownMenuItem<SupportCategory>(
                                   value: cat,
-                                  child: Text(cat,
-                                      style: const TextStyle(fontSize: 13)),
+                                  child: Text(
+                                    cat.label,
+                                    style: const TextStyle(fontSize: 13),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 );
                               }).toList(),
                               onChanged: (val) {
