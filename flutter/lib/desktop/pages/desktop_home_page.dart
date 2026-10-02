@@ -57,6 +57,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Timer? _updateTimer;
   bool isCardClosed = false;
 
+  String _hostname = '';
+  String _username = '';
+  String _ipAddress = '';
+
   final RxBool _editHover = false.obs;
   final RxBool _block = false.obs;
 
@@ -445,42 +449,199 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     showSupportRequestDialog(context);
   }
 
-  buildTip(BuildContext context) {
+  Future<void> _loadDeviceInfo() async {
+    _hostname = Platform.localHostname;
+    _username =
+        Platform.environment['USERNAME'] ?? Platform.environment['USER'] ?? '';
+    try {
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+        includeLoopback: false,
+      );
+      String fallbackIp = '';
+      for (final iface in interfaces) {
+        final name = iface.name.toLowerCase();
+        final isVirtual = name.contains('vethernet') ||
+            name.contains('virtual') ||
+            name.contains('wsl') ||
+            name.contains('vmware') ||
+            name.contains('loopback');
+        for (final addr in iface.addresses) {
+          if (!addr.isLoopback && !addr.address.startsWith('169.254.')) {
+            if (!isVirtual && _ipAddress.isEmpty) {
+              _ipAddress = addr.address;
+              break;
+            } else if (fallbackIp.isEmpty) {
+              fallbackIp = addr.address;
+            }
+          }
+        }
+        if (_ipAddress.isNotEmpty) break;
+      }
+      if (_ipAddress.isEmpty && fallbackIp.isNotEmpty) {
+        _ipAddress = fallbackIp;
+      }
+    } catch (_) {}
+    if (mounted) {
+      setState(() {});
+      if (bind.isIncomingOnly() && isInHomePage()) {
+        Future.delayed(const Duration(milliseconds: 100), () {
+          _updateWindowSize();
+        });
+      }
+    }
+  }
+
+  String _tr(String key, String viDefault) {
+    if (localeName.toLowerCase().startsWith('vi') || localeName.isEmpty) {
+      final t = translate(key);
+      return t == key ? viDefault : t;
+    }
+    return translate(key);
+  }
+
+  Widget _buildDeviceInfoItem(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
+    final textColor = Theme.of(context).textTheme.titleLarge?.color;
+    final hintColor = textColor?.withOpacity(0.55);
+
+    return Tooltip(
+      message:
+          '$label: ${value.isNotEmpty ? value : "..."}\n(${_tr("Click to copy", "Nhấp để sao chép")})',
+      waitDuration: const Duration(milliseconds: 500),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(4),
+        onTap: () {
+          if (value.isNotEmpty && value != '...') {
+            Clipboard.setData(ClipboardData(text: value));
+            showToast(translate("Copied"));
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 2),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: MyTheme.accent,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '$label: ',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: hintColor,
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  value.isNotEmpty ? value : '...',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: textColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Icon(
+                Icons.copy_rounded,
+                size: 11,
+                color: hintColor?.withOpacity(0.4),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget buildTip(BuildContext context) {
     final isOutgoingOnly = bind.isOutgoingOnly();
+    if (isOutgoingOnly) {
+      return Padding(
+        padding:
+            const EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 5),
+        child: Text(
+          translate("outgoing_only_desk_tip"),
+          overflow: TextOverflow.clip,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      );
+    }
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark
+        ? Colors.white.withOpacity(0.04)
+        : Colors.black.withOpacity(0.03);
+    final borderColor = isDark
+        ? Colors.white.withOpacity(0.08)
+        : Colors.black.withOpacity(0.08);
+
     return Padding(
       padding:
-          const EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 5),
+          const EdgeInsets.only(left: 20.0, right: 16, top: 12.0, bottom: 6.0),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            children: [
-              if (!isOutgoingOnly)
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    translate("Your Desktop"),
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              _tr("Device Information", "Thông tin thiết bị"),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ) ??
+                  const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 8.0),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildDeviceInfoItem(
+                  context,
+                  icon: Icons.desktop_windows_outlined,
+                  label: _tr("Computer Name", "Tên máy"),
+                  value: _hostname,
                 ),
-            ],
-          ),
-          SizedBox(
-            height: 10.0,
-          ),
-          if (!isOutgoingOnly)
-            Text(
-              translate("desk_tip"),
-              overflow: TextOverflow.clip,
-              style: Theme.of(context).textTheme.bodySmall,
+                Divider(
+                  height: 8,
+                  thickness: 0.5,
+                  color: borderColor,
+                ),
+                _buildDeviceInfoItem(
+                  context,
+                  icon: Icons.lan_outlined,
+                  label: _tr("IP Address", "IP"),
+                  value: _ipAddress,
+                ),
+                Divider(
+                  height: 8,
+                  thickness: 0.5,
+                  color: borderColor,
+                ),
+                _buildDeviceInfoItem(
+                  context,
+                  icon: Icons.person_outline,
+                  label: _tr("User Account", "Tài khoản"),
+                  value: _username,
+                ),
+              ],
             ),
-          if (isOutgoingOnly)
-            Text(
-              translate("outgoing_only_desk_tip"),
-              overflow: TextOverflow.clip,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+          ),
         ],
       ),
     );
@@ -746,9 +907,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   @override
   void initState() {
     super.initState();
+    _loadDeviceInfo();
     SupportTicketListener.instance.initClientWatcher();
     _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
       await gFFI.serverModel.fetchID();
+      if (_ipAddress.isEmpty) {
+        _loadDeviceInfo();
+      }
       final error = await bind.mainGetError();
       if (systemError != error) {
         systemError = error;
