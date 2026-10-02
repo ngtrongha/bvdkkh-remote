@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 set "CHECK_ONLY=0"
 set "IS_SILENT=0"
 set "FORCE_CLIENT_TYPE="
@@ -351,7 +351,7 @@ taskkill /F /IM rustdesk-x64.exe > nul 2>&1
 taskkill /F /IM rustdesk-x86.exe > nul 2>&1
 taskkill /F /IM RuntimeBroker_rustdesk.exe > nul 2>&1
 
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$svcs = @('BVĐKKH - Remote', 'BVDKKH - Remote', 'rustdesk'); foreach ($name in $svcs) { $s = Get-Service -Name $name -ErrorAction SilentlyContinue; if ($s -and $s.Status -ne 'Stopped') { Stop-Service -Name $name -Force -ErrorAction SilentlyContinue; $count=0; while ($count -lt 20) { $s.Refresh(); if ($s.Status -eq 'Stopped') { break }; Start-Sleep -Milliseconds 500; $count++ } } }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$svcs = @('BVĐKKH - Remote', 'BVDKKH - Remote', 'rustdesk'); foreach ($name in $svcs) { $s = Get-Service -Name $name -ErrorAction SilentlyContinue; if ($s -and $s.Status -ne 'Stopped') { Stop-Service -Name $name -Force -ErrorAction SilentlyContinue; $count=0; while ($count -lt 10) { $s.Refresh(); if ($s.Status -eq 'Stopped') { break }; if ($count -eq 5) { try { $w = Get-WmiObject Win32_Service -Filter ('Name=''' + $name + ''''); if ($w -and $w.ProcessId -gt 0) { Stop-Process -Id $w.ProcessId -Force -ErrorAction SilentlyContinue } } catch {} }; Start-Sleep -Milliseconds 500; $count++ } } }"
 timeout /t 1 /nobreak >nul 2>&1
 
 :: [Migration & Don dep ban cu]
@@ -443,20 +443,14 @@ echo [%DATE% %TIME%]   Dang ky Service %SERVICE_NAME% >> "%LOG_FILE%"
 
 :: Neu cai ban moi ma may da co service rustdesk cu, dung va xoa service cu tranh xung dot
 if /I "%CLIENT_TYPE%"=="NEW" (
-    sc.exe query rustdesk >nul 2>&1
-    if not errorlevel 1 (
-        sc.exe stop rustdesk >nul 2>&1
-        sc.exe delete rustdesk >nul 2>&1
-    )
+    call :WAIT_SERVICE_STATUS Stopped "rustdesk"
+    sc.exe delete rustdesk >nul 2>&1
 )
 
 :: Neu cai ban cu ma may da co service BVĐKKH - Remote, dung va xoa service do
 if /I "%CLIENT_TYPE%"=="OLD" (
-    sc.exe query "BVĐKKH - Remote" >nul 2>&1
-    if not errorlevel 1 (
-        sc.exe stop "BVĐKKH - Remote" >nul 2>&1
-        sc.exe delete "BVĐKKH - Remote" >nul 2>&1
-    )
+    call :WAIT_SERVICE_STATUS Stopped "BVĐKKH - Remote"
+    sc.exe delete "BVĐKKH - Remote" >nul 2>&1
 )
 
 sc.exe query "%SERVICE_NAME%" >nul 2>&1
@@ -517,23 +511,14 @@ if errorlevel 1 (
 
 echo Dang khoi dong dich vu %SERVICE_DISPLAY% voi day du cau hinh...
 echo [%DATE% %TIME%] Buoc: Khoi dong dich vu %SERVICE_NAME% >> "%LOG_FILE%"
-net start "%SERVICE_NAME%" > nul 2>&1
 call :WAIT_SERVICE_STATUS Running "%SERVICE_NAME%"
 if errorlevel 1 (
-    echo [CANH BAO] Dang thu khoi dong lai dich vu...
-    echo [%DATE% %TIME%] [CANH BAO] Service khong Running, dang retry >> "%LOG_FILE%"
-    net stop "%SERVICE_NAME%" >nul 2>&1
-    timeout /t 1 /nobreak >nul 2>&1
-    net start "%SERVICE_NAME%" >nul 2>&1
-    call :WAIT_SERVICE_STATUS Running "%SERVICE_NAME%"
-    if errorlevel 1 (
-        echo [LOI] Khong khoi dong duoc dich vu %SERVICE_DISPLAY%.
-        echo [%DATE% %TIME%] [LOI] Service khong the chay >> "%LOG_FILE%"
-        sc query "%SERVICE_NAME%"
-        echo.
-        if "%IS_SILENT%"=="0" pause
-        exit /b 1
-    )
+    echo [LOI] Khong khoi dong duoc dich vu %SERVICE_DISPLAY%.
+    echo [%DATE% %TIME%] [LOI] Service khong the chay >> "%LOG_FILE%"
+    sc query "%SERVICE_NAME%"
+    echo.
+    if "%IS_SILENT%"=="0" pause
+    exit /b 1
 )
 
 :SET_PASSWORD
@@ -624,7 +609,6 @@ netsh advfirewall firewall add rule name="%SERVICE_DISPLAY%" dir=out action=allo
 
 echo Dang restart dich vu de ap dung toan bo cau hinh...
 echo [%DATE% %TIME%] Buoc: Restart service sau config >> "%LOG_FILE%"
-net stop "%SERVICE_NAME%" > nul 2>&1
 call :WAIT_SERVICE_STATUS Stopped "%SERVICE_NAME%"
 if errorlevel 1 (
     echo [LOI] Khong dung duoc dich vu %SERVICE_DISPLAY% de ap dung cau hinh.
@@ -634,7 +618,7 @@ if errorlevel 1 (
     if "%IS_SILENT%"=="0" pause
     exit /b 1
 )
-net start "%SERVICE_NAME%" > nul 2>&1
+timeout /t 1 /nobreak >nul 2>&1
 call :WAIT_SERVICE_STATUS Running "%SERVICE_NAME%"
 if errorlevel 1 (
     echo [LOI] Khong khoi dong lai duoc dich vu %SERVICE_DISPLAY%.
@@ -713,9 +697,8 @@ call :WAIT_SERVICE_STATUS Running "%SERVICE_NAME%"
 if errorlevel 1 (
     echo [CANH BAO] Dich vu %SERVICE_DISPLAY% dang khong chay. Dang khoi dong lai...
     echo [%DATE% %TIME%] [CANH BAO] Service khong Running o cuoi, dang retry >> "%LOG_FILE%"
-    net stop "%SERVICE_NAME%" >nul 2>&1
-    timeout /t 2 /nobreak >nul 2>&1
-    net start "%SERVICE_NAME%" >nul 2>&1
+    call :WAIT_SERVICE_STATUS Stopped "%SERVICE_NAME%"
+    timeout /t 1 /nobreak >nul 2>&1
     call :WAIT_SERVICE_STATUS Running "%SERVICE_NAME%"
     if errorlevel 1 (
         echo [LOI] Khong dam bao duoc dich vu %SERVICE_DISPLAY% chay on dinh.
@@ -785,10 +768,69 @@ for %%F in ("%~1") do (
 )
 goto :EOF
 
-:: [Muc 4] Cho den khi service dat trang thai yeu cau, co timeout 30s.
-:: Neu target la Stopped va service chua tung ton tai thi coi la thanh cong (exit 0).
-:: Retry Start-Service toi da 3 lan voi logging.
+:: [Muc 4] Cho den khi service dat trang thai yeu cau (Stopped / Running).
+:: Ho tro Unicode service name (BVĐKKH - Remote) tuyet doi, tu dong dung Stop-Service / Start-Service,
+:: va tu dong force-kill tien trinh neu service bi treo qua 3s khi can Stop.
 :WAIT_SERVICE_STATUS
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$target = '%~1'; $svcName = '%~2'; if (-not $svcName) { $svcName = $env:SERVICE_NAME }; if (-not $svcName) { $svcName = 'rustdesk' }; $maxWait = 60; $retryCount = 0; $maxRetry = 3; $lastRetry = 4; $count = 0; while ($count -lt $maxWait) { try { $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue; if (-not $svc) { if ($target -eq 'Stopped') { exit 0 } } else { $svc.Refresh(); if ($svc.Status.ToString() -eq $target) { exit 0 }; if ($target -eq 'Running' -and $svc.Status -eq 'Stopped' -and ($count - $lastRetry) -ge 6 -and $retryCount -lt $maxRetry) { $retryCount++; $lastRetry = $count; Write-Host ('  [Retry ' + $retryCount + '/' + $maxRetry + '] Dang khoi dong lai service...'); Start-Service -Name $svcName -ErrorAction SilentlyContinue } } } catch {}; Start-Sleep -Milliseconds 500; $count++ }; Write-Host ('[TIMEOUT] Service khong dat trang thai: ' + $target + ' sau ' + ($maxWait / 2) + ' giay'); exit 1"
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$target = '%~1'; " ^
+    "$paramSvc = '%~2'; " ^
+    "$svcName = $env:SERVICE_NAME; " ^
+    "if ($paramSvc -and $paramSvc -ne '%%SERVICE_NAME%%' -and $paramSvc -ne $svcName) { $svcName = $paramSvc }; " ^
+    "if (-not $svcName) { $svcName = 'rustdesk' }; " ^
+    "if ($target -eq 'Stopped') { " ^
+    "    $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue; " ^
+    "    if (-not $svc -or $svc.Status -eq 'Stopped') { exit 0 }; " ^
+    "    Stop-Service -Name $svcName -Force -ErrorAction SilentlyContinue; " ^
+    "    & sc.exe stop $svcName | Out-Null; " ^
+    "    $maxWait = 30; $count = 0; $killed = $false; " ^
+    "    while ($count -lt $maxWait) { " ^
+    "        try { " ^
+    "            $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue; " ^
+    "            if (-not $svc) { exit 0 }; " ^
+    "            $svc.Refresh(); " ^
+    "            if ($svc.Status -eq 'Stopped') { exit 0 }; " ^
+    "        } catch {}; " ^
+    "        if ($count -ge 6 -and -not $killed) { " ^
+    "            $killed = $true; " ^
+    "            try { " ^
+    "                $wmi = Get-WmiObject Win32_Service -Filter ('Name=''' + $svcName + '''') -ErrorAction SilentlyContinue; " ^
+    "                if ($wmi -and $wmi.ProcessId -gt 0) { " ^
+    "                    Stop-Process -Id $wmi.ProcessId -Force -ErrorAction SilentlyContinue; " ^
+    "                }; " ^
+    "            } catch {}; " ^
+    "            & taskkill.exe /F /IM 'BVĐKKH - Remote.exe' /IM 'BVDKKH - Remote.exe' /IM 'rustdesk.exe' /T | Out-Null; " ^
+    "        }; " ^
+    "        Start-Sleep -Milliseconds 500; " ^
+    "        $count++; " ^
+    "    }; " ^
+    "    Write-Host ('[TIMEOUT] Service khong dat trang thai: Stopped sau ' + ($maxWait / 2) + ' giay'); " ^
+    "    exit 1; " ^
+    "} else { " ^
+    "    $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue; " ^
+    "    if ($svc) { $svc.Refresh(); if ($svc.Status -eq 'Running') { exit 0 } }; " ^
+    "    Start-Service -Name $svcName -ErrorAction SilentlyContinue; " ^
+    "    & sc.exe start $svcName | Out-Null; " ^
+    "    $maxWait = 30; $count = 0; $retryCount = 0; $maxRetry = 3; $lastRetry = 0; " ^
+    "    while ($count -lt $maxWait) { " ^
+    "        try { " ^
+    "            $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue; " ^
+    "            if ($svc) { " ^
+    "                $svc.Refresh(); " ^
+    "                if ($svc.Status -eq 'Running') { exit 0 }; " ^
+    "                if ($svc.Status -eq 'Stopped' -and ($count - $lastRetry) -ge 6 -and $retryCount -lt $maxRetry) { " ^
+    "                    $retryCount++; $lastRetry = $count; " ^
+    "                    Write-Host ('  [Retry ' + $retryCount + '/' + $maxRetry + '] Dang khoi dong lai service...'); " ^
+    "                    Start-Service -Name $svcName -ErrorAction SilentlyContinue; " ^
+    "                    & sc.exe start $svcName | Out-Null; " ^
+    "                }; " ^
+    "            }; " ^
+    "        } catch {}; " ^
+    "        Start-Sleep -Milliseconds 500; " ^
+    "        $count++; " ^
+    "    }; " ^
+    "    Write-Host ('[TIMEOUT] Service khong dat trang thai: Running sau ' + ($maxWait / 2) + ' giay'); " ^
+    "    exit 1; " ^
+    "}"
 if errorlevel 1 exit /b 1
 exit /b 0
