@@ -2697,6 +2697,13 @@ class _AboutState extends State<_About> {
                                 fontSize: 13,
                                 color: Colors.white),
                           ),
+                          const SizedBox(height: 2.0),
+                          Text(
+                            'Phiên bản: $version',
+                            style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.white70),
+                          ),
                           const Divider(color: Colors.white30, height: 16),
                           const Text(
                             'Lead Developer: Nguyễn Trọng Hà',
