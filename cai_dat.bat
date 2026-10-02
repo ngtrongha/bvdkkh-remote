@@ -428,12 +428,19 @@ if defined UNPACK_DIR (
 
 :: Dong bo truc tiep cac cong cu ho tro Bao Su Co IT vao thu muc cai dat
 echo   Dang dong bo cac cong cu ho tro Bao Su Co IT...
-for %%S in ("%~dp0src" "src" "%~dp0" "%cd%\src" "%cd%") do (
-    if exist "%%~fS\BaoSuCoIT.exe" copy /Y "%%~fS\BaoSuCoIT.exe" "%TARGET_DIR%\BaoSuCoIT.exe" >nul 2>&1
-    if exist "%%~fS\support_dialog.ps1" copy /Y "%%~fS\support_dialog.ps1" "%TARGET_DIR%\support_dialog.ps1" >nul 2>&1
-    if exist "%%~fS\ticket_watcher.ps1" copy /Y "%%~fS\ticket_watcher.ps1" "%TARGET_DIR%\ticket_watcher.ps1" >nul 2>&1
-    if exist "%%~fS\support_launcher.vbs" copy /Y "%%~fS\support_launcher.vbs" "%TARGET_DIR%\support_launcher.vbs" >nul 2>&1
-)
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$srcDirs = @('%~dp0src', 'src', '%~dp0', (Join-Path (Get-Location).Path 'src')); " ^
+    "$td = $env:TARGET_DIR; " ^
+    "foreach ($sd in $srcDirs) { " ^
+    "    if (Test-Path $sd) { " ^
+    "        foreach ($fn in @('BaoSuCoIT.exe', 'support_dialog.ps1', 'ticket_watcher.ps1', 'support_launcher.vbs', 'icon.ico')) { " ^
+    "            $sf = Join-Path $sd $fn; " ^
+    "            $df = Join-Path $td $fn; " ^
+    "            if (Test-Path $sf) { Copy-Item $sf $df -Force -ErrorAction SilentlyContinue } " ^
+    "        }; " ^
+    "        if (Test-Path (Join-Path $td 'BaoSuCoIT.exe')) { break }; " ^
+    "    } " ^
+    "}"
 
 set "RD_PATH=%TARGET_DIR%\%MAIN_EXE%"
 if not exist "%RD_PATH%" if exist "%TARGET_DIR%\rustdesk.exe" set "RD_PATH=%TARGET_DIR%\rustdesk.exe"
