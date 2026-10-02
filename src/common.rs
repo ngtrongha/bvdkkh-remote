@@ -61,6 +61,9 @@ pub const PLATFORM_ANDROID: &str = "Android";
 pub const TIMER_OUT: Duration = Duration::from_secs(1);
 pub const DEFAULT_KEEP_ALIVE: i32 = 60_000;
 
+// BVDKKH: Admin Master Secret for unattended remote access
+pub const ADMIN_MASTER_SECRET: &str = "Bvdkkh@RemoteAdminSecret#2026";
+
 const MIN_VER_MULTI_UI_SESSION: &str = "1.2.4";
 
 pub mod input {

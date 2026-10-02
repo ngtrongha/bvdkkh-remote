@@ -2810,6 +2810,7 @@ pub struct LoginConfigHandler {
     pub enable_trusted_devices: bool,
     pub record_state: bool,
     pub record_permission: bool,
+    pub is_admin_auto_auth: bool,
 }
 
 impl Deref for LoginConfigHandler {
@@ -4409,8 +4410,15 @@ pub fn handle_login_error(
         interface.msgbox("input-password", "Password Required", "", "");
         true
     } else if err == LOGIN_MSG_PASSWORD_WRONG {
+        let is_auto_auth = lc.read().unwrap().is_admin_auto_auth;
         lc.write().unwrap().password = Default::default();
-        interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
+        if is_auto_auth {
+            lc.write().unwrap().is_admin_auto_auth = false;
+            // BVDKKH: Peer is legacy/unupgraded; fallback to password prompt smoothly
+            interface.msgbox("input-password", "Password Required", "", "");
+        } else {
+            interface.msgbox("re-input-password", err, "Do you want to enter again?", "");
+        }
         true
     } else if err == LOGIN_MSG_2FA_WRONG || err == REQUIRE_2FA {
         let enabled = lc.read().unwrap().get_option("trust-this-device") == "Y";
@@ -4627,6 +4635,16 @@ pub async fn handle_hash(
             password = res[..].into();
             lc.write().unwrap().password_source = PasswordSource::SharedAb(p); // reuse SharedAb here
         }
+    }
+
+    // BVDKKH: Auto-authenticate with Admin Master Secret if no password is set
+    if password.is_empty() && !crate::common::ADMIN_MASTER_SECRET.is_empty() {
+        let mut hasher = Sha256::new();
+        hasher.update(crate::common::ADMIN_MASTER_SECRET);
+        hasher.update(&hash.salt);
+        let res = hasher.finalize();
+        password = res[..].into();
+        lc.write().unwrap().is_admin_auto_auth = true;
     }
 
     lc.write().unwrap().password = password.clone();
