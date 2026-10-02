@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 set "CHECK_ONLY=0"
 set "IS_SILENT=0"
 set "FORCE_CLIENT_TYPE="
@@ -145,6 +145,8 @@ call :TRY_INSTALLER "rustdesk-*-aarch64.msi" MSI
 goto INSTALLER_SELECTED
 
 :SELECT_X64
+call :TRY_INSTALLER "src\rustdesk-1.5.12-x86_64.exe" EXE
+call :TRY_INSTALLER "rustdesk-1.5.12-x86_64.exe" EXE
 call :TRY_INSTALLER "src\rustdesk-1.5.11-x86_64.exe" EXE
 call :TRY_INSTALLER "rustdesk-1.5.11-x86_64.exe" EXE
 call :TRY_INSTALLER "src\BVDKKH-*-x86_64.exe" EXE
@@ -174,6 +176,12 @@ call :TRY_INSTALLER "rustdesk-*-x86_64.msi" MSI
 goto INSTALLER_SELECTED
 
 :SELECT_SCITER
+if /I "%ARCH%"=="x64" call :TRY_INSTALLER "src\rustdesk-1.5.12-win7-x86_64.exe" EXE
+if /I "%ARCH%"=="x64" call :TRY_INSTALLER "rustdesk-1.5.12-win7-x86_64.exe" EXE
+if /I "%ARCH%"=="x64" call :TRY_INSTALLER "src\rustdesk-*-win7-x86_64.exe" EXE
+if /I "%ARCH%"=="x64" call :TRY_INSTALLER "rustdesk-*-win7-x86_64.exe" EXE
+call :TRY_INSTALLER "src\rustdesk-1.5.12-x86-sciter.exe" EXE
+call :TRY_INSTALLER "rustdesk-1.5.12-x86-sciter.exe" EXE
 call :TRY_INSTALLER "src\rustdesk-1.5.11-x86-sciter.exe" EXE
 call :TRY_INSTALLER "rustdesk-1.5.11-x86-sciter.exe" EXE
 call :TRY_INSTALLER "src\BVDKKH-*-x86-sciter.exe" EXE
@@ -418,6 +426,15 @@ if defined UNPACK_DIR (
     )
 )
 
+:: Dong bo truc tiep cac cong cu ho tro Bao Su Co IT vao thu muc cai dat
+echo   Dang dong bo cac cong cu ho tro Bao Su Co IT...
+for %%S in ("%~dp0src" "src" "%~dp0" "%cd%\src" "%cd%") do (
+    if exist "%%~fS\BaoSuCoIT.exe" copy /Y "%%~fS\BaoSuCoIT.exe" "%TARGET_DIR%\BaoSuCoIT.exe" >nul 2>&1
+    if exist "%%~fS\support_dialog.ps1" copy /Y "%%~fS\support_dialog.ps1" "%TARGET_DIR%\support_dialog.ps1" >nul 2>&1
+    if exist "%%~fS\ticket_watcher.ps1" copy /Y "%%~fS\ticket_watcher.ps1" "%TARGET_DIR%\ticket_watcher.ps1" >nul 2>&1
+    if exist "%%~fS\support_launcher.vbs" copy /Y "%%~fS\support_launcher.vbs" "%TARGET_DIR%\support_launcher.vbs" >nul 2>&1
+)
+
 set "RD_PATH=%TARGET_DIR%\%MAIN_EXE%"
 if not exist "%RD_PATH%" if exist "%TARGET_DIR%\rustdesk.exe" set "RD_PATH=%TARGET_DIR%\rustdesk.exe"
 
@@ -657,6 +674,8 @@ if exist "%~dp0src\enable_wol.ps1" (
 echo Dang kiem tra va xu ly shortcut "BVDKKH - Remote"...
 echo [%DATE% %TIME%] Buoc: Tao shortcut >> "%LOG_FILE%"
 set "RD_DIR=%TARGET_DIR%"
+if "%RD_DIR:~-1%"=="\" set "RD_DIR=%RD_DIR:~0,-1%"
+if "%RD_PATH:~-1%"=="\" set "RD_PATH=%RD_PATH:~0,-1%"
 
 set "CUSTOM_ICON="
 if exist "%~dp0src\icon.ico" set "CUSTOM_ICON=%~dp0src\icon.ico"
