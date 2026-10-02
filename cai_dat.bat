@@ -428,19 +428,29 @@ if defined UNPACK_DIR (
 
 :: Dong bo truc tiep cac cong cu ho tro Bao Su Co IT vao thu muc cai dat
 echo   Dang dong bo cac cong cu ho tro Bao Su Co IT...
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$srcDirs = @('%~dp0src', 'src', '%~dp0', (Join-Path (Get-Location).Path 'src')); " ^
-    "$td = $env:TARGET_DIR; " ^
-    "foreach ($sd in $srcDirs) { " ^
-    "    if (Test-Path $sd) { " ^
-    "        foreach ($fn in @('BaoSuCoIT.exe', 'support_dialog.ps1', 'ticket_watcher.ps1', 'support_launcher.vbs', 'icon.ico')) { " ^
-    "            $sf = Join-Path $sd $fn; " ^
-    "            $df = Join-Path $td $fn; " ^
-    "            if (Test-Path $sf) { Copy-Item $sf $df -Force -ErrorAction SilentlyContinue } " ^
-    "        }; " ^
-    "        if (Test-Path (Join-Path $td 'BaoSuCoIT.exe')) { break }; " ^
-    "    } " ^
-    "}"
+echo [%DATE% %TIME%]   Dong bo cong cu ho tro Bao Su Co IT >> "%LOG_FILE%"
+if exist "%~dp0src\BaoSuCoIT.exe" (
+    copy /Y "%~dp0src\BaoSuCoIT.exe" "%TARGET_DIR%\" >nul 2>&1
+    copy /Y "%~dp0src\support_dialog.ps1" "%TARGET_DIR%\" >nul 2>&1
+    copy /Y "%~dp0src\ticket_watcher.ps1" "%TARGET_DIR%\" >nul 2>&1
+    copy /Y "%~dp0src\support_launcher.vbs" "%TARGET_DIR%\" >nul 2>&1
+    copy /Y "%~dp0src\icon.ico" "%TARGET_DIR%\" >nul 2>&1
+)
+if exist "src\BaoSuCoIT.exe" (
+    copy /Y "src\BaoSuCoIT.exe" "%TARGET_DIR%\" >nul 2>&1
+    copy /Y "src\support_dialog.ps1" "%TARGET_DIR%\" >nul 2>&1
+    copy /Y "src\ticket_watcher.ps1" "%TARGET_DIR%\" >nul 2>&1
+    copy /Y "src\support_launcher.vbs" "%TARGET_DIR%\" >nul 2>&1
+    copy /Y "src\icon.ico" "%TARGET_DIR%\" >nul 2>&1
+)
+if exist "%~dp0BaoSuCoIT.exe" (
+    copy /Y "%~dp0BaoSuCoIT.exe" "%TARGET_DIR%\" >nul 2>&1
+    copy /Y "%~dp0support_dialog.ps1" "%TARGET_DIR%\" >nul 2>&1
+    copy /Y "%~dp0ticket_watcher.ps1" "%TARGET_DIR%\" >nul 2>&1
+    copy /Y "%~dp0support_launcher.vbs" "%TARGET_DIR%\" >nul 2>&1
+    copy /Y "%~dp0icon.ico" "%TARGET_DIR%\" >nul 2>&1
+)
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$td = $env:TARGET_DIR; if ($td) { $td = $td.Trim().TrimEnd('\'); foreach ($sd in @('%~dp0src', 'src', '%~dp0')) { if (Test-Path $sd) { foreach ($fn in @('BaoSuCoIT.exe', 'support_dialog.ps1', 'ticket_watcher.ps1', 'support_launcher.vbs', 'icon.ico')) { $sf = Join-Path $sd $fn; $df = Join-Path $td $fn; if (Test-Path $sf) { Copy-Item $sf $df -Force -ErrorAction SilentlyContinue } } } } }"
 
 set "RD_PATH=%TARGET_DIR%\%MAIN_EXE%"
 if not exist "%RD_PATH%" if exist "%TARGET_DIR%\rustdesk.exe" set "RD_PATH=%TARGET_DIR%\rustdesk.exe"
