@@ -608,6 +608,7 @@ class MyIdMenu: Reactor.Component {
                 <div style='font-size: 14px; font-weight: bold;'>BỆNH VIỆN ĐA KHOA KHÁNH HÒA</div> \
                 <div>Đơn vị: Tổ Công nghệ thông tin</div> \
                 <div>Phần mềm điều khiển máy tính từ xa nội bộ (BVĐKKH - Remoter)</div> \
+                <div>Phiên bản: " + handler.get_version() + "</div> \
                 <hr style='border: 0; border-top: 1px solid rgba(255,255,255,0.3); margin: 8px 0;' /> \
                 <div><b>Lead Developer:</b> Nguyễn Trọng Hà</div> \
                 <div><b>Email:</b> trongha.dev@gmail.com</div> \

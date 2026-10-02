@@ -92,6 +92,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   var _directAccessPort = "";
   var _fingerprint = "";
   var _buildDate = "";
+  var _version = "";
   var _myId = "";
   var _autoDisconnectTimeout = "";
   var _hideServer = false;
@@ -224,6 +225,13 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
       if (_buildDate != buildDate) {
         update = true;
         _buildDate = buildDate;
+      }
+
+      final ver = await bind.mainGetVersion();
+      if (_version != ver) {
+        update = true;
+        _version = ver;
+        version = ver;
       }
 
       final myId = await bind.mainGetMyId();
@@ -1026,7 +1034,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           title: Text(translate("About")),
           tiles: [
             SettingsTile(
-                title: Text(translate("Version: ") + version),
+                title: Text(translate("Version: ") +
+                    (_version.isNotEmpty ? _version : version)),
                 leading: Icon(Icons.info)),
             SettingsTile(
                 title: Text(translate("Build Date")),
@@ -1245,7 +1254,8 @@ void showThemeSettings(OverlayDialogManager dialogManager) async {
   }, backDismiss: true, clickMaskDismiss: true);
 }
 
-void showAbout(OverlayDialogManager dialogManager) {
+void showAbout(OverlayDialogManager dialogManager) async {
+  final appVersion = version.isNotEmpty ? version : await bind.mainGetVersion();
   dialogManager.show((setState, close, context) {
     return CustomAlertDialog(
       title: Text(translate('About RustDesk')),
@@ -1253,7 +1263,7 @@ void showAbout(OverlayDialogManager dialogManager) {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Version: $version'),
+          Text('Version: $appVersion'),
           const SizedBox(height: 10),
           const Text(
             'BỆNH VIỆN ĐA KHOA KHÁNH HÒA',
