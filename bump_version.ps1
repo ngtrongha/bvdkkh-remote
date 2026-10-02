@@ -81,6 +81,16 @@ if (Test-Path $flutterBuildYml) {
     Write-Host "[SUCCESS] Updated .github/workflows/flutter-build.yml" -ForegroundColor Green
 }
 
+# 6b. Update .github/workflows/flutter-tag.yml
+$flutterTagYml = Join-Path $rootDir ".github\workflows\flutter-tag.yml"
+if (Test-Path $flutterTagYml) {
+    $content = Get-Content $flutterTagYml -Raw
+    $content = $content -replace "default:\s*'v[0-9\.]+'", "default: 'v$cleanVersion'"
+    $content = $content -replace "\|\|\s*'v[0-9\.]+'", "|| 'v$cleanVersion'"
+    Set-Content -Path $flutterTagYml -Value $content -NoNewline
+    Write-Host "[SUCCESS] Updated .github/workflows/flutter-tag.yml" -ForegroundColor Green
+}
+
 # 7. Update packaging specifications (res/*.spec, res/PKGBUILD, appimage/*.yml)
 $specFiles = @(
     "res\PKGBUILD",
