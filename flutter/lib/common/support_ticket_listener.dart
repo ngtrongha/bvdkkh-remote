@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ffi';
@@ -54,7 +58,7 @@ class SupportTicket {
       hostname: (json['hostname'] ?? '').toString(),
       username: (json['username'] ?? '').toString(),
       ipAddress: (json['ip_address'] ?? '').toString(),
-      category: (json['category'] ?? 'Khác').toString(),
+      category: (json['category'] ?? 'hardware_other').toString(),
       priority: (json['priority'] ?? 'normal').toString(),
       description: (json['description'] ?? '').toString(),
       contactName: (json['contact_name'] ?? '').toString(),
@@ -64,6 +68,25 @@ class SupportTicket {
       assignedAdmin: (json['assigned_admin'] ?? '').toString(),
       resolutionNote: (json['resolution_note'] ?? '').toString(),
     );
+  }
+
+  String get categoryDisplay {
+    switch (category) {
+      case 'his_lis':
+        return 'Phần mềm Bệnh viện (HIS / LIS / PACS)';
+      case 'printer':
+        return 'Lỗi Máy In / Không in được phiếu';
+      case 'network':
+        return 'Mất mạng / Không kết nối được Internet';
+      case 'slow_pc':
+        return 'Máy tính bị chậm / Treo máy';
+      case 'software_install':
+        return 'Cần cài đặt phần mềm mới';
+      case 'hardware_other':
+        return 'Sự cố phần cứng / Khác';
+      default:
+        return category;
+    }
   }
 }
 
