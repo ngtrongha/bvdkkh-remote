@@ -1702,16 +1702,8 @@ pub fn get_webrtc_enabled() -> bool {
 
 pub fn get_local_option(key: &str) -> String {
     let v = LocalConfig::get_option(key);
-    if key == keys::OPTION_ENABLE_UDP_PUNCH
-        || key == keys::OPTION_ENABLE_IPV6_PUNCH
-        || key == keys::OPTION_ENABLE_WEBRTC
-    {
-        if v.is_empty() {
-            if !is_public(&Config::get_rendezvous_server()) {
-                return "N".to_owned();
-            }
-        }
-    }
+    // BVDKKH: Enable UDP punch, IPv6 punch, and WebRTC by default on all servers (including private/self-hosted).
+    // Upstream forced "N" when v.is_empty() and server was self-hosted.
     v
 }
 

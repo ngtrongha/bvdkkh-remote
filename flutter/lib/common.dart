@@ -1638,12 +1638,9 @@ bool option2bool(String option, String value) {
 
 String bool2option(String option, bool b) {
   String res;
-  if ((option.startsWith('enable-') ||
-          option == kOptionAllowAutoUpdate ||
-          option == kOptionAllowRemoteConfigModification) &&
-      option != kOptionEnableUdpPunch &&
-      option != kOptionEnableIpv6Punch &&
-      option != kOptionEnableWebrtc) {
+  if (option.startsWith('enable-') ||
+      option == kOptionAllowAutoUpdate ||
+      option == kOptionAllowRemoteConfigModification) {
     res = b ? defaultOptionYes : 'N';
   } else if (option.startsWith('allow-') ||
       option == kOptionStopService ||
