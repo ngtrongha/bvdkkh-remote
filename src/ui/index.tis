@@ -8,7 +8,7 @@ stdout.println("is_xfce: ", is_xfce);
 
 // See default height in common.tis `msgbox()`.
 const msgbox_default_height = 180;
-const incoming_only_width = 180;
+const incoming_only_width = 250;
 
 const outgoing_only = handler.is_outgoing_only();
 const incoming_only = handler.is_incoming_only();
@@ -26,9 +26,9 @@ const disable_change_id = handler.get_builtin_option("disable-change-id") == "Y"
 
 // html min-width, min-height not working on mac, below works for all
 if (incoming_only) {
-  view.windowMinSize = (scaleIt(incoming_only_width), scaleIt((handler.is_installed() || disable_installation) ? 300 : 390));
+  view.windowMinSize = (scaleIt(incoming_only_width), scaleIt((handler.is_installed() || disable_installation) ? 380 : 470));
 } else {
-  view.windowMinSize = (scaleIt(560), scaleIt(300));
+  view.windowMinSize = (scaleIt(640), scaleIt(350));
 }
 
 var app;
@@ -709,6 +709,70 @@ function editDirectAccessPort() {
       }, msgbox_default_height, get_msgbox_width());
 }
 
+class DeviceInfo: Reactor.Component {
+    function this() {
+        this.device = { hostname: "", ip: "", username: "" };
+        this.copiedNotice = "";
+        this.refresh();
+    }
+
+    function refresh() {
+        try {
+            var raw = handler.get_device_detail();
+            if (raw) {
+                this.device = JSON.parse(raw);
+            }
+        } catch (e) {
+            stdout.println("DeviceInfo refresh error:", e);
+        }
+    }
+
+    function copyVal(val, label) {
+        if (!val || val == "...") return;
+        try { view.clipboard(#put, val); } catch(_) {}
+        try { handler.set_clipboard(val); } catch(_) {}
+        var me = this;
+        me.copiedNotice = label + ": " + translate("Copied");
+        me.update();
+        self.timer(2s, function() {
+            me.copiedNotice = "";
+            me.update();
+        });
+    }
+
+    function render() {
+        var h = this.device.hostname || "...";
+        var ip = this.device.ip || "...";
+        var u = this.device.username || "...";
+
+        return <div .device-info-box>
+            <div .device-info-header>
+                <span .device-info-title>{translate("Device Information")}</span>
+                {this.copiedNotice ? <span .device-info-notice>{this.copiedNotice}</span> : ""}
+            </div>
+            <div .device-info-card>
+                <div .device-info-row title={translate("Click to copy")} onClick={:: this.copyVal(h, translate("Computer Name"))}>
+                    <span .label>{translate("Computer Name")}:</span>
+                    <span .value>{h}</span>
+                    <span .copy-icon>&#128203;</span>
+                </div>
+                <div .device-info-divider />
+                <div .device-info-row title={translate("Click to copy")} onClick={:: this.copyVal(ip, translate("IP Address"))}>
+                    <span .label>{translate("IP Address")}:</span>
+                    <span .value>{ip}</span>
+                    <span .copy-icon>&#128203;</span>
+                </div>
+                <div .device-info-divider />
+                <div .device-info-row title={translate("Click to copy")} onClick={:: this.copyVal(u, translate("User Account"))}>
+                    <span .label>{translate("User Account")}:</span>
+                    <span .value>{u}</span>
+                    <span .copy-icon>&#128203;</span>
+                </div>
+            </div>
+        </div>;
+    }
+}
+
 class App: Reactor.Component
 {
     function this() {
@@ -728,11 +792,13 @@ class App: Reactor.Component
                         </div>
                         <div .lighter-text>{outgoing_only ? translate('outgoing_only_desk_tip') : translate('desk_tip')}</div>
                         {outgoing_only ? <div style="position:absolute; left:-10000px; top:-10000px; width:0; height:0; overflow:hidden"><MyIdMenu /></div> : ""}
+                        {!outgoing_only && <DeviceInfo />}
                         {!outgoing_only && <div .your-desktop>
                             <MyIdMenu />
                             {key_confirmed ? <input type="text" readonly value={formatId(get_id())}/> : translate("Generating ...")}
                         </div>}
                         {!outgoing_only && <PasswordArea />}
+                        {!outgoing_only && <button #btn-report-support .button-support onClick={:: handler.trigger_support_request()}>Báo Sự Cố IT (Ctrl+Alt+H)</button>}
                     </div>
                     {(!is_win || handler.is_installed() || disable_installation) ? "" : <InstallMe />}
                     {software_update_url && !disable_installation ? <UpdateMe /> : ""}

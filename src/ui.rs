@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 use std::{
     collections::HashMap,
     iter::FromIterator,
@@ -667,6 +671,49 @@ impl UI {
         get_login_device_info_json()
     }
 
+    fn get_device_detail(&self) -> String {
+        get_device_detail_json()
+    }
+
+    fn set_clipboard(&self, text: String) {
+        if let Ok(mut ctx) = arboard::Clipboard::new() {
+            let _ = ctx.set_text(text);
+        }
+    }
+
+    fn trigger_support_request(&self) {
+        #[cfg(windows)]
+        {
+            if let Ok(current_exe) = std::env::current_exe() {
+                if let Some(dir) = current_exe.parent() {
+                    let support_exe = dir.join("BaoSuCoIT.exe");
+                    if support_exe.exists() {
+                        let _ = std::process::Command::new(support_exe).spawn();
+                        return;
+                    }
+                    let ps1 = dir.join("support_dialog.ps1");
+                    if ps1.exists() {
+                        let _ = std::process::Command::new("powershell")
+                            .args(&[
+                                "-WindowStyle",
+                                "Hidden",
+                                "-ExecutionPolicy",
+                                "Bypass",
+                                "-File",
+                                &ps1.to_string_lossy(),
+                            ])
+                            .spawn();
+                        return;
+                    }
+                }
+            }
+            let default_exe = std::path::Path::new(r"C:\Program Files\BVĐKKH - Remote\BaoSuCoIT.exe");
+            if default_exe.exists() {
+                let _ = std::process::Command::new(default_exe).spawn();
+            }
+        }
+    }
+
     fn support_remove_wallpaper(&self) -> bool {
         support_remove_wallpaper()
     }
@@ -812,6 +859,9 @@ impl sciter::EventHandler for UI {
         fn video_save_directory(bool);
         fn handle_relay_id(String);
         fn get_login_device_info();
+        fn get_device_detail();
+        fn set_clipboard(String);
+        fn trigger_support_request();
         fn support_remove_wallpaper();
         fn has_valid_2fa();
         fn generate2fa();
@@ -855,6 +905,68 @@ fn get_sound_inputs() -> Vec<String> {
         .drain(..)
         .map(|x| x.1)
         .collect()
+}
+
+#[derive(serde::Serialize)]
+struct DeviceDetail {
+    hostname: String,
+    ip: String,
+    username: String,
+}
+
+pub fn get_device_detail_json() -> String {
+    let hostname = crate::common::whoami_hostname();
+    let mut username = crate::platform::get_active_username();
+    if username.is_empty() {
+        username = crate::common::username();
+    }
+    let ip = get_local_ipv4();
+    let detail = DeviceDetail {
+        hostname,
+        ip,
+        username,
+    };
+    serde_json::to_string(&detail).unwrap_or_else(|_| "{}".to_string())
+}
+
+fn get_local_ipv4() -> String {
+    #[cfg(not(target_os = "ios"))]
+    {
+        let interfaces = default_net::get_interfaces();
+        let mut fallback = String::new();
+        for iface in interfaces {
+            let name = iface.name.to_lowercase();
+            let is_virtual = name.contains("vethernet")
+                || name.contains("virtual")
+                || name.contains("wsl")
+                || name.contains("vmware")
+                || name.contains("loopback");
+            for ipv4 in iface.ipv4 {
+                let ip_str = ipv4.addr.to_string();
+                if !ipv4.addr.is_loopback() && !ip_str.starts_with("169.254.") {
+                    if !is_virtual {
+                        return ip_str;
+                    } else if fallback.is_empty() {
+                        fallback = ip_str;
+                    }
+                }
+            }
+        }
+        if !fallback.is_empty() {
+            return fallback;
+        }
+    }
+    if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
+        if socket.connect("172.16.3.28:21116").is_ok() || socket.connect("8.8.8.8:80").is_ok() {
+            if let Ok(addr) = socket.local_addr() {
+                let ip = addr.ip().to_string();
+                if !ip.is_empty() && ip != "0.0.0.0" {
+                    return ip;
+                }
+            }
+        }
+    }
+    "".to_string()
 }
 
 // sacrifice some memory

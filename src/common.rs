@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 use std::{
     collections::HashMap,
     future::Future,
@@ -63,6 +67,28 @@ pub const DEFAULT_KEEP_ALIVE: i32 = 60_000;
 
 // BVDKKH: Admin Master Secret for unattended remote access
 pub const ADMIN_MASTER_SECRET: &str = "Bvdkkh@RemoteAdminSecret#2026";
+pub const HOSPITAL_SECRET_SALT: &str = "Bvdkkh@RemoteHospitalSecretSalt#2026";
+
+/// Derives deterministic emergency/device password from Hostname using SHA-256 and hospital salt.
+/// Matches Dart (Web Admin) and PowerShell (Installer) implementations.
+pub fn derive_device_password(hostname: &str) -> String {
+    use hbb_common::sha2::{Digest, Sha256};
+    let clean = hostname.trim().to_uppercase();
+    if clean.is_empty() {
+        return "".to_string();
+    }
+    let input = format!("{}:{}", clean, HOSPITAL_SECRET_SALT);
+    let mut hasher = Sha256::new();
+    hasher.update(input.as_bytes());
+    let hash = hasher.finalize();
+    const CHARSET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    let mut res = String::from("Bv@");
+    for i in 0..9 {
+        let idx = (hash[i] as usize) % CHARSET.len();
+        res.push(CHARSET[idx] as char);
+    }
+    res
+}
 
 const MIN_VER_MULTI_UI_SESSION: &str = "1.2.4";
 
