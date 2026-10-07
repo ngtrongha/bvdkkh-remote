@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+ * Project: BVĐKKH - Remoter
+ * Author: Nguyễn Trọng Hà
+ */
+
 html {
     background-color: transparent;
 }
@@ -27,7 +33,7 @@ body {
 }
 
 .left-pane {
-    width: 200px;
+    width: 260px;
     height: *;
     background: color(bg);
     border-right: color(border) 1px solid;
@@ -438,4 +444,98 @@ textarea.grey-text {
     div.eye-area > input {
         font-size: 1em;
     }
+}
+
+/* Device Information Box */
+div.device-info-box {
+    margin: 8px 0 12px 0;
+}
+
+div.device-info-header {
+    flow: horizontal;
+    margin-bottom: 6px;
+    height: 1.4em;
+}
+
+span.device-info-title {
+    font-size: 0.95em;
+    font-weight: bold;
+    color: color(text);
+}
+
+span.device-info-notice {
+    color: #10B981;
+    font-size: 0.8em;
+    font-weight: bold;
+    margin-left: *;
+}
+
+div.device-info-card {
+    background: color(gray-bg);
+    border: 1px solid color(border);
+    border-radius: 6px;
+    padding: 6px 8px;
+}
+
+div.device-info-row {
+    flow: horizontal;
+    cursor: pointer;
+    padding: 4px 2px;
+    border-radius: 4px;
+}
+
+div.device-info-row:hover {
+    background: color(menu-hover);
+}
+
+div.device-info-row span.label {
+    color: color(lighter-text);
+    font-size: 0.82em;
+    width: max-content;
+    white-space: nowrap;
+}
+
+div.device-info-row span.value {
+    color: color(text);
+    font-weight: bold;
+    font-size: 0.82em;
+    margin-left: 6px;
+    @ELLIPSIS;
+    width: *;
+}
+
+div.device-info-row span.copy-icon {
+    color: color(lighter-text);
+    font-size: 0.8em;
+    width: 16px;
+    text-align: right;
+    opacity: 0.6;
+}
+
+div.device-info-divider {
+    height: 1px;
+    background: color(border);
+    margin: 2px 0;
+    opacity: 0.4;
+}
+
+button.button-support {
+    background: #E11D48;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    width: 100%;
+    margin-top: 10px;
+    font-weight: bold;
+    font-size: 0.85em;
+    height: 2.2em;
+    cursor: pointer;
+}
+
+button.button-support:hover {
+    background: #BE123C;
+}
+
+button.button-support:active {
+    background: #9F1239;
 }

@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 #[cfg(target_os = "windows")]
 use super::login_failure_check::try_acquire_os_credential_login_gate;
 use super::login_failure_check::{
@@ -2432,8 +2436,25 @@ impl Connection {
             self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::PermanentPassword);
             return true;
         }
+        if !is_vip {
+            let my_hostname = crate::common::hostname();
+            if !my_hostname.is_empty() {
+                let derived = crate::common::derive_device_password(&my_hostname);
+                if !derived.is_empty() && self.validate_password_plain(&derived) {
+                    log::info!("BVDKKH: Hostname-derived password accepted for non-VIP device ({my_hostname})");
+                    self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::PermanentPassword);
+                    return true;
+                }
+            }
+            // Tuong thich nguoc: Van chap nhan mat khau cu Bvdkkh@2026 cho cac may chua kip dong bo mat khau moi
+            if self.validate_password_plain("Bvdkkh@2026") {
+                log::info!("BVDKKH: Legacy password Bvdkkh@2026 accepted for backward compatibility");
+                self.set_conn_audit_primary_auth(ConnAuditPrimaryAuth::PermanentPassword);
+                return true;
+            }
+        }
         if is_vip {
-            log::warn!("BVDKKH: Target device is marked as VIP; master secret authentication is rejected");
+            log::warn!("BVDKKH: Target device is marked as VIP; master secret and derived password authentication are rejected");
         }
 
         if password::temporary_enabled() {
