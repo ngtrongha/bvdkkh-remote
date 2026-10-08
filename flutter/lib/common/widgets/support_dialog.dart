@@ -338,57 +338,115 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
       }
 
       final url = Uri.parse('$apiServer/api/support/ticket');
-      final request = http.MultipartRequest('POST', url);
-
       final token = bind.mainGetLocalOption(key: 'access_token');
-      if (token.isNotEmpty) {
-        request.headers['Authorization'] = 'Bearer $token';
-      }
 
-      request.fields['device_id'] = _deviceId;
-      request.fields['hostname'] = _hostname;
-      request.fields['username'] = _username;
-      request.fields['ip_address'] = _ipAddress;
-      request.fields['os'] = _os;
-      request.fields['category'] = _selectedCategory.key;
-      request.fields['priority'] = _selectedPriority;
-      request.fields['description'] = desc;
-      request.fields['contact_name'] = _contactNameController.text.trim();
-      request.fields['contact_phone'] = _contactPhoneController.text.trim();
-
-      if (_includeLogs) {
-        final logs = _getRecentLogs();
-        if (logs.isNotEmpty) {
-          request.fields['logs'] = logs;
+      http.Response response;
+      if (_attachedFiles.isEmpty) {
+        final Map<String, String> headers = {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        };
+        if (token.isNotEmpty) {
+          headers['Authorization'] = 'Bearer $token';
         }
-      }
 
-      for (final file in _attachedFiles) {
-        if (file.existsSync()) {
-          request.files.add(await http.MultipartFile.fromPath(
-            'attachments',
-            file.path,
-          ));
+        final payload = <String, dynamic>{
+          'device_id': _deviceId,
+          'hostname': _hostname,
+          'username': _username,
+          'ip_address': _ipAddress,
+          'os': _os,
+          'category': _selectedCategory.key,
+          'priority': _selectedPriority,
+          'description': desc,
+          'contact_name': _contactNameController.text.trim(),
+          'contact_phone': _contactPhoneController.text.trim(),
+        };
+
+        if (_includeLogs) {
+          final logs = _getRecentLogs();
+          if (logs.isNotEmpty) {
+            payload['logs'] = logs;
+          }
         }
-      }
 
-      final streamedResponse =
-          await request.send().timeout(const Duration(seconds: 30));
-      final response = await http.Response.fromStream(streamedResponse);
+        response = await http
+            .post(
+              url,
+              headers: headers,
+              body: json.encode(payload),
+            )
+            .timeout(const Duration(seconds: 30));
+      } else {
+        final request = http.MultipartRequest('POST', url);
+        if (token.isNotEmpty) {
+          request.headers['Authorization'] = 'Bearer $token';
+        }
+
+        request.fields['device_id'] = _deviceId;
+        request.fields['hostname'] = _hostname;
+        request.fields['username'] = _username;
+        request.fields['ip_address'] = _ipAddress;
+        request.fields['os'] = _os;
+        request.fields['category'] = _selectedCategory.key;
+        request.fields['priority'] = _selectedPriority;
+        request.fields['description'] = desc;
+        request.fields['contact_name'] = _contactNameController.text.trim();
+        request.fields['contact_phone'] = _contactPhoneController.text.trim();
+
+        if (_includeLogs) {
+          final logs = _getRecentLogs();
+          if (logs.isNotEmpty) {
+            request.fields['logs'] = logs;
+          }
+        }
+
+        for (final file in _attachedFiles) {
+          if (file.existsSync()) {
+            request.files.add(await http.MultipartFile.fromPath(
+              'attachments',
+              file.path,
+            ));
+          }
+        }
+
+        final streamedResponse =
+            await request.send().timeout(const Duration(seconds: 30));
+        response = await http.Response.fromStream(streamedResponse);
+      }
 
       if (response.statusCode == 200) {
         final body = json.decode(utf8.decode(response.bodyBytes));
+
+        // Kiểm tra xem server có trả về lỗi dạng {"error": "..."} không
+        if (body is Map &&
+            body['error'] != null &&
+            body['error'].toString().isNotEmpty) {
+          setState(() {
+            _isSubmitting = false;
+            _errorMessage = 'Máy chủ báo lỗi: ${body['error']}';
+          });
+          return;
+        }
+
         int createdId = 0;
-        if (body['data'] != null && body['data']['id'] != null) {
+        if (body is Map && body['data'] != null && body['data']['id'] != null) {
           final idVal = body['data']['id'];
           createdId =
               idVal is int ? idVal : (int.tryParse(idVal.toString()) ?? 0);
         }
 
-        // Bắt đầu kích hoạt Client Watcher để lắng nghe phản hồi của KTV IT
-        if (createdId > 0) {
-          SupportTicketListener.instance.trackTicket(createdId);
+        if (createdId <= 0) {
+          setState(() {
+            _isSubmitting = false;
+            _errorMessage =
+                'Máy chủ không phản hồi mã sự cố hợp lệ (${body is Map ? (body['message'] ?? body['error']) : response.body}).';
+          });
+          return;
         }
+
+        // Bắt đầu kích hoạt Client Watcher để lắng nghe phản hồi của KTV IT
+        SupportTicketListener.instance.trackTicket(createdId);
 
         // Đóng dialog
         widget.onClose();
@@ -396,10 +454,17 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
         // Hiển thị thông báo gửi thành công
         _showSuccessNotification(createdId);
       } else {
+        String serverErr = response.body;
+        try {
+          final errBody = json.decode(utf8.decode(response.bodyBytes));
+          if (errBody is Map && errBody['error'] != null) {
+            serverErr = errBody['error'].toString();
+          }
+        } catch (_) {}
         setState(() {
           _isSubmitting = false;
           _errorMessage =
-              'Máy chủ phản hồi lỗi (${response.statusCode}): ${response.body}';
+              'Máy chủ phản hồi lỗi (${response.statusCode}): $serverErr';
         });
       }
     } catch (e) {
