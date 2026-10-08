@@ -130,11 +130,9 @@ const HKLM_PREFIX: &str = "HKEY_LOCAL_MACHINE\\";
 
 fn validate_install_app_name(app_name: &str) -> ResultType<()> {
     if app_name.is_empty()
-        || !app_name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '-')
+        || app_name.contains(['\0', '"', '%', '\r', '\n', '|', '<', '>', '&', '^'])
     {
-        bail!("Application name must match [a-zA-Z0-9-]+");
+        bail!("Application name contains characters unsafe for installer script");
     }
     Ok(())
 }
@@ -5051,7 +5049,8 @@ mod tests {
     #[test]
     fn install_app_names_enforce_ascii_command_safety() {
         assert!(validate_install_app_name("RustDesk-Admin1").is_ok());
-        for app_name in ["", "RustDesk_Admin", "RustDesk&whoami", "RustDesk应用"] {
+        assert!(validate_install_app_name("BVĐKKH - Remote").is_ok());
+        for app_name in ["", "RustDesk&whoami", "RustDesk|calc", "RustDesk\"run"] {
             assert!(
                 validate_install_app_name(app_name).is_err(),
                 "unsafe application name was accepted: {app_name}"
