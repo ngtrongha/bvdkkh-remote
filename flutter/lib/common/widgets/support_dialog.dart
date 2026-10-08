@@ -11,9 +11,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import '../../common.dart';
+import '../../common.dart' hide Dialog;
 import '../../models/platform_model.dart';
 import '../support_ticket_listener.dart';
+import 'animated_dropdown.dart';
 
 Widget _buildDialogHeader(VoidCallback onClose) {
   return Container(
@@ -21,8 +22,8 @@ Widget _buildDialogHeader(VoidCallback onClose) {
     decoration: const BoxDecoration(
       color: Color(0xFFE11D48), // Rose Red
       borderRadius: BorderRadius.only(
-        topLeft: Radius.circular(8),
-        topRight: Radius.circular(8),
+        topLeft: Radius.circular(10),
+        topRight: Radius.circular(10),
       ),
     ),
     child: Row(
@@ -59,15 +60,49 @@ Widget _buildDialogHeader(VoidCallback onClose) {
   );
 }
 
+bool _isSupportDialogOpen = false;
+
 Future<bool?> showSupportRequestDialog(BuildContext context) async {
-  return await gFFI.dialogManager.show<bool>((setState, close, context) {
-    return CustomAlertDialog(
-      contentBoxConstraints: const BoxConstraints(maxWidth: 580),
-      titlePadding: EdgeInsets.zero,
-      title: _buildDialogHeader(close),
-      content: SupportDialogBody(onClose: close),
+  if (_isSupportDialogOpen) return false;
+  final targetContext = context.mounted ? context : globalKey.currentContext;
+  if (targetContext == null) return null;
+
+  _isSupportDialogOpen = true;
+  try {
+    return await showDialog<bool>(
+      context: targetContext,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: Theme.of(ctx).colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          clipBehavior: Clip.antiAlias,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 580),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildDialogHeader(() => Navigator.of(ctx).pop(false)),
+                Flexible(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                    child: SupportDialogBody(
+                      onClose: () => Navigator.of(ctx).pop(true),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
-  });
+  } finally {
+    _isSupportDialogOpen = false;
+  }
 }
 
 enum SupportCategory {
@@ -439,6 +474,17 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryTextColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final secondaryTextColor =
+        isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final cardBgColor =
+        isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
+    final borderColor =
+        isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+    final inputBgColor =
+        isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
+
     return Container(
       padding: const EdgeInsets.only(top: 14),
       child: SingleChildScrollView(
@@ -454,19 +500,21 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
+                  color: cardBgColor,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.grey.shade300),
+                  border: Border.all(color: borderColor),
                 ),
                 child: Wrap(
                   spacing: 12,
                   runSpacing: 4,
                   children: [
-                    _buildInfoBadge('ID Máy', _deviceId, Icons.computer),
-                    _buildInfoBadge('Máy tính', _hostname, Icons.desktop_mac),
-                    _buildInfoBadge('Tài khoản', _username, Icons.person),
+                    _buildInfoBadge('ID Máy', _deviceId, Icons.computer, isDark),
+                    _buildInfoBadge(
+                        'Máy tính', _hostname, Icons.desktop_mac, isDark),
+                    _buildInfoBadge(
+                        'Tài khoản', _username, Icons.person, isDark),
                     if (_ipAddress.isNotEmpty)
-                      _buildInfoBadge('IP', _ipAddress, Icons.network_check),
+                      _buildInfoBadge('IP', _ipAddress, Icons.network_check, isDark),
                   ],
                 ),
               ),
@@ -481,39 +529,37 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Danh mục sự cố *',
                           style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 12),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: primaryTextColor,
+                          ),
                         ),
                         const SizedBox(height: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey.shade300),
-                            borderRadius: BorderRadius.circular(6),
+                        AnimatedDropdown<SupportCategory>(
+                          value: _selectedCategory,
+                          height: 42,
+                          fillColor: inputBgColor,
+                          borderColor: borderColor,
+                          dropdownColor:
+                              isDark ? const Color(0xFF1E293B) : Colors.white,
+                          textStyle: TextStyle(
+                            color: primaryTextColor,
+                            fontSize: 13,
                           ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<SupportCategory>(
-                              isExpanded: true,
-                              value: _selectedCategory,
-                              items: SupportCategory.values.map((cat) {
-                                return DropdownMenuItem<SupportCategory>(
-                                  value: cat,
-                                  child: Text(
-                                    cat.label,
-                                    style: const TextStyle(fontSize: 13),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (val) {
-                                if (val != null) {
-                                  setState(() => _selectedCategory = val);
-                                }
-                              },
-                            ),
-                          ),
+                          items: SupportCategory.values.map((cat) {
+                            return AnimatedDropdownItem<SupportCategory>(
+                              value: cat,
+                              label: cat.label,
+                            );
+                          }).toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() => _selectedCategory = val);
+                            }
+                          },
                         ),
                       ],
                     ),
@@ -524,10 +570,13 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Mức độ ưu tiên',
                           style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 12),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: primaryTextColor,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         Row(
@@ -537,6 +586,12 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
                                 label: 'Bình thường',
                                 value: 'normal',
                                 color: const Color(0xFF2563EB),
+                                isDark: isDark,
+                                unselectedBg: isDark
+                                    ? const Color(0xFF1E293B)
+                                    : const Color(0xFFF1F5F9),
+                                unselectedBorder: borderColor,
+                                unselectedText: secondaryTextColor,
                               ),
                             ),
                             const SizedBox(width: 6),
@@ -545,6 +600,12 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
                                 label: 'Khẩn cấp',
                                 value: 'urgent',
                                 color: const Color(0xFFDC2626),
+                                isDark: isDark,
+                                unselectedBg: isDark
+                                    ? const Color(0xFF1E293B)
+                                    : const Color(0xFFF1F5F9),
+                                unselectedBorder: borderColor,
+                                unselectedText: secondaryTextColor,
                               ),
                             ),
                           ],
@@ -557,24 +618,25 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
               const SizedBox(height: 14),
 
               // Description
-              const Text(
+              Text(
                 'Mô tả chi tiết sự cố *',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: primaryTextColor,
+                ),
               ),
               const SizedBox(height: 6),
               TextFormField(
                 controller: _descController,
                 maxLines: 4,
-                decoration: InputDecoration(
+                style: TextStyle(color: primaryTextColor, fontSize: 13),
+                decoration: _buildInputDecoration(
                   hintText:
                       'Mô tả cụ thể sự cố đang gặp phải (ví dụ: máy in phòng khám không in được phiếu chỉ định, không kết nối được mạng HIS...)',
-                  hintStyle:
-                      TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: Colors.grey.shade300),
-                  ),
-                  contentPadding: const EdgeInsets.all(10),
+                  isDark: isDark,
+                  fillColor: inputBgColor,
+                  borderColor: borderColor,
                 ),
               ),
               const SizedBox(height: 14),
@@ -586,27 +648,26 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Họ tên người gửi',
                           style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 12),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: primaryTextColor,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         TextFormField(
                           controller: _contactNameController,
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(Icons.person_outline,
-                                size: 18, color: Colors.grey),
+                          style:
+                              TextStyle(color: primaryTextColor, fontSize: 13),
+                          decoration: _buildInputDecoration(
+                            prefixIcon: Icon(Icons.person_outline,
+                                size: 18, color: secondaryTextColor),
                             hintText: 'Tên bác sĩ / điều dưỡng...',
-                            hintStyle: TextStyle(
-                                color: Colors.grey.shade400, fontSize: 12),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(6),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 10),
+                            isDark: isDark,
+                            fillColor: inputBgColor,
+                            borderColor: borderColor,
                           ),
                         ),
                       ],
@@ -617,28 +678,27 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Số điện thoại / Máy lẻ',
                           style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 12),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: primaryTextColor,
+                          ),
                         ),
                         const SizedBox(height: 6),
                         TextFormField(
                           controller: _contactPhoneController,
                           keyboardType: TextInputType.phone,
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(Icons.phone_outlined,
-                                size: 18, color: Colors.grey),
+                          style:
+                              TextStyle(color: primaryTextColor, fontSize: 13),
+                          decoration: _buildInputDecoration(
+                            prefixIcon: Icon(Icons.phone_outlined,
+                                size: 18, color: secondaryTextColor),
                             hintText: 'Ví dụ: 102, 0905...',
-                            hintStyle: TextStyle(
-                                color: Colors.grey.shade400, fontSize: 12),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(6),
-                              borderSide:
-                                  BorderSide(color: Colors.grey.shade300),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 10),
+                            isDark: isDark,
+                            fillColor: inputBgColor,
+                            borderColor: borderColor,
                           ),
                         ),
                       ],
@@ -653,8 +713,17 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
                 children: [
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: const Color(0xFF2563EB),
-                      side: const BorderSide(color: Color(0xFF93C5FD)),
+                      foregroundColor: isDark
+                          ? const Color(0xFF60A5FA)
+                          : const Color(0xFF2563EB),
+                      side: BorderSide(
+                        color: isDark
+                            ? const Color(0xFF3B82F6)
+                            : const Color(0xFF93C5FD),
+                      ),
+                      backgroundColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : Colors.transparent,
                       visualDensity: VisualDensity.compact,
                     ),
                     icon: const Icon(Icons.attach_file, size: 16),
@@ -672,8 +741,13 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
                     onChanged: (val) =>
                         setState(() => _includeLogs = val ?? true),
                   ),
-                  const Text('Gửi kèm log RustDesk',
-                      style: TextStyle(fontSize: 12)),
+                  Text(
+                    'Gửi kèm log RustDesk',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: secondaryTextColor,
+                    ),
+                  ),
                 ],
               ),
 
@@ -688,16 +762,23 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
                     return Chip(
                       label: Text(
                         fileName,
-                        style: const TextStyle(fontSize: 11),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: primaryTextColor,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      deleteIcon: const Icon(Icons.close, size: 14),
+                      deleteIcon:
+                          Icon(Icons.close, size: 14, color: secondaryTextColor),
                       onDeleted: () {
                         setState(() => _attachedFiles.remove(f));
                       },
                       visualDensity: VisualDensity.compact,
-                      backgroundColor: Colors.blue.shade50,
+                      backgroundColor: isDark
+                          ? const Color(0xFF1E293B)
+                          : Colors.blue.shade50,
+                      side: BorderSide(color: borderColor),
                     );
                   }).toList(),
                 ),
@@ -710,13 +791,24 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.red.shade50,
+                    color: isDark
+                        ? const Color(0xFF450A0A)
+                        : Colors.red.shade50,
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.red.shade200),
+                    border: Border.all(
+                      color: isDark
+                          ? const Color(0xFFDC2626)
+                          : Colors.red.shade200,
+                    ),
                   ),
                   child: Text(
                     _errorMessage,
-                    style: TextStyle(color: Colors.red.shade800, fontSize: 12),
+                    style: TextStyle(
+                      color: isDark
+                          ? const Color(0xFFFCA5A5)
+                          : Colors.red.shade800,
+                      fontSize: 12,
+                    ),
                   ),
                 ),
               ],
@@ -727,6 +819,10 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: secondaryTextColor,
+                      side: BorderSide(color: borderColor),
+                    ),
                     onPressed: _isSubmitting ? null : widget.onClose,
                     child: const Text('HỦY BỎ'),
                   ),
@@ -737,6 +833,9 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
                     ),
                     icon: _isSubmitting
                         ? const SizedBox(
@@ -764,20 +863,62 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
     );
   }
 
-  Widget _buildInfoBadge(String label, String value, IconData icon) {
+  InputDecoration _buildInputDecoration({
+    required String hintText,
+    required bool isDark,
+    required Color fillColor,
+    required Color borderColor,
+    Widget? prefixIcon,
+  }) {
+    return InputDecoration(
+      prefixIcon: prefixIcon,
+      hintText: hintText,
+      hintStyle: TextStyle(
+        color: isDark ? Colors.white38 : Colors.black38,
+        fontSize: 12,
+      ),
+      filled: true,
+      fillColor: fillColor,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: BorderSide(color: borderColor),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(6),
+        borderSide: BorderSide(color: borderColor),
+      ),
+      focusedBorder: const OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(6)),
+        borderSide: BorderSide(color: Color(0xFFE11D48), width: 1.5),
+      ),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    );
+  }
+
+  Widget _buildInfoBadge(
+      String label, String value, IconData icon, bool isDark) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 13, color: Colors.grey.shade600),
+        Icon(icon,
+            size: 13,
+            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B)),
         const SizedBox(width: 4),
-        Text('$label: ',
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+        Text(
+          '$label: ',
+          style: TextStyle(
+            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+            fontSize: 11,
+          ),
+        ),
         Text(
           value.isNotEmpty ? value : 'N/A',
-          style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
-              fontFamily: 'monospace'),
+          style: TextStyle(
+            color: isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A),
+            fontWeight: FontWeight.bold,
+            fontSize: 11,
+            fontFamily: 'monospace',
+          ),
         ),
       ],
     );
@@ -787,6 +928,10 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
     required String label,
     required String value,
     required Color color,
+    required bool isDark,
+    required Color unselectedBg,
+    required Color unselectedBorder,
+    required Color unselectedText,
   }) {
     final isSelected = _selectedPriority == value;
     return InkWell(
@@ -795,10 +940,10 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? color : Colors.grey.shade100,
+          color: isSelected ? color : unselectedBg,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: isSelected ? color : Colors.grey.shade300,
+            color: isSelected ? color : unselectedBorder,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -806,7 +951,7 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
         child: Text(
           label,
           style: TextStyle(
-            color: isSelected ? Colors.white : Colors.black87,
+            color: isSelected ? Colors.white : unselectedText,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
             fontSize: 12,
           ),

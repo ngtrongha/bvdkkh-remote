@@ -27,7 +27,12 @@ pub fn start_tray() {
 }
 
 #[cfg(windows)]
-fn start_global_support_hotkey() {
+pub fn start_global_support_hotkey() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static STARTED: AtomicBool = AtomicBool::new(false);
+    if STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
     std::thread::spawn(move || {
         use winapi::um::winuser::{
             DispatchMessageW, GetMessageW, RegisterHotKey, TranslateMessage, UnregisterHotKey,
@@ -43,7 +48,7 @@ fn start_global_support_hotkey() {
                 while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
                     if msg.message == WM_HOTKEY && msg.wParam == hotkey_id as usize {
                         log::info!("Ctrl+Alt+H pressed, launching IT Support request");
-                        crate::run_me::<&str>(vec!["--support"]).ok();
+                        crate::run_me::<&str>(vec!["--support", "rustdesk://support"]).ok();
                     }
                     TranslateMessage(&msg);
                     DispatchMessageW(&msg);
@@ -164,7 +169,7 @@ fn make_tray() -> hbb_common::ResultType<()> {
     };
 
     let open_support_func = move || {
-        crate::run_me::<&str>(vec!["--support"]).ok();
+        crate::run_me::<&str>(vec!["--support", "rustdesk://support"]).ok();
     };
 
     #[cfg(windows)]
