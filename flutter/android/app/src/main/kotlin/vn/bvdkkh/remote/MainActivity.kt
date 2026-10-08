@@ -1,4 +1,4 @@
-package com.carriez.flutter_hbb
+package vn.bvdkkh.remote
 
 /**
  * Handle events from flutter
