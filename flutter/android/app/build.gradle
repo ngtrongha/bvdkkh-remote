@@ -82,7 +82,7 @@ protobuf {
 }
 
 android {
-    namespace "vn.bvdkkh.remote"
+    namespace "com.carriez.flutter_hbb"
     compileSdkVersion 36
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
