@@ -2414,7 +2414,11 @@ List<String>? urlLinkToCmdArgs(Uri uri) {
     "rdp",
     "terminal",
     "terminal-admin",
+    "support",
   ];
+  if (uri.authority == "support" || uri.host == "support" || uri.path == "/support") {
+    return ["--support"];
+  }
   if (uri.authority.isEmpty &&
       uri.path.split('').every((char) => char == '/')) {
     return [];
