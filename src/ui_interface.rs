@@ -107,9 +107,29 @@ pub fn goto_install() {
 pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) {
     #[cfg(windows)]
     std::thread::spawn(move || {
-        allow_err!(crate::platform::windows::install_me(
+        if let Err(err) = crate::platform::windows::install_me(
             &_options, _path, _silent, _debug
-        ));
+        ) {
+            log::error!("Failed to install: {err}");
+            use std::os::windows::ffi::OsStrExt;
+            let title: Vec<u16> = std::ffi::OsStr::new("Lỗi cài đặt BVĐKKH - Remote")
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+            let msg: Vec<u16> = std::ffi::OsStr::new(&format!("Không thể hoàn tất cài đặt:\n{err}"))
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+            unsafe {
+                winapi::um::winuser::MessageBoxW(
+                    std::ptr::null_mut(),
+                    msg.as_ptr(),
+                    title.as_ptr(),
+                    winapi::um::winuser::MB_OK | winapi::um::winuser::MB_ICONERROR,
+                );
+            }
+            return;
+        }
         std::process::exit(0);
     });
 }
