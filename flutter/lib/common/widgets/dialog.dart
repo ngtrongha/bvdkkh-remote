@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -502,6 +506,7 @@ class DialogTextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
   final int? maxLength;
+  final bool autofocus;
 
   static const kUsernameTitle = 'Username';
   static const kUsernameIcon = Icon(Icons.account_circle_outlined);
@@ -520,6 +525,7 @@ class DialogTextField extends StatelessWidget {
       this.keyboardType,
       this.inputFormatters,
       this.maxLength,
+      this.autofocus = true,
       required this.title,
       required this.controller})
       : super(key: key);
@@ -542,7 +548,7 @@ class DialogTextField extends StatelessWidget {
                 ),
                 controller: controller,
                 focusNode: focusNode,
-                autofocus: true,
+                autofocus: autofocus,
                 obscureText: obscureText,
                 keyboardType: keyboardType,
                 inputFormatters: inputFormatters,
@@ -767,6 +773,8 @@ class _DialogVerificationCodeField extends State<DialogVerificationCodeField> {
         widget.controller.addListener(() {
           final text = widget.controller.text.trim();
           if (text == _preText) return;
+          widget.controller.selection =
+              TextSelection.collapsed(offset: widget.controller.text.length);
           widget.onChanged!(setState, errorText);
           _preText = text;
         });
@@ -802,6 +810,7 @@ class _DialogVerificationCodeField extends State<DialogVerificationCodeField> {
       controller: widget.controller,
       errorText: widget.errorText ?? errorText.value,
       focusNode: _focusNode,
+      autofocus: false,
       helperText: widget.helperText,
       keyboardType: widget.keyboardType,
       inputFormatters: widget.inputFormatters,

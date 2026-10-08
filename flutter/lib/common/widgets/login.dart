@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -798,22 +802,14 @@ Future<bool?> _openLoginDialog() async {
             passwordMsg = "Failed, bad tfa type from server";
           }
           if (isEmailVerification != null) {
-            if (isMobile) {
-              if (close != null) close(null);
-              verificationCodeDialog(
-                  resp.user, resp.secret, isEmailVerification);
-            } else {
-              setState(() => isInProgress = false);
-              // Workaround for web, close the dialog first, then show the verification code dialog.
-              // Otherwise, the text field will keep selecting the text and we can't input the code.
-              // Not sure why this happens.
-              if (isWeb && close != null) close(null);
-              final res = await verificationCodeDialog(
-                  resp.user, resp.secret, isEmailVerification);
-              if (res == true) {
-                if (!isWeb && close != null) close(false);
-                return;
-              }
+            setState(() => isInProgress = false);
+            // Close login dialog first before showing verification code dialog.
+            // Otherwise, background dialog text fields conflict in the overlay and keep selecting the text.
+            if (close != null) close(null);
+            final res = await verificationCodeDialog(
+                resp.user, resp.secret, isEmailVerification);
+            if (res == true) {
+              return;
             }
           }
           break;
@@ -1105,9 +1101,7 @@ Future<bool?> verificationCodeDialog(
           dialogButton("Verify", onPressed: getOnSubmit()),
         ]);
   });
-  // For verification code, desktop update other models in login dialog, mobile need to close login dialog first,
-  // otherwise the soft keyboard will jump out on each key press, so mobile update in verification code dialog.
-  if (isMobile && res == true) {
+  if (res == true) {
     gFFI.userModel.refreshCurrentUser();
     await UserModel.updateOtherModels();
   }
