@@ -36,26 +36,60 @@ pub fn start_global_support_hotkey() {
     std::thread::spawn(move || {
         use winapi::um::winuser::{
             DispatchMessageW, GetMessageW, RegisterHotKey, TranslateMessage, UnregisterHotKey,
-            MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, WM_HOTKEY,
+            MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, WM_HOTKEY,
         };
         unsafe {
-            let hotkey_id = 0x171;
-            // 0x48 is virtual-key code for 'H'
-            let fs_modifiers = (MOD_CONTROL | MOD_ALT | MOD_NOREPEAT) as u32;
-            if RegisterHotKey(std::ptr::null_mut(), hotkey_id, fs_modifiers, 0x48) != 0 {
+            let id_ctrl_alt_h = 0x171;
+            let id_ctrl_shift_h = 0x172;
+            let id_f8 = 0x173;
+
+            let fs_ctrl_alt = (MOD_CONTROL | MOD_ALT | MOD_NOREPEAT) as u32;
+            let fs_ctrl_shift = (MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT) as u32;
+
+            let mut registered_count = 0;
+
+            // 1. Primary: Ctrl + Alt + H (0x48 = 'H')
+            if RegisterHotKey(std::ptr::null_mut(), id_ctrl_alt_h, fs_ctrl_alt, 0x48) != 0 {
                 log::info!("Global hotkey Ctrl+Alt+H registered successfully");
+                registered_count += 1;
+            } else {
+                let err = winapi::um::errhandlingapi::GetLastError();
+                log::warn!("Could not register global hotkey Ctrl+Alt+H (error code: {err})");
+            }
+
+            // 2. Reliable secondary: Ctrl + Shift + H (0x48 = 'H')
+            if RegisterHotKey(std::ptr::null_mut(), id_ctrl_shift_h, fs_ctrl_shift, 0x48) != 0 {
+                log::info!("Global hotkey Ctrl+Shift+H registered successfully");
+                registered_count += 1;
+            } else {
+                let err = winapi::um::errhandlingapi::GetLastError();
+                log::warn!("Could not register global hotkey Ctrl+Shift+H (error code: {err})");
+            }
+
+            // 3. One-key shortcut: F8 (0x77 = VK_F8)
+            if RegisterHotKey(std::ptr::null_mut(), id_f8, MOD_NOREPEAT as u32, 0x77) != 0 {
+                log::info!("Global hotkey F8 registered successfully");
+                registered_count += 1;
+            }
+
+            if registered_count > 0 {
                 let mut msg = std::mem::zeroed();
                 while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
-                    if msg.message == WM_HOTKEY && msg.wParam == hotkey_id as usize {
-                        log::info!("Ctrl+Alt+H pressed, launching IT Support request");
-                        crate::run_me::<&str>(vec!["--support", "rustdesk://support"]).ok();
+                    if msg.message == WM_HOTKEY {
+                        let id = msg.wParam as i32;
+                        if id == id_ctrl_alt_h || id == id_ctrl_shift_h || id == id_f8 {
+                            log::info!("Support hotkey triggered (id: {id}), launching IT Support request");
+                            crate::run_me::<&str>(vec!["--support", "rustdesk://support"]).ok();
+                        }
                     }
                     TranslateMessage(&msg);
                     DispatchMessageW(&msg);
                 }
-                UnregisterHotKey(std::ptr::null_mut(), hotkey_id);
+                UnregisterHotKey(std::ptr::null_mut(), id_ctrl_alt_h);
+                UnregisterHotKey(std::ptr::null_mut(), id_ctrl_shift_h);
+                UnregisterHotKey(std::ptr::null_mut(), id_f8);
             } else {
-                log::warn!("Could not register global hotkey Ctrl+Alt+H in tray");
+                log::error!("All global support hotkeys failed to register");
             }
         }
     });

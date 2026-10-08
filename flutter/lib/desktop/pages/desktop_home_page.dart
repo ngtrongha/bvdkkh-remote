@@ -428,7 +428,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       child: ElevatedButton.icon(
         icon: const Icon(Icons.support_agent_rounded, size: 16),
         label: const Text(
-          'Báo Sự Cố IT (Ctrl+Alt+H)',
+          'Báo Sự Cố IT (F8 / Ctrl+Alt+H)',
           style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
         ),
         style: ElevatedButton.styleFrom(
@@ -453,7 +453,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     if (event is KeyDownEvent) {
       final isCtrl = HardwareKeyboard.instance.isControlPressed;
       final isAlt = HardwareKeyboard.instance.isAltPressed;
+      final isShift = HardwareKeyboard.instance.isShiftPressed;
       if (isCtrl && isAlt && event.logicalKey == LogicalKeyboardKey.keyH) {
+        _openSupportDialog();
+        return true;
+      }
+      if (isCtrl && isShift && event.logicalKey == LogicalKeyboardKey.keyH) {
+        _openSupportDialog();
+        return true;
+      }
+      if (event.logicalKey == LogicalKeyboardKey.f8) {
         _openSupportDialog();
         return true;
       }
