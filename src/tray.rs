@@ -160,6 +160,7 @@ fn make_tray() -> hbb_common::ResultType<()> {
                     crate::server::CHILD_PROCESS.lock().unwrap().push(task);
                 }
             }
+        }
     };
 
     let open_support_func = move || {
