@@ -132,7 +132,7 @@ class _AnimatedDropdownState<T> extends State<AnimatedDropdown<T>>
             CompositedTransformFollower(
               link: _layerLink,
               showWhenUnlinked: false,
-              offset: openUpwards ? const Offset(0, -4) : Offset(0, size.height + 4),
+              offset: openUpwards ? const Offset(0, -4) : const Offset(0, 4),
               targetAnchor:
                   openUpwards ? Alignment.topLeft : Alignment.bottomLeft,
               followerAnchor:
