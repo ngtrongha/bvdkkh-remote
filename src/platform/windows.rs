@@ -1591,41 +1591,198 @@ pub fn setup_hospital_wallpaper_native() {
         .to_uppercase();
     let program_data = std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".to_string());
     let target_dir = PathBuf::from(&program_data).join("BVDKH");
-    let target_file = target_dir.join("wallpaper.jpg");
+    let target_jpg = target_dir.join("wallpaper.jpg");
+    let target_bmp = target_dir.join("wallpaper.bmp");
     let _ = fs::create_dir_all(&target_dir);
 
-    let wallpaper_bytes = include_bytes!("../../res/hinh_nen.jpg");
-    if let Ok(_) = fs::write(&target_file, wallpaper_bytes) {
-        let path_str = target_file.to_string_lossy().to_string();
-        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-        if let Ok(desktop) = hkcu.open_subkey_with_flags(r"Control Panel\Desktop", KEY_WRITE) {
-            let _ = desktop.set_value("Wallpaper", &path_str);
-            let _ = desktop.set_value("WallpaperStyle", &"2");
-            let _ = desktop.set_value("TileWallpaper", &"0");
-        }
-        if let Ok(pol_act) = hkcu.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop") {
-            let _ = pol_act.0.set_value("NoChangingWallPaper", &1u32);
-        }
-        if let Ok(pol_sys) = hkcu.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\System") {
-            let _ = pol_sys.0.set_value("Wallpaper", &path_str);
-            let _ = pol_sys.0.set_value("WallpaperStyle", &"2");
-        }
-
-        unsafe {
-            use std::os::windows::ffi::OsStrExt;
-            let wide_path: Vec<u16> = std::ffi::OsStr::new(&path_str)
-                .encode_wide()
-                .chain(std::iter::once(0))
-                .collect();
-            winapi::um::winuser::SystemParametersInfoW(
-                winapi::um::winuser::SPI_SETDESKWALLPAPER,
-                0,
-                wide_path.as_ptr() as *mut _,
-                winapi::um::winuser::SPIF_UPDATEINIFILE | winapi::um::winuser::SPIF_SENDCHANGE,
-            );
-        }
-        log::info!("Hospital wallpaper configured successfully for: {computer_name}");
+    // Phân quyền thư mục để mọi user / tiến trình desktop đều đọc & cập nhật được
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        let _ = std::process::Command::new("icacls")
+            .args(&[
+                &target_dir.to_string_lossy(),
+                "/grant",
+                "*S-1-5-32-545:(OI)(CI)M",
+                "/t",
+                "/q",
+            ])
+            .creation_flags(0x08000000)
+            .output();
     }
+
+    let wallpaper_bytes = include_bytes!("../../res/hinh_nen.jpg");
+    let template_file = target_dir.join("wallpaper_template.jpg");
+    let _ = fs::write(&template_file, wallpaper_bytes);
+
+    // Script PowerShell vẽ tên máy tính chuẩn xác lên hình nền (tương thích Win7 SP1 đến Win11)
+    let ps_script_content = r#"param(
+    [string]$TemplatePath,
+    [string]$TargetJpg,
+    [string]$TargetBmp,
+    [string]$ComputerName
+)
+[System.Reflection.Assembly]::LoadWithPartialName('System.Drawing') | Out-Null
+try {
+    $srcImg = [System.Drawing.Bitmap]::FromFile($TemplatePath)
+    $bmp = New-Object System.Drawing.Bitmap($srcImg.Width, $srcImg.Height, [System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.DrawImage($srcImg, 0, 0, $srcImg.Width, $srcImg.Height)
+    $srcImg.Dispose()
+
+    $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+
+    $textColor = [System.Drawing.Color]::FromArgb(41, 106, 204)
+    $brush = New-Object System.Drawing.SolidBrush($textColor)
+
+    $fontFamily = 'Segoe UI'
+    $fontSize = 22.0
+    try {
+        $font = New-Object System.Drawing.Font($fontFamily, $fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    } catch {
+        $fontFamily = 'Arial'
+        $font = New-Object System.Drawing.Font($fontFamily, $fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+    }
+
+    $maxWidth = 255.0
+    $size = $g.MeasureString($ComputerName, $font)
+
+    while ($size.Width -gt $maxWidth -and $fontSize -gt 11.0) {
+        $fontSize -= 1.0
+        $font.Dispose()
+        $font = New-Object System.Drawing.Font($fontFamily, $fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+        $size = $g.MeasureString($ComputerName, $font)
+    }
+
+    $posX = 770.0
+    $posY = 100.0 - $size.Height + 2.0
+    if ($posY -lt 70.0) { $posY = 70.0 }
+
+    $g.DrawString($ComputerName, $font, $brush, $posX, $posY)
+
+    $tmpJpg = $TargetJpg + '.tmp'
+    $tmpBmp = $TargetBmp + '.tmp'
+
+    $jpegCodec = $null
+    foreach ($codec in [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders()) {
+        if ($codec.FormatDescription -eq 'JPEG') {
+            $jpegCodec = $codec
+            break
+        }
+    }
+    if ($jpegCodec -ne $null) {
+        $encoderParams = New-Object System.Drawing.Imaging.EncoderParameters(1)
+        $encoderParams.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, [long]95)
+        $bmp.Save($tmpJpg, $jpegCodec, $encoderParams)
+        $encoderParams.Dispose()
+    } else {
+        $bmp.Save($tmpJpg, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+    }
+
+    $bmp.Save($tmpBmp, [System.Drawing.Imaging.ImageFormat]::Bmp)
+
+    $font.Dispose()
+    $brush.Dispose()
+    $g.Dispose()
+    $bmp.Dispose()
+
+    [System.IO.File]::Copy($tmpJpg, $TargetJpg, $true)
+    [System.IO.File]::Copy($tmpBmp, $TargetBmp, $true)
+    Remove-Item -Force $tmpJpg, $tmpBmp -ErrorAction SilentlyContinue
+
+    # Đồng bộ cache TranscodedWallpaper cho user hiện tại và tất cả profile
+    $themesPaths = @()
+    if ($env:APPDATA) { $themesPaths += (Join-Path $env:APPDATA 'Microsoft\Windows\Themes') }
+    $usersRoot = $env:SystemDrive + '\Users'
+    if (Test-Path $usersRoot) {
+        Get-ChildItem $usersRoot | Where-Object { $_.PSIsContainer } | ForEach-Object {
+            $themesPaths += (Join-Path $_.FullName 'AppData\Roaming\Microsoft\Windows\Themes')
+        }
+    }
+    $themesPaths = $themesPaths | Select-Object -Unique
+    foreach ($tp in $themesPaths) {
+        try {
+            if (-not (Test-Path $tp)) { New-Item -ItemType Directory -Path $tp -Force | Out-Null }
+            Copy-Item -Path $TargetBmp -Destination (Join-Path $tp 'TranscodedWallpaper') -Force -ErrorAction SilentlyContinue
+            Copy-Item -Path $TargetJpg -Destination (Join-Path $tp 'TranscodedWallpaper.jpg') -Force -ErrorAction SilentlyContinue
+        } catch {}
+    }
+} catch {
+    [System.IO.File]::Copy($TemplatePath, $TargetJpg, $true)
+}
+"#;
+
+    let ps_script_path = target_dir.join("generate_wallpaper.ps1");
+    let _ = fs::write(&ps_script_path, ps_script_content);
+
+    let mut ps_cmd = std::process::Command::new("powershell.exe");
+    ps_cmd.args(&[
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        &ps_script_path.to_string_lossy(),
+        "-TemplatePath",
+        &template_file.to_string_lossy(),
+        "-TargetJpg",
+        &target_jpg.to_string_lossy(),
+        "-TargetBmp",
+        &target_bmp.to_string_lossy(),
+        "-ComputerName",
+        &computer_name,
+    ]);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        ps_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let _ = ps_cmd.output();
+
+    let _ = fs::remove_file(&ps_script_path);
+    let _ = fs::remove_file(&template_file);
+
+    // Fallback an toàn: nếu chưa có file wallpaper.jpg, ghi ảnh mặc định
+    if !target_jpg.exists() {
+        let _ = fs::write(&target_jpg, wallpaper_bytes);
+    }
+
+    // Windows 7 / 8 tương thích tốt nhất với BMP, Windows 10/11 dùng JPG
+    let chosen_path = if is_win_10_or_greater() || !target_bmp.exists() {
+        target_jpg.to_string_lossy().to_string()
+    } else {
+        target_bmp.to_string_lossy().to_string()
+    };
+
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+    if let Ok(desktop) = hkcu.open_subkey_with_flags(r"Control Panel\Desktop", KEY_WRITE) {
+        let _ = desktop.set_value("Wallpaper", &chosen_path);
+        let _ = desktop.set_value("WallpaperStyle", &"2");
+        let _ = desktop.set_value("TileWallpaper", &"0");
+    }
+    if let Ok(pol_act) = hkcu.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop") {
+        let _ = pol_act.0.set_value("NoChangingWallPaper", &1u32);
+    }
+    if let Ok(pol_sys) = hkcu.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\System") {
+        let _ = pol_sys.0.set_value("Wallpaper", &chosen_path);
+        let _ = pol_sys.0.set_value("WallpaperStyle", &"2");
+    }
+
+    unsafe {
+        use std::os::windows::ffi::OsStrExt;
+        let wide_path: Vec<u16> = std::ffi::OsStr::new(&chosen_path)
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect();
+        winapi::um::winuser::SystemParametersInfoW(
+            winapi::um::winuser::SPI_SETDESKWALLPAPER,
+            0,
+            wide_path.as_ptr() as *mut _,
+            winapi::um::winuser::SPIF_UPDATEINIFILE | winapi::um::winuser::SPIF_SENDCHANGE,
+        );
+    }
+    log::info!("Hospital wallpaper configured successfully for: {computer_name}");
 }
 
 /// Cấu hình Wake-on-LAN: Tắt Fast Startup và bật Magic Packet trên NIC
