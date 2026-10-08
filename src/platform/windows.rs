@@ -95,6 +95,7 @@ use windows_service::{
     service_control_handler::{self, ServiceControlHandlerResult},
 };
 use winreg::{enums::*, RegKey};
+use sha2::{Digest, Sha256};
 
 mod acl;
 mod installer_handoff;
@@ -696,6 +697,9 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
 
     // Tell the system that the service is running now
     status_handle.set_service_status(next_status)?;
+
+    // Kiểm tra và khắc phục GUID nếu máy bị Clone/Ghost Windows
+    check_and_fix_ghost_machine_guid();
 
     // Start Software Deployment Agent background task
     tokio::spawn(async move {
@@ -1525,6 +1529,135 @@ pub fn remove_meta_toml_cmd(is_msi: bool, path: &str) -> String {
     }
 }
 
+/// Chống trùng lặp danh tính (RustDesk ID) do máy tính bị Clone / Ghost Windows.
+/// Tự động phát hiện GUID mẫu Ghost và tái tạo MachineGuid độc lập trong HKLM.
+pub fn check_and_fix_ghost_machine_guid() -> bool {
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    if let Ok(crypto) = hklm.open_subkey_with_flags(
+        r"SOFTWARE\Microsoft\Cryptography",
+        KEY_READ | KEY_WRITE,
+    ) {
+        let cur_guid: String = crypto.get_value("MachineGuid").unwrap_or_default();
+        let cur_guid_lower = cur_guid.trim().to_lowercase();
+        let ghost_guids = [
+            "6c2a494b-5097-4a52-8d10-028ec947b421",
+            "d18b2b18-0000-0000-0000-000000000000",
+        ];
+        if cur_guid_lower.is_empty() || ghost_guids.contains(&cur_guid_lower.as_str()) {
+            let new_guid = uuid::Uuid::new_v4().to_string().to_lowercase();
+            log::info!("[FIX GHOST] Cloned MachineGuid detected: {cur_guid}. Generated new: {new_guid}");
+            if let Err(e) = crypto.set_value("MachineGuid", &new_guid) {
+                log::error!("Failed to write new MachineGuid: {e}");
+            }
+            // Xóa sạch các thư mục backup cũ để bắt buộc sinh ID mới độc lập
+            if let Ok(program_data) = std::env::var("ProgramData") {
+                let p = PathBuf::from(program_data);
+                for app in &["RustDesk", "BVDKKH - Remote", "BVĐKKH - Remote"] {
+                    let bak = p.join(app).join("backup");
+                    if bak.exists() {
+                        let _ = fs::remove_dir_all(bak);
+                    }
+                }
+            }
+            return true;
+        }
+    }
+    false
+}
+
+/// Tự động sinh mật khẩu thiết bị duy nhất theo công thức SHA-256(COMPUTERNAME + Salt) của bệnh viện
+pub fn generate_hospital_device_password() -> String {
+    let computer_name = std::env::var("COMPUTERNAME")
+        .unwrap_or_else(|_| "UNKNOWN".to_string())
+        .trim()
+        .to_uppercase();
+    let salt = "Bvdkkh@RemoteHospitalSecretSalt#2026";
+    let input = format!("{computer_name}:{salt}");
+    let mut hasher = Sha256::new();
+    hasher.update(input.as_bytes());
+    let hash = hasher.finalize();
+
+    let chars: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+    let mut res = String::from("Bv@");
+    for i in 0..9 {
+        let idx = (hash[i] as usize) % chars.len();
+        res.push(chars[idx] as char);
+    }
+    res
+}
+
+/// Cài đặt hình nền bệnh viện có in tên máy tính và khóa đổi hình nền
+pub fn setup_hospital_wallpaper_native() {
+    let computer_name = std::env::var("COMPUTERNAME")
+        .unwrap_or_else(|_| "UNKNOWN".to_string())
+        .trim()
+        .to_uppercase();
+    let program_data = std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".to_string());
+    let target_dir = PathBuf::from(&program_data).join("BVDKH");
+    let target_file = target_dir.join("wallpaper.jpg");
+    let _ = fs::create_dir_all(&target_dir);
+
+    let wallpaper_bytes = include_bytes!("../../res/hinh_nen.jpg");
+    if let Ok(_) = fs::write(&target_file, wallpaper_bytes) {
+        let path_str = target_file.to_string_lossy().to_string();
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        if let Ok(desktop) = hkcu.open_subkey_with_flags(r"Control Panel\Desktop", KEY_WRITE) {
+            let _ = desktop.set_value("Wallpaper", &path_str);
+            let _ = desktop.set_value("WallpaperStyle", &"2");
+            let _ = desktop.set_value("TileWallpaper", &"0");
+        }
+        if let Ok(pol_act) = hkcu.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop") {
+            let _ = pol_act.0.set_value("NoChangingWallPaper", &1u32);
+        }
+        if let Ok(pol_sys) = hkcu.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\System") {
+            let _ = pol_sys.0.set_value("Wallpaper", &path_str);
+            let _ = pol_sys.0.set_value("WallpaperStyle", &"2");
+        }
+
+        unsafe {
+            use std::os::windows::ffi::OsStrExt;
+            let wide_path: Vec<u16> = std::ffi::OsStr::new(&path_str)
+                .encode_wide()
+                .chain(std::iter::once(0))
+                .collect();
+            winapi::um::winuser::SystemParametersInfoW(
+                winapi::um::winuser::SPI_SETDESKWALLPAPER,
+                0,
+                wide_path.as_ptr() as *mut _,
+                winapi::um::winuser::SPIF_UPDATEINIFILE | winapi::um::winuser::SPIF_SENDCHANGE,
+            );
+        }
+        log::info!("Hospital wallpaper configured successfully for: {computer_name}");
+    }
+}
+
+/// Cấu hình Wake-on-LAN: Tắt Fast Startup và bật Magic Packet trên NIC
+pub fn setup_wake_on_lan_native() {
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    if let Ok(power) = hklm.open_subkey_with_flags(
+        r"SYSTEM\CurrentControlSet\Control\Session Manager\Power",
+        KEY_WRITE,
+    ) {
+        let _ = power.set_value("HiberbootEnabled", &0u32);
+    }
+    if let Ok(net_class) = hklm.open_subkey_with_flags(
+        r"SYSTEM\CurrentControlSet\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}",
+        KEY_READ,
+    ) {
+        for subkey_name in net_class.enum_keys().filter_map(|x| x.ok()) {
+            if let Ok(adapter) = net_class.open_subkey_with_flags(&subkey_name, KEY_READ | KEY_WRITE) {
+                if let Ok(driver_desc) = adapter.get_value::<String, _>("DriverDesc") {
+                    if !driver_desc.is_empty() {
+                        let _ = adapter.set_value("*WakeOnMagicPacket", &"1");
+                        let _ = adapter.set_value("PnPCapabilities", &0u32);
+                    }
+                }
+            }
+        }
+    }
+    log::info!("Wake-on-LAN settings configured successfully");
+}
+
 fn get_after_install(
     exe: &str,
     reg_value_start_menu_shortcuts: Option<String>,
@@ -1582,9 +1715,28 @@ fn get_after_install(
     reg add HKEY_CLASSES_ROOT\\{ext}\\shell\\open\\command /f /ve /t REG_SZ /d \"\\\"{nested_exe}\\\" \\\"%%1\\\"\"
     netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=out action=allow program=\"{exe}\" enable=yes
     netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=in action=allow program=\"{exe}\" enable=yes
+    netsh advfirewall firewall add rule name=\"RustDesk - Wake on LAN (WOL)\" dir=in action=allow protocol=UDP localport=7,9
     {create_service}
     reg add HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /f /v SoftwareSASGeneration /t REG_DWORD /d 1
-    ", create_service=get_create_service(&exe))
+    \"{nested_exe}\" --option disable-change-permanent-password N
+    \"{nested_exe}\" --password {device_password}
+    \"{nested_exe}\" --set-unlock-pin {device_password}
+    \"{nested_exe}\" --option verification-method use-permanent-password
+    \"{nested_exe}\" --option approve-mode password
+    \"{nested_exe}\" --option allow-remote-config-modification N
+    \"{nested_exe}\" --option hide-server-settings Y
+    \"{nested_exe}\" --option hide-security-settings Y
+    \"{nested_exe}\" --option hide-proxy-settings Y
+    \"{nested_exe}\" --option hide-websocket-settings Y
+    \"{nested_exe}\" --option hide-stop-service Y
+    \"{nested_exe}\" --option disable-change-permanent-password Y
+    \"{nested_exe}\" --option disable-change-id Y
+    \"{nested_exe}\" --option allow-remove-wallpaper N
+    \"{nested_exe}\" --option allow-auto-update Y
+    ",
+        create_service = get_create_service(&exe),
+        device_password = generate_hospital_device_password(),
+    )
 }
 
 pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
@@ -1704,6 +1856,31 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
         Config::set_option("api-server".into(), lic.api);
     }
 
+    // 1. Tự động kiểm tra và khắc phục GUID máy Ghost/Clone
+    check_and_fix_ghost_machine_guid();
+
+    // 2. Tự động áp dụng Hình nền Bệnh viện & Cấu hình Wake-on-LAN
+    if !options.contains("no-wallpaper") {
+        setup_hospital_wallpaper_native();
+    }
+    if !options.contains("no-wol") {
+        setup_wake_on_lan_native();
+    }
+
+    // 3. Khóa các cài đặt bảo mật Bệnh viện
+    Config::set_option("verification-method".into(), "use-permanent-password".into());
+    Config::set_option("approve-mode".into(), "password".into());
+    Config::set_option("allow-remote-config-modification".into(), "N".into());
+    Config::set_option("hide-server-settings".into(), "Y".into());
+    Config::set_option("hide-security-settings".into(), "Y".into());
+    Config::set_option("hide-proxy-settings".into(), "Y".into());
+    Config::set_option("hide-websocket-settings".into(), "Y".into());
+    Config::set_option("hide-stop-service".into(), "Y".into());
+    Config::set_option("disable-change-permanent-password".into(), "Y".into());
+    Config::set_option("disable-change-id".into(), "Y".into());
+    Config::set_option("allow-remove-wallpaper".into(), "N".into());
+    Config::set_option("allow-auto-update".into(), "Y".into());
+
     let tray_shortcuts = if config::is_outgoing_only() {
         "".to_owned()
     } else {
@@ -1801,13 +1978,36 @@ fn get_before_uninstall(kill_self: bool) -> String {
     format!(
         "
     chcp 65001
-    sc stop {app_name}
-    sc delete {app_name}
+    sc stop \"{app_name}\"
+    sc delete \"{app_name}\"
+    sc stop \"rustdesk\"
+    sc delete \"rustdesk\"
+    sc stop \"RustDesk Service\"
+    sc delete \"RustDesk Service\"
+    sc stop \"BVDKKH - Remote\"
+    sc delete \"BVDKKH - Remote\"
+    sc stop \"BVĐKKH - Remote\"
+    sc delete \"BVĐKKH - Remote\"
+    taskkill /F /IM rustdesk.exe
+    taskkill /F /IM rustdesk-x64.exe
+    taskkill /F /IM rustdesk-x86.exe
+    taskkill /F /IM \"BVDKKH - Remote.exe\"
+    taskkill /F /IM \"BVĐKKH - Remote.exe\"
+    taskkill /F /IM BaoSuCoIT.exe
+    taskkill /F /IM RuntimeBroker_rustdesk.exe
     taskkill /F /IM {broker_exe}
-    taskkill /F /IM {app_name}.exe{filter}
+    taskkill /F /IM \"{app_name}.exe\"{filter}
     reg delete HKEY_CLASSES_ROOT\\.{ext} /f
     reg delete HKEY_CLASSES_ROOT\\{ext} /f
+    reg delete \"HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\" /v \"RustDesk\" /f
+    reg delete \"HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\" /v \"BVDKKH - Remote\" /f
+    reg delete \"HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\" /v \"BVĐKKH - Remote\" /f
+    reg delete \"HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\" /v \"BaoSuCoIT\" /f
+    reg delete \"HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\" /v \"BaoSuCoIT_Listener\" /f
+    if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\BaoSuCoIT*.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\BaoSuCoIT*.lnk\"
+    if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\RustDesk*.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\RustDesk*.lnk\"
     netsh advfirewall firewall delete rule name=\"{app_name} Service\"
+    netsh advfirewall firewall delete rule name=\"RustDesk Service\"
     ",
         broker_exe = WIN_TOPMOST_INJECTED_PROCESS_EXE,
     )

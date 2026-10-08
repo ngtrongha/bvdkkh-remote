@@ -117,6 +117,16 @@ pub fn start(args: &mut [String]) {
         frame.event_handler(UI {});
         frame.sciter_handler(UIHostHandler {});
         page = "install.html";
+    } else if args[0] == "--support" {
+        std::thread::spawn(move || check_zombie());
+        crate::common::check_software_update();
+        frame.event_handler(UI {});
+        frame.sciter_handler(UIHostHandler {});
+        page = "index.html";
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            UI {}.trigger_support_request();
+        });
     } else if args[0] == "--cm" {
         frame.register_behavior("connection-manager", move || {
             Box::new(cm::SciterConnectionManager::new())

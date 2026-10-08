@@ -2287,6 +2287,12 @@ bool handleUriLink({List<String>? cmdArgs, Uri? uri, String? uriString}) {
     return true;
   }
 
+  if (args.contains('--support') || uri?.host == 'support' || uri?.path == '/support') {
+    windowOnTop(null);
+    stateGlobal.showSupportRequest.value = true;
+    return true;
+  }
+
   UriLinkType? type;
   String? id;
   String? password;
