@@ -449,6 +449,18 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     showSupportRequestDialog(context);
   }
 
+  bool _handleGlobalKey(KeyEvent event) {
+    if (event is KeyDownEvent) {
+      final isCtrl = HardwareKeyboard.instance.isControlPressed;
+      final isAlt = HardwareKeyboard.instance.isAltPressed;
+      if (isCtrl && isAlt && event.logicalKey == LogicalKeyboardKey.keyH) {
+        _openSupportDialog();
+        return true;
+      }
+    }
+    return false;
+  }
+
   Future<void> _loadDeviceInfo() async {
     _hostname = Platform.localHostname;
     _username =
@@ -909,6 +921,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     super.initState();
     _loadDeviceInfo();
     SupportTicketListener.instance.initClientWatcher();
+    HardwareKeyboard.instance.addHandler(_handleGlobalKey);
     ever(stateGlobal.showSupportRequest, (bool show) {
       if (show) {
         stateGlobal.showSupportRequest.value = false;
@@ -1098,6 +1111,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleGlobalKey);
     _uniLinksSubscription?.cancel();
     Get.delete<RxBool>(tag: 'stop-service');
     _updateTimer?.cancel();

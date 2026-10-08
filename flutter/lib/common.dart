@@ -32,6 +32,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 
 import '../consts.dart';
+import 'common/widgets/animated_dropdown.dart';
 import 'common/widgets/overlay.dart';
 import 'mobile/pages/file_manager_page.dart';
 import 'mobile/pages/remote_page.dart';
@@ -3696,30 +3697,32 @@ class ComboBox extends StatelessWidget {
     }
     var ref = values[index].obs;
     current = keys[index];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: enabled
-              ? MyTheme.color(context).border2 ?? MyTheme.border
-              : MyTheme.border,
-        ),
-        borderRadius:
-            BorderRadius.circular(8), //border raiuds of dropdown button
-      ),
-      height: 42, // should be the height of a TextField
-      child: Obx(() => DropdownButton<String>(
-            isExpanded: true,
+      margin: const EdgeInsets.only(bottom: 5),
+      child: Obx(() => AnimatedDropdown<String>(
+            enabled: enabled,
             value: ref.value,
-            elevation: 16,
-            underline: Container(),
-            style: TextStyle(
-                color: enabled
-                    ? Theme.of(context).textTheme.titleMedium?.color
-                    : disabledTextColor(context, enabled)),
-            icon: const Icon(
-              Icons.expand_more_sharp,
-              size: 20,
-            ).marginOnly(right: 15),
+            height: 42,
+            fillColor: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+            borderColor: enabled
+                ? (MyTheme.color(context).border2 ?? (isDark ? const Color(0xFF334155) : MyTheme.border))
+                : MyTheme.border,
+            dropdownColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+            textStyle: TextStyle(
+              fontSize: 14,
+              color: enabled
+                  ? Theme.of(context).textTheme.titleMedium?.color
+                  : disabledTextColor(context, enabled),
+            ),
+            borderRadius: BorderRadius.circular(8),
+            items: values.map((String val) {
+              return AnimatedDropdownItem<String>(
+                value: val,
+                label: val,
+              );
+            }).toList(),
             onChanged: enabled
                 ? (String? newValue) {
                     if (newValue != null && newValue != ref.value) {
@@ -3729,18 +3732,8 @@ class ComboBox extends StatelessWidget {
                     }
                   }
                 : null,
-            items: values.map<DropdownMenuItem<String>>((String value) {
-              return DropdownMenuItem<String>(
-                value: value,
-                child: Text(
-                  value,
-                  style: const TextStyle(fontSize: 15),
-                  overflow: TextOverflow.ellipsis,
-                ).marginOnly(left: 15),
-              );
-            }).toList(),
           )),
-    ).marginOnly(bottom: 5);
+    );
   }
 }
 
