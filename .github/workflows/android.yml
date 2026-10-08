@@ -40,15 +40,21 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Free Disk Space
-        uses: jlumbroso/free-disk-space@v1.3.1
-        with:
-          tool-cache: false
-          android: false
-          dotnet: true
-          haskell: true
-          large-packages: false
-          docker-images: true
-          swap-storage: false
+        shell: bash
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h /
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/.ghcup
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY" || true
+          sudo rm -rf /usr/local/lib/android/sdk/ndk/* || true
+          sudo docker image prune --all --force || true
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile || true
+          echo "=== Disk space after cleanup ==="
+          df -h /
 
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -115,6 +121,7 @@ jobs:
       - name: Build C/C++ dependencies (vcpkg)
         run: |
           ./flutter/build_android_deps.sh "${{ inputs.target_abi }}"
+          rm -rf /opt/artifacts/vcpkg/buildtrees /opt/artifacts/vcpkg/packages /opt/artifacts/vcpkg/downloads || true
 
       - name: Build Rust core library (librustdesk.so)
         env:
@@ -165,6 +172,7 @@ jobs:
               FLUTTER_TARGET="android-x64"
               ;;
           esac
+          rm -rf ./target
 
           pushd flutter
           flutter build apk "--${{ inputs.build_type }}" --target-platform "${FLUTTER_TARGET}" --split-per-abi
