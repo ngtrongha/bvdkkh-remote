@@ -909,6 +909,20 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     super.initState();
     _loadDeviceInfo();
     SupportTicketListener.instance.initClientWatcher();
+    ever(stateGlobal.showSupportRequest, (bool show) {
+      if (show) {
+        stateGlobal.showSupportRequest.value = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _openSupportDialog();
+        });
+      }
+    });
+    if (stateGlobal.showSupportRequest.value) {
+      stateGlobal.showSupportRequest.value = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _openSupportDialog();
+      });
+    }
     _updateTimer = periodic_immediate(const Duration(seconds: 1), () async {
       await gFFI.serverModel.fetchID();
       if (_ipAddress.isEmpty) {

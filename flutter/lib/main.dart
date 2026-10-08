@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -113,6 +117,9 @@ Future<void> main(List<String> args) async {
     desktopType = DesktopType.main;
     await windowManager.ensureInitialized();
     windowManager.setPreventClose(true);
+    if (args.contains('--support')) {
+      stateGlobal.showSupportRequest.value = true;
+    }
     if (isMacOS) {
       disableWindowMovable(kWindowId);
     }

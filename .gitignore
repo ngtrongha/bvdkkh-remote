@@ -23,6 +23,7 @@ keystores/
 *jpg
 !res/*.png
 !res/*.svg
+!res/*.jpg
 !flutter/assets/*.png
 !flutter/android/app/src/main/res/**/*.png
 !flutter/ios/Runner/Assets.xcassets/**/*.png

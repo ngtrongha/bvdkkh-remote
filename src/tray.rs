@@ -20,7 +20,40 @@ pub fn start_tray() {
     #[cfg(target_os = "linux")]
     crate::server::check_zombie();
 
+    #[cfg(windows)]
+    start_global_support_hotkey();
+
     allow_err!(make_tray());
+}
+
+#[cfg(windows)]
+fn start_global_support_hotkey() {
+    std::thread::spawn(move || {
+        use winapi::um::winuser::{
+            DispatchMessageW, GetMessageW, RegisterHotKey, TranslateMessage, UnregisterHotKey,
+            MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, WM_HOTKEY,
+        };
+        unsafe {
+            let hotkey_id = 0x171;
+            // 0x48 is virtual-key code for 'H'
+            let fs_modifiers = (MOD_CONTROL | MOD_ALT | MOD_NOREPEAT) as u32;
+            if RegisterHotKey(std::ptr::null_mut(), hotkey_id, fs_modifiers, 0x48) != 0 {
+                log::info!("Global hotkey Ctrl+Alt+H registered successfully");
+                let mut msg = std::mem::zeroed();
+                while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                    if msg.message == WM_HOTKEY && msg.wParam == hotkey_id as usize {
+                        log::info!("Ctrl+Alt+H pressed, launching IT Support request");
+                        crate::run_me::<&str>(vec!["--support"]).ok();
+                    }
+                    TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+                UnregisterHotKey(std::ptr::null_mut(), hotkey_id);
+            } else {
+                log::warn!("Could not register global hotkey Ctrl+Alt+H in tray");
+            }
+        }
+    });
 }
 
 fn make_tray() -> hbb_common::ResultType<()> {
@@ -75,10 +108,11 @@ fn make_tray() -> hbb_common::ResultType<()> {
         None
     };
     let open_i = MenuItem::new(translate("Open".to_owned()), true, None);
+    let support_i = MenuItem::new("Báo sự cố IT (Ctrl+Alt+H)".to_owned(), true, None);
     if let Some(quit_i) = &quit_i {
-        tray_menu.append_items(&[&open_i, quit_i]).ok();
+        tray_menu.append_items(&[&open_i, &support_i, quit_i]).ok();
     } else {
-        tray_menu.append_items(&[&open_i]).ok();
+        tray_menu.append_items(&[&open_i, &support_i]).ok();
     }
     let tooltip = |count: usize| {
         if count == 0 {
@@ -126,7 +160,10 @@ fn make_tray() -> hbb_common::ResultType<()> {
                     crate::server::CHILD_PROCESS.lock().unwrap().push(task);
                 }
             }
-        }
+    };
+
+    let open_support_func = move || {
+        crate::run_me::<&str>(vec!["--support"]).ok();
     };
 
     #[cfg(windows)]
@@ -218,9 +255,13 @@ fn make_tray() -> hbb_common::ResultType<()> {
                         .map(|t| t.set_visible(true));
                 } else if event.id == open_i.id() {
                     open_func();
+                } else if event.id == support_i.id() {
+                    open_support_func();
                 }
             } else if event.id == open_i.id() {
                 open_func();
+            } else if event.id == support_i.id() {
+                open_support_func();
             }
         }
 
