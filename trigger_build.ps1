@@ -3,7 +3,7 @@ param(
 )
 
 $rootDir = $PSScriptRoot
-$cred = cmd.exe /c "echo url=https://github.com/ngtrongha/rustdesk.git | git -C `"$rootDir`" credential fill" 2>$null | Out-String
+$cred = cmd.exe /c "echo url=https://github.com/ngtrongha/bvdkkh-remote.git | git -C `"$rootDir`" credential fill" 2>$null | Out-String
 $match = [regex]::Match($cred, 'password=(.+)')
 if (-not $match.Success) {
     Write-Error "Khong the lay GitHub token tu git credential helper."
@@ -23,7 +23,7 @@ foreach ($branch in $branches) {
         'inputs' = @{ 'tag_name' = $TagName }
     } | ConvertTo-Json
     try {
-        Invoke-RestMethod -Uri 'https://api.github.com/repos/ngtrongha/rustdesk/actions/workflows/flutter-tag.yml/dispatches' -Method Post -Headers $headers -Body $body
+        Invoke-RestMethod -Uri 'https://api.github.com/repos/ngtrongha/bvdkkh-remote/actions/workflows/flutter-tag.yml/dispatches' -Method Post -Headers $headers -Body $body
         Write-Host "[SUCCESS] Da kich hoat build GitHub Actions cho nhanh: $branch" -ForegroundColor Green
     } catch {
         Write-Error "[ERROR] Loi khi goi build cho $branch : $_"
