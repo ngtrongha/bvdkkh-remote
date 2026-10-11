@@ -1,4 +1,8 @@
-﻿import 'package:bot_toast/bot_toast.dart';
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
+import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/widgets/dialog.dart';
@@ -1560,17 +1564,20 @@ void connectInPeerTab(BuildContext context, Peer peer, PeerTabIndex tab,
         alias: peer.alias,
       );
     }
-    if (!gFFI.abModel.current.isPersonal()) {
-      if (peer.password.isNotEmpty) {
-        password = peer.password;
+  }
+  if (peer.password.isNotEmpty) {
+    password = peer.password;
+    isSharedPassword = true;
+  } else {
+    final abPeer = gFFI.abModel.findPeerInAllAb(peer.id);
+    if (abPeer != null && abPeer.password.isNotEmpty) {
+      password = abPeer.password;
+      isSharedPassword = true;
+    } else {
+      final abPassword = gFFI.abModel.getdefaultSharedPassword();
+      if (abPassword != null && abPassword.isNotEmpty) {
+        password = abPassword;
         isSharedPassword = true;
-      }
-      if (password.isEmpty) {
-        final abPassword = gFFI.abModel.getdefaultSharedPassword();
-        if (abPassword != null) {
-          password = abPassword;
-          isSharedPassword = true;
-        }
       }
     }
   }

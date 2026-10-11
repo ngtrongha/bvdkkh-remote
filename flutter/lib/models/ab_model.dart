@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -703,6 +707,18 @@ class AbModel {
 // #region tools
   Peer? find(String id) {
     return currentAbPeers.firstWhereOrNull((e) => e.id == id);
+  }
+
+  Peer? findPeerInAllAb(String id) {
+    final cleanId = id.replaceAll(' ', '');
+    for (final ab in addressbooks.values) {
+      for (final p in ab.peers) {
+        if (p.id == id || p.id.replaceAll(' ', '') == cleanId) {
+          return p;
+        }
+      }
+    }
+    return null;
   }
 
   bool idContainByCurrent(String id) {
