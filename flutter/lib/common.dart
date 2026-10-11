@@ -4,6 +4,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'package:crypto/crypto.dart';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -2581,6 +2582,106 @@ connectMainDesktop(String id,
   }
 }
 
+/// Derives deterministic device password from hospital workstation hostname
+String deriveHospitalDevicePassword(String hostname) {
+  final cleanHost = hostname.trim().toUpperCase();
+  if (cleanHost.isEmpty) return '';
+  final bytes = utf8.encode('$cleanHost:Bvdkkh@RemoteHospitalSecretSalt#2026');
+  final digest = sha256.convert(bytes);
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+  final buffer = StringBuffer('Bv@');
+  for (int i = 0; i < 9; i++) {
+    buffer.write(chars[digest.bytes[i] % chars.length]);
+  }
+  return buffer.toString();
+}
+
+/// Automatically resolves control password for target [id] from:
+/// 1. Address book cache (all addressbooks)
+/// 2. Default shared password
+/// 3. Central Server API (`/api/devices/$cleanId/control-password` or `/admin/devices/$cleanId/control-password`)
+/// 4. Deterministic hospital derivation if hostname is known
+Future<String?> resolveDevicePassword(String id) async {
+  final cleanId = id.replaceAll(' ', '').trim();
+  if (cleanId.isEmpty) return null;
+
+  // 1. Search in loaded address books
+  try {
+    for (final ab in gFFI.abModel.addressbooks.values) {
+      for (final p in ab.peers) {
+        if (p.id.replaceAll(' ', '') == cleanId) {
+          if (p.password.isNotEmpty) {
+            return p.password;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    debugPrint('resolveDevicePassword ab error: $e');
+  }
+
+  // 2. Default shared password
+  try {
+    final defaultShared = gFFI.abModel.getdefaultSharedPassword();
+    if (defaultShared != null && defaultShared.isNotEmpty) {
+      return defaultShared;
+    }
+  } catch (_) {}
+
+  // 3. Central API Server lookup (if user is logged in)
+  if (gFFI.userModel.isLogin) {
+    try {
+      final server = await bind.mainGetApiServer();
+      if (server.isNotEmpty) {
+        final headers = getHttpHeaders();
+        for (final path in [
+          '/api/devices/$cleanId/control-password',
+          '/admin/devices/$cleanId/control-password'
+        ]) {
+          try {
+            final uri = Uri.parse('$server$path');
+            final resp = await http.get(uri, headers: headers).timeout(const Duration(seconds: 2));
+            if (resp.statusCode == 200) {
+              final json = jsonDecode(resp.body);
+              final data = json['data'] ?? json;
+              if (data is Map && data['password'] != null) {
+                final pwd = data['password'].toString().trim();
+                if (pwd.isNotEmpty) {
+                  return pwd;
+                }
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('resolveDevicePassword api error: $e');
+    }
+  }
+
+  // 4. Derive from hostname if available in address book or peer cache
+  try {
+    String? hostname;
+    for (final ab in gFFI.abModel.addressbooks.values) {
+      for (final p in ab.peers) {
+        if (p.id.replaceAll(' ', '') == cleanId && p.hostname.isNotEmpty) {
+          hostname = p.hostname;
+          break;
+        }
+      }
+      if (hostname != null) break;
+    }
+    if (hostname != null && hostname.isNotEmpty) {
+      final derived = deriveHospitalDevicePassword(hostname);
+      if (derived.isNotEmpty) {
+        return derived;
+      }
+    }
+  } catch (_) {}
+
+  return null;
+}
+
 /// Connect to a peer with [id].
 /// If [isFileTransfer], starts a session only for file transfer.
 /// If [isViewCamera], starts a session only for view camera.
@@ -2600,6 +2701,13 @@ connect(BuildContext context, String id,
   if (!gFFI.userModel.isLogin || !gFFI.userModel.isAdmin.value) {
     showToast('Chỉ tài khoản Quản trị viên (Admin) mới có quyền điều khiển thiết bị khác!');
     return;
+  }
+  if (password == null || password.isEmpty) {
+    final autoPwd = await resolveDevicePassword(id);
+    if (autoPwd != null && autoPwd.isNotEmpty) {
+      password = autoPwd;
+      isSharedPassword = true;
+    }
   }
   if (!isDesktop || desktopType == DesktopType.main) {
     try {
