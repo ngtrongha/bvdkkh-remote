@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -81,8 +85,6 @@ class HttpService {
               .delete(url, headers: headers, body: body)
               .timeout(_requestTimeout);
           break;
-        default:
-          throw Exception('Unsupported HTTP method');
       }
 
       return response;
