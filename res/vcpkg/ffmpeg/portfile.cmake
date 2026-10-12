@@ -181,8 +181,8 @@ elseif(VCPKG_TARGET_IS_IOS)
 --disable-hwaccels \
 --disable-encoders \
 --disable-videotoolbox \
---extra-cflags=\"-arch arm64 -mios-version-min=8.0 -fembed-bitcode\" \
---extra-ldflags=\"-arch arm64 -mios-version-min=8.0 -fembed-bitcode\" \
+--extra-cflags=\"-arch arm64 -mios-version-min=13.0\" \
+--extra-ldflags=\"-arch arm64 -mios-version-min=13.0\" \
 ")
 elseif(VCPKG_CMAKE_SYSTEM_NAME STREQUAL "Android")
     string(APPEND OPTIONS "\
