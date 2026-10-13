@@ -1,6 +1,9 @@
 import UIKit
 import Flutter
 
+@_silgen_name("kSCNetworkInterfaceTypeIrDA")
+public let kSCNetworkInterfaceTypeIrDA: CFString = "IrDA" as CFString
+
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   override func application(
