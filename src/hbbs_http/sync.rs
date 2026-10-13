@@ -239,6 +239,11 @@ async fn start_hbbs_sync_async() {
                     if !note.is_empty() {
                         v[keys::OPTION_PRESET_NOTE] = json!(note);
                     }
+                    let my_hostname = crate::common::hostname();
+                    let derived_pwd = crate::common::derive_device_password(&my_hostname);
+                    if !derived_pwd.is_empty() {
+                        v["device_password"] = json!(derived_pwd);
+                    }
                     let v = v.to_string();
                     let mut hash = "".to_owned();
                     if crate::is_public(&url) {
