@@ -2582,7 +2582,9 @@ connectMainDesktop(String id,
 
 /// Derives deterministic device password from hospital workstation hostname
 String deriveHospitalDevicePassword(String hostname) {
-  final cleanHost = hostname.trim().toUpperCase();
+  final trimmed = hostname.trim();
+  if (trimmed.isEmpty) return '';
+  final cleanHost = trimmed.split('.').first.trim().toUpperCase();
   if (cleanHost.isEmpty) return '';
   final bytes = utf8.encode('$cleanHost:Bvdkkh@RemoteHospitalSecretSalt#2026');
   final digest = sha256.convert(bytes);
@@ -2629,16 +2631,21 @@ Future<String?> resolveDevicePassword(String id) async {
   // 3. Central API Server lookup (if user is logged in)
   if (gFFI.userModel.isLogin) {
     try {
-      final server = await bind.mainGetApiServer();
+      var server = (await bind.mainGetApiServer()).trim();
       if (server.isNotEmpty) {
+        if (!server.startsWith('http://') && !server.startsWith('https://')) {
+          server = 'http://$server';
+        }
+        server = server.replaceAll(RegExp(r'/+$'), '');
         final headers = getHttpHeaders();
         for (final path in [
           '/api/devices/$cleanId/control-password',
-          '/admin/devices/$cleanId/control-password'
+          '/admin/devices/$cleanId/control-password',
+          '/api/admin/devices/$cleanId/control-password',
         ]) {
           try {
             final uri = Uri.parse('$server$path');
-            final resp = await http.get(uri, headers: headers).timeout(const Duration(seconds: 2));
+            final resp = await http.get(uri, headers: headers).timeout(const Duration(seconds: 3));
             if (resp.statusCode == 200) {
               final json = jsonDecode(resp.body);
               final data = json['data'] ?? json;
