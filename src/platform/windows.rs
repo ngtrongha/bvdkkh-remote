@@ -1564,23 +1564,9 @@ pub fn check_and_fix_ghost_machine_guid() -> bool {
 
 /// Tự động sinh mật khẩu thiết bị duy nhất theo công thức SHA-256(COMPUTERNAME + Salt) của bệnh viện
 pub fn generate_hospital_device_password() -> String {
-    let computer_name = std::env::var("COMPUTERNAME")
-        .unwrap_or_else(|_| "UNKNOWN".to_string())
-        .trim()
-        .to_uppercase();
-    let salt = "Bvdkkh@RemoteHospitalSecretSalt#2026";
-    let input = format!("{computer_name}:{salt}");
-    let mut hasher = Sha256::new();
-    hasher.update(input.as_bytes());
-    let hash = hasher.finalize();
-
-    let chars: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
-    let mut res = String::from("Bv@");
-    for i in 0..9 {
-        let idx = (hash[i] as usize) % chars.len();
-        res.push(chars[idx] as char);
-    }
-    res
+    let raw_name = std::env::var("COMPUTERNAME")
+        .unwrap_or_else(|_| crate::common::hostname());
+    crate::common::derive_device_password(&raw_name)
 }
 
 /// Cài đặt hình nền bệnh viện có in tên máy tính và khóa đổi hình nền
@@ -2021,7 +2007,11 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
         setup_wake_on_lan_native();
     }
 
-    // 3. Khóa các cài đặt bảo mật Bệnh viện
+    // 3. Khóa các cài đặt bảo mật Bệnh viện và lưu mật khẩu cố định
+    let hospital_pwd = generate_hospital_device_password();
+    if !hospital_pwd.is_empty() {
+        Config::set_permanent_password(&hospital_pwd);
+    }
     Config::set_option("verification-method".into(), "use-permanent-password".into());
     Config::set_option("approve-mode".into(), "password".into());
     Config::set_option("allow-remote-config-modification".into(), "N".into());
@@ -2030,7 +2020,7 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
     Config::set_option("hide-proxy-settings".into(), "Y".into());
     Config::set_option("hide-websocket-settings".into(), "Y".into());
     Config::set_option("hide-stop-service".into(), "Y".into());
-    Config::set_option("disable-change-permanent-password".into(), "Y".into());
+    Config::set_option("disable-change-permanent-password".into(), "N".into());
     Config::set_option("disable-change-id".into(), "Y".into());
     Config::set_option("allow-remove-wallpaper".into(), "N".into());
     Config::set_option("allow-auto-update".into(), "Y".into());

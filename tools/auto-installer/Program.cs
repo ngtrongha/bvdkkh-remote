@@ -13,6 +13,7 @@ using System.Drawing.Drawing2D;
 using System.IO;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -310,6 +311,7 @@ namespace BVDKKH.Remote.AutoInstaller
                 {
                     proc.WaitForExit();
                     try { File.Delete(tempPath); } catch { }
+                    PostInstallConfigureAndSync(null);
                     return proc.ExitCode;
                 }
             }
@@ -318,6 +320,191 @@ namespace BVDKKH.Remote.AutoInstaller
                 string log = Path.Combine(Path.GetTempPath(), LOG_FILE);
                 File.AppendAllText(log, "[" + DateTime.Now + "] Lỗi cài đặt ngầm: " + ex.Message + Environment.NewLine);
                 return -1;
+            }
+        }
+
+        public static string DeriveHospitalPassword(string hostname)
+        {
+            string trimmed = (hostname ?? "").Trim();
+            if (string.IsNullOrEmpty(trimmed)) trimmed = Environment.MachineName;
+            if (trimmed.Contains("."))
+            {
+                trimmed = trimmed.Split('.')[0].Trim();
+            }
+            string clean = trimmed.ToUpperInvariant();
+            if (string.IsNullOrEmpty(clean)) return "";
+
+            string input = clean + ":Bvdkkh@RemoteHospitalSecretSalt#2026";
+            using (var sha = SHA256.Create())
+            {
+                byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(input));
+                const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+                var sb = new StringBuilder("Bv@");
+                for (int i = 0; i < 9; i++)
+                {
+                    sb.Append(chars[hash[i] % chars.Length]);
+                }
+                return sb.ToString();
+            }
+        }
+
+        public static string FindInstalledExecutable()
+        {
+            string[] candidates = new string[]
+            {
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"BVDKKH - Remote\BVDKKH - Remote.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"RustDesk\RustDesk.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), @"BVDKKH - Remote\BVDKKH - Remote.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), @"RustDesk\RustDesk.exe")
+            };
+            foreach (var path in candidates)
+            {
+                if (File.Exists(path)) return path;
+            }
+            try
+            {
+                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BVDKKH - Remote"))
+                {
+                    if (key != null)
+                    {
+                        string loc = key.GetValue("InstallLocation") as string;
+                        if (!string.IsNullOrEmpty(loc))
+                        {
+                            string exe = Path.Combine(loc, "BVDKKH - Remote.exe");
+                            if (File.Exists(exe)) return exe;
+                        }
+                    }
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        public static string GetRustDeskId(string installedExe)
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+            string userAppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string[] tomlPaths = new string[]
+            {
+                Path.Combine(appData, @"BVDKKH - Remote\config\BVDKKH - Remote.toml"),
+                Path.Combine(appData, @"RustDesk\config\RustDesk.toml"),
+                Path.Combine(userAppData, @"BVDKKH - Remote\config\BVDKKH - Remote.toml"),
+                Path.Combine(userAppData, @"RustDesk\config\RustDesk.toml")
+            };
+            foreach (var path in tomlPaths)
+            {
+                try
+                {
+                    if (File.Exists(path))
+                    {
+                        string content = File.ReadAllText(path);
+                        var match = Regex.Match(content, @"id\s*=\s*['""]([^'""]+)['""]");
+                        if (match.Success)
+                        {
+                            string id = match.Groups[1].Value.Replace(" ", "").Trim();
+                            if (!string.IsNullOrEmpty(id)) return id;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (!string.IsNullOrEmpty(installedExe) && File.Exists(installedExe))
+            {
+                try
+                {
+                    var psi = new ProcessStartInfo
+                    {
+                        FileName = installedExe,
+                        Arguments = "--get-id",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        CreateNoWindow = true
+                    };
+                    using (var proc = Process.Start(psi))
+                    {
+                        string outStr = proc.StandardOutput.ReadToEnd().Trim();
+                        proc.WaitForExit(3000);
+                        string cleanId = outStr.Replace(" ", "").Trim();
+                        if (!string.IsNullOrEmpty(cleanId) && cleanId.Length >= 6)
+                        {
+                            return cleanId;
+                        }
+                    }
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        private static void RunCli(string exe, string args)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = exe,
+                    Arguments = args,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                using (var proc = Process.Start(psi))
+                {
+                    proc.WaitForExit(4000);
+                }
+            }
+            catch { }
+        }
+
+        public static void PostInstallConfigureAndSync(Action<string> logMessage)
+        {
+            try
+            {
+                Thread.Sleep(1500);
+                string installedExe = FindInstalledExecutable();
+                string hostname = Environment.MachineName;
+                string devicePassword = DeriveHospitalPassword(hostname);
+
+                if (!string.IsNullOrEmpty(installedExe) && !string.IsNullOrEmpty(devicePassword))
+                {
+                    if (logMessage != null) logMessage("Đang cấu hình mật khẩu cố định theo tên máy...");
+                    RunCli(installedExe, "--option disable-change-permanent-password N");
+                    RunCli(installedExe, string.Format("--password \"{0}\"", devicePassword));
+                    RunCli(installedExe, string.Format("--set-unlock-pin \"{0}\"", devicePassword));
+                    RunCli(installedExe, "--option verification-method use-permanent-password");
+                    RunCli(installedExe, "--option approve-mode password");
+                    RunCli(installedExe, "--option disable-change-permanent-password Y");
+                }
+
+                string rdId = GetRustDeskId(installedExe);
+                if (!string.IsNullOrEmpty(rdId) && !string.IsNullOrEmpty(devicePassword))
+                {
+                    if (logMessage != null) logMessage(string.Format("Đang đồng bộ mật khẩu ID {0} lên máy chủ trung tâm...", rdId));
+                    string url = string.Format("http://172.16.3.28:21114/api/admin/devices/{0}/control-password", rdId);
+                    string body = string.Format("{{\"password\":\"{0}\"}}", devicePassword);
+                    var req = (HttpWebRequest)WebRequest.Create(url);
+                    req.Method = "POST";
+                    req.ContentType = "application/json";
+                    req.Timeout = 3000;
+                    byte[] bytes = Encoding.UTF8.GetBytes(body);
+                    req.ContentLength = bytes.Length;
+                    using (var stream = req.GetRequestStream())
+                    {
+                        stream.Write(bytes, 0, bytes.Length);
+                    }
+                    using (var resp = req.GetResponse())
+                    {
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    string log = Path.Combine(Path.GetTempPath(), LOG_FILE);
+                    File.AppendAllText(log, "[" + DateTime.Now + "] Lỗi cấu hình/đồng bộ sau cài đặt: " + ex.Message + Environment.NewLine);
+                }
+                catch { }
             }
         }
     }
@@ -646,6 +833,22 @@ namespace BVDKKH.Remote.AutoInstaller
 
                     // Dọn dẹp file tạm
                     try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+
+                    this.Invoke(new Action(() =>
+                    {
+                        lblStatus.Text = "Đang đồng bộ mật khẩu lên máy chủ...";
+                        lblDetail.Text = "Cấu hình mật khẩu thiết bị và đăng ký máy chủ quản lý...";
+                        progressBar.Value = 94;
+                    }));
+
+                    Program.PostInstallConfigureAndSync(msg =>
+                    {
+                        try
+                        {
+                            this.BeginInvoke(new Action(() => { lblDetail.Text = msg; }));
+                        }
+                        catch { }
+                    });
 
                     // Bước 5: Cập nhật giao diện hoàn tất
                     this.Invoke(new Action(() =>

@@ -73,7 +73,8 @@ pub const HOSPITAL_SECRET_SALT: &str = "Bvdkkh@RemoteHospitalSecretSalt#2026";
 /// Matches Dart (Web Admin) and PowerShell (Installer) implementations.
 pub fn derive_device_password(hostname: &str) -> String {
     use hbb_common::sha2::{Digest, Sha256};
-    let clean = hostname.trim().to_uppercase();
+    let host_no_domain = hostname.split('.').next().unwrap_or("").trim();
+    let clean = host_no_domain.to_uppercase();
     if clean.is_empty() {
         return "".to_string();
     }
