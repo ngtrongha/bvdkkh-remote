@@ -560,6 +560,12 @@
 					"-framework",
 					"\"QuartzCore\"",
 					"-framework",
+					"\"SystemConfiguration\"",
+					"-framework",
+					"\"Security\"",
+					"-framework",
+					"\"Network\"",
+					"-framework",
 					"\"UIKit\"",
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = vn.bvdkkh.remote;
@@ -613,6 +619,12 @@
 					"\"Photos\"",
 					"-framework",
 					"\"QuartzCore\"",
+					"-framework",
+					"\"SystemConfiguration\"",
+					"-framework",
+					"\"Security\"",
+					"-framework",
+					"\"Network\"",
 					"-framework",
 					"\"UIKit\"",
 				);
