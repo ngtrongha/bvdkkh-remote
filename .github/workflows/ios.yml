@@ -94,7 +94,7 @@ jobs:
         run: |
           pushd flutter
           flutter pub get
-          (cd ios && pod install)
+          (cd ios && pod install --repo-update)
           flutter build ipa --${{ inputs.build_type }} --no-codesign
           mkdir -p build/ios/ipa/Payload
           if [ -d "build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app" ]; then
