@@ -250,6 +250,18 @@ class _PeerCardState extends State<_PeerCard>
                     ],
                   ).marginOnly(top: 2),
                 ),
+                if (!peer.online)
+                  IconButton(
+                    icon: const Icon(Icons.power_settings_new_rounded, size: 18),
+                    color: const Color(0xFFF59E0B),
+                    tooltip: 'Bật máy từ xa (WOL)',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    onPressed: () {
+                      bind.mainWol(id: peer.id);
+                      showToast('Đã gửi tín hiệu bật máy (WOL) đến ${peer.id}');
+                    },
+                  ),
                 isPortrait
                     ? checkBoxOrActionMorePortrait(peer)
                     : checkBoxOrActionMoreLandscape(peer, isTile: true),
@@ -431,6 +443,18 @@ class _PeerCardState extends State<_PeerCard>
                           ],
                         ),
                       ),
+                      if (!peer.online)
+                        IconButton(
+                          icon: const Icon(Icons.power_settings_new_rounded, size: 16),
+                          color: const Color(0xFFF59E0B),
+                          tooltip: 'Bật máy từ xa (WOL)',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                          onPressed: () {
+                            bind.mainWol(id: peer.id);
+                            showToast('Đã gửi tín hiệu bật máy (WOL) đến ${peer.id}');
+                          },
+                        ),
                       checkBoxOrActionMoreLandscape(peer, isTile: false),
                     ],
                   ),
@@ -491,17 +515,33 @@ class _PeerCardState extends State<_PeerCard>
             : Icon(Icons.check_box_outline_blank),
       );
     } else {
-      return InkWell(
-          child: const Padding(
-              padding: EdgeInsets.all(12), child: Icon(Icons.more_vert)),
-          onTapDown: (e) {
-            final x = e.globalPosition.dx;
-            final y = e.globalPosition.dy;
-            _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-          },
-          onTap: () {
-            _showPeerMenu(peer.id);
-          });
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!peer.online)
+            IconButton(
+              icon: const Icon(Icons.power_settings_new_rounded, size: 20, color: Color(0xFFF59E0B)),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+              tooltip: 'Bật máy (WOL)',
+              onPressed: () {
+                bind.mainWol(id: peer.id);
+                showToast('Đã gửi tín hiệu bật máy (WOL) đến ${peer.id}');
+              },
+            ),
+          InkWell(
+              child: const Padding(
+                  padding: EdgeInsets.all(12), child: Icon(Icons.more_vert)),
+              onTapDown: (e) {
+                final x = e.globalPosition.dx;
+                final y = e.globalPosition.dy;
+                _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+              },
+              onTap: () {
+                _showPeerMenu(peer.id);
+              }),
+        ],
+      );
     }
   }
 
@@ -727,12 +767,19 @@ abstract class BasePeerCard extends StatelessWidget {
   @protected
   MenuEntryBase<String> _wolAction(String id) {
     return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        translate('WOL'),
-        style: style,
+      childBuilder: (TextStyle? style) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.power_settings_new_rounded, size: 16, color: Color(0xFFF59E0B)).marginOnly(right: 8),
+          Text(
+            translate('WOL'),
+            style: style,
+          ),
+        ],
       ),
       proc: () {
         bind.mainWol(id: id);
+        showToast('Đã gửi tín hiệu bật máy (WOL) đến $id');
       },
       padding: menuPadding,
       dismissOnClicked: true,

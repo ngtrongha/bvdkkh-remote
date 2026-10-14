@@ -386,7 +386,9 @@ class _ConnectionPageState extends State<ConnectionPage>
                     Expanded(
                       child: _buildIdInputField(context),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
+                    _buildWolButton(context),
+                    const SizedBox(width: 8),
                     _buildConnectButton(context),
                   ],
                 ),
@@ -621,6 +623,43 @@ class _ConnectionPageState extends State<ConnectionPage>
         _triggerConnectWithSelectedMode();
       },
     );
+  }
+
+  Widget _buildWolButton(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return OutlinedButton.icon(
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFF0D9488),
+        side: const BorderSide(color: Color(0xFF0D9488), width: 1.2),
+        backgroundColor: isDark
+            ? const Color(0xFF0D9488).withOpacity(0.12)
+            : const Color(0xFF0D9488).withOpacity(0.06),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+      icon: const Icon(Icons.power_settings_new_rounded, size: 18, color: Color(0xFF0D9488)),
+      label: const Text(
+        'BẬT MÁY (WOL)',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.2,
+        ),
+      ),
+      onPressed: _onTriggerWol,
+    );
+  }
+
+  void _onTriggerWol() {
+    final id = _idController.id.trim();
+    if (id.isEmpty) {
+      showToast('Vui lòng nhập ID hoặc địa chỉ MAC của thiết bị cần bật');
+      return;
+    }
+    bind.mainWol(id: id);
+    showToast('Đã gửi tín hiệu bật máy (WOL) đến $id');
   }
 
   Widget _buildStitchDirectoryCard(BuildContext context) {
