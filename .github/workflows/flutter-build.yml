@@ -126,9 +126,11 @@ jobs:
             rustdesk.sbom.json
 
   generate-bridge:
+    if: false
     uses: ./.github/workflows/bridge.yml
 
   build-RustDeskTempTopMostWindow:
+    if: false
     uses: ./.github/workflows/third-party-RustDeskTempTopMostWindow.yml
     strategy:
       fail-fast: false
@@ -146,6 +148,7 @@ jobs:
       target_version: Windows10
 
   build-for-windows-flutter:
+    if: false
     name: ${{ matrix.job.target }}
     needs: [generate-sbom, build-RustDeskTempTopMostWindow, generate-bridge]
     runs-on: ${{ matrix.job.os }}
