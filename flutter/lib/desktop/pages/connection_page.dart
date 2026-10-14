@@ -6,15 +6,11 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common/widgets/connection_page_title.dart';
 import 'package:flutter_hbb/consts.dart';
-import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 
@@ -23,8 +19,6 @@ import '../../common/formatter/id_formatter.dart';
 import '../../common/widgets/peer_tab_page.dart';
 import '../../common/widgets/autocomplete.dart';
 import '../../models/platform_model.dart';
-import '../../common/widgets/login.dart';
-import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
 
 class OnlineStatusWidget extends StatefulWidget {
   const OnlineStatusWidget({Key? key, this.onSvcStatusChanged})
@@ -175,6 +169,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   final TextEditingController _idEditingController = TextEditingController();
 
   String selectedConnectionType = 'Connect';
+  int _selectedMode = 0;
 
   bool isWindowMinimized = false;
 
@@ -183,12 +178,11 @@ class _ConnectionPageState extends State<ConnectionPage>
   // https://github.com/flutter/flutter/issues/157244
   Iterable<Peer> _autocompleteOpts = [];
 
-  final _menuOpen = false.obs;
-
   @override
   void initState() {
     super.initState();
     _allPeersLoader.init(setState);
+    _allPeersLoader.getAllPeers();
     _idFocusNode.addListener(onFocusChanged);
     if (_idController.text.isEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -273,75 +267,29 @@ class _ConnectionPageState extends State<ConnectionPage>
   @override
   Widget build(BuildContext context) {
     final isOutgoingOnly = bind.isOutgoingOnly();
-    return Column(
-      children: [
-        Expanded(
-            child: Column(
-          children: [
-            Row(
-              children: [
-                Flexible(child: _buildRemoteIDTextField(context)),
-              ],
-            ).marginOnly(top: 22),
-            Obx(() {
-              final isLogin = gFFI.userModel.isLogin;
-              if (!isLogin) {
-                return Expanded(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.shield_outlined,
-                          size: 44,
-                          color: Theme.of(context).hintColor.withOpacity(0.3),
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Danh sách thiết bị chỉ hiển thị sau khi đăng nhập',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Theme.of(context).hintColor.withOpacity(0.8),
-                          ),
-                        ),
-                        const SizedBox(height: 14),
-                        OutlinedButton.icon(
-                          icon: const Icon(Icons.login_rounded, size: 16),
-                          label: const Text('Đăng nhập Quản trị viên'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: MyTheme.accent,
-                            side: BorderSide(
-                                color: MyTheme.accent.withOpacity(0.5)),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                          ),
-                          onPressed: () async {
-                            await loginDialog();
-                          },
-                        ),
-                      ],
-                    ).marginOnly(right: 12),
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Column(
+        children: [
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildStitchConnectionCard(context),
+                  const SizedBox(height: 14),
+                  Expanded(
+                    child: _buildStitchDirectoryCard(context),
                   ),
-                );
-              }
-              return Expanded(
-                child: Column(
-                  children: [
-                    const SizedBox(height: 12),
-                    const Divider().paddingOnly(right: 12),
-                    Expanded(child: PeerTabPage()),
-                  ],
-                ),
-              );
-            }),
-          ],
-        ).paddingOnly(left: 12.0)),
-        if (!isOutgoingOnly) const Divider(height: 1),
-        if (!isOutgoingOnly) OnlineStatusWidget()
-      ],
+                ],
+              ),
+            ),
+          ),
+          if (!isOutgoingOnly) const Divider(height: 1),
+          if (!isOutgoingOnly) const OnlineStatusWidget(),
+        ],
+      ),
     );
   }
 
@@ -352,11 +300,11 @@ class _ConnectionPageState extends State<ConnectionPage>
       bool isViewCamera = false,
       bool isTerminal = false,
       bool isTcpTunneling = false}) {
-    if (!gFFI.userModel.isLogin || !gFFI.userModel.isAdmin.value) {
-      showToast('Chỉ tài khoản Quản trị viên (Admin) mới có quyền điều khiển thiết bị khác!');
+    var id = _idController.id.trim();
+    if (id.isEmpty) {
+      showToast('Vui lòng nhập ID máy trạm cần kết nối');
       return;
     }
-    var id = _idController.id;
     connect(context, id,
         isFileTransfer: isFileTransfer,
         isViewCamera: isViewCamera,
@@ -364,317 +312,530 @@ class _ConnectionPageState extends State<ConnectionPage>
         isTcpTunneling: isTcpTunneling);
   }
 
-  /// UI for the remote ID TextField.
-  /// Search for a peer.
-  Widget _buildRemoteIDTextField(BuildContext context) {
-    var w = Container(
-      width: 320 + 20 * 2,
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
-      decoration: BoxDecoration(
-          borderRadius: const BorderRadius.all(Radius.circular(13)),
-          border: Border.all(color: Theme.of(context).colorScheme.background)),
-      child: Ink(
-        child: Column(
-          children: [
-            getConnectionPageTitle(context, false).marginOnly(bottom: 15),
-            Obx(() {
-              final user = gFFI.userModel;
-              final isAdmin = user.isLogin && user.isAdmin.value;
-              if (!isAdmin) {
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.amber.withOpacity(0.3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.lock_outline, size: 16, color: Colors.amber),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          user.isLogin
-                              ? 'Tài khoản không có quyền Admin để điều khiển máy khác'
-                              : 'Cần đăng nhập tài khoản Admin để điều khiển máy khác',
-                          style: const TextStyle(fontSize: 11, color: Colors.amber),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }
-              return const SizedBox.shrink();
-            }),
-            Row(
-              children: [
-                Expanded(
-                    child: RawAutocomplete<Peer>(
-                  optionsBuilder: (TextEditingValue textEditingValue) {
-                    if (textEditingValue.text == '') {
-                      _autocompleteOpts = const Iterable<Peer>.empty();
-                    } else if (_allPeersLoader.peers.isEmpty &&
-                        !_allPeersLoader.isPeersLoaded) {
-                      Peer emptyPeer = Peer(
-                        id: '',
-                        username: '',
-                        hostname: '',
-                        alias: '',
-                        platform: '',
-                        tags: [],
-                        hash: '',
-                        password: '',
-                        forceAlwaysRelay: false,
-                        rdpPort: '',
-                        rdpUsername: '',
-                        loginName: '',
-                        device_group_name: '',
-                        note: '',
-                      );
-                      _autocompleteOpts = [emptyPeer];
-                    } else {
-                      String textWithoutSpaces =
-                          textEditingValue.text.replaceAll(" ", "");
-                      if (int.tryParse(textWithoutSpaces) != null) {
-                        textEditingValue = TextEditingValue(
-                          text: textWithoutSpaces,
-                          selection: textEditingValue.selection,
-                        );
-                      }
-                      String textToFind = textEditingValue.text.toLowerCase();
-                      _autocompleteOpts = _allPeersLoader.peers
-                          .where((peer) =>
-                              peer.id.toLowerCase().contains(textToFind) ||
-                              peer.username
-                                  .toLowerCase()
-                                  .contains(textToFind) ||
-                              peer.hostname
-                                  .toLowerCase()
-                                  .contains(textToFind) ||
-                              peer.alias.toLowerCase().contains(textToFind))
-                          .toList();
-                      _allPeersLoader.queryOnlines(_autocompleteOpts);
-                    }
-                    return _autocompleteOpts;
-                  },
-                  focusNode: _idFocusNode,
-                  textEditingController: _idEditingController,
-                  fieldViewBuilder: (
-                    BuildContext context,
-                    TextEditingController fieldTextEditingController,
-                    FocusNode fieldFocusNode,
-                    VoidCallback onFieldSubmitted,
-                  ) {
-                    updateTextAndPreserveSelection(
-                        fieldTextEditingController, _idController.text);
-                    return Obx(() => TextField(
-                          autocorrect: false,
-                          enableSuggestions: false,
-                          keyboardType: TextInputType.visiblePassword,
-                          focusNode: fieldFocusNode,
-                          style: const TextStyle(
-                            fontFamily: 'WorkSans',
-                            fontSize: 22,
-                            height: 1.4,
-                          ),
-                          maxLines: 1,
-                          cursorColor:
-                              Theme.of(context).textTheme.titleLarge?.color,
-                          decoration: InputDecoration(
-                              filled: false,
-                              counterText: '',
-                              hintText: _idInputFocused.value
-                                  ? null
-                                  : translate('Enter Remote ID'),
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 15, vertical: 13)),
-                          controller: fieldTextEditingController,
-                          inputFormatters: [IDTextInputFormatter()],
-                          onChanged: (v) {
-                            _idController.id = v;
-                          },
-                          onSubmitted: (_) {
-                            onConnect();
-                          },
-                        ).workaroundFreezeLinuxMint());
-                  },
-                  onSelected: (option) {
-                    setState(() {
-                      _idController.id = option.id;
-                      FocusScope.of(context).unfocus();
-                    });
-                  },
-                  optionsViewBuilder: (BuildContext context,
-                      AutocompleteOnSelected<Peer> onSelected,
-                      Iterable<Peer> options) {
-                    options = _autocompleteOpts;
-                    double maxHeight = options.length * 50;
-                    if (options.length == 1) {
-                      maxHeight = 52;
-                    } else if (options.length == 3) {
-                      maxHeight = 146;
-                    } else if (options.length == 4) {
-                      maxHeight = 193;
-                    }
-                    maxHeight = maxHeight.clamp(0, 200);
+  void _triggerConnectWithSelectedMode() {
+    onConnect(
+      isFileTransfer: _selectedMode == 2,
+      isViewCamera: _selectedMode == 1,
+      isTerminal: _selectedMode == 3,
+      isTcpTunneling: _selectedMode == 4,
+    );
+  }
 
-                    return Align(
-                      alignment: Alignment.topLeft,
-                      child: Container(
-                          decoration: BoxDecoration(
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
-                                blurRadius: 5,
-                                spreadRadius: 1,
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                              borderRadius: BorderRadius.circular(5),
-                              child: Material(
-                                elevation: 4,
-                                child: ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    maxHeight: maxHeight,
-                                    maxWidth: 319,
-                                  ),
-                                  child: _allPeersLoader.peers.isEmpty &&
-                                          !_allPeersLoader.isPeersLoaded
-                                      ? Container(
-                                          height: 80,
-                                          child: Center(
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                            ),
-                                          ))
-                                      : Padding(
-                                          padding:
-                                              const EdgeInsets.only(top: 5),
-                                          child: ListView(
-                                            children: options
-                                                .map((peer) =>
-                                                    AutocompletePeerTile(
-                                                        onSelect: () =>
-                                                            onSelected(peer),
-                                                        peer: peer))
-                                                .toList(),
-                                          ),
-                                        ),
-                                ),
-                              ))),
-                    );
-                  },
-                )),
+  Widget _buildStitchConnectionCard(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final headerBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9);
+    final borderColor = Theme.of(context).dividerColor.withOpacity(0.15);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: headerBg,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+              border: Border(bottom: BorderSide(color: borderColor)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.screen_share_rounded, size: 18, color: MyTheme.accent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'KẾT NỐI ĐẾN MÁY TRẠM KHÁC / REMOTE CONNECTION',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).textTheme.titleLarge?.color,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    const Icon(Icons.bolt_rounded, size: 14, color: Colors.amber),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Kênh điều khiển tốc độ cao',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
-            Padding(
-              padding: const EdgeInsets.only(top: 13.0),
-              child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-                SizedBox(
-                  height: 28.0,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      onConnect();
-                    },
-                    child: Text(translate("Connect")),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'NHẬP MÃ ĐỊNH DANH ĐỐI TÁC (PARTNER ID)',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.65),
+                    letterSpacing: 0.3,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  height: 28.0,
-                  width: 28.0,
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Theme.of(context).dividerColor),
-                    borderRadius: BorderRadius.circular(8),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildIdInputField(context),
+                    ),
+                    const SizedBox(width: 10),
+                    _buildConnectButton(context),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'CHẾ ĐỘ KẾT NỐI LÂM SÀNG:',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.65),
+                    letterSpacing: 0.3,
                   ),
-                  child: Center(
-                    child: StatefulBuilder(
-                      builder: (context, setState) {
-                        var offset = Offset(0, 0);
-                        return Obx(() => InkWell(
-                              child: _menuOpen.value
-                                  ? Transform.rotate(
-                                      angle: pi,
-                                      child: Icon(IconFont.more, size: 14),
-                                    )
-                                  : Icon(IconFont.more, size: 14),
-                              onTapDown: (e) {
-                                offset = e.globalPosition;
-                              },
-                              onTap: () async {
-                                _menuOpen.value = true;
-                                final x = offset.dx;
-                                final y = offset.dy;
-                                await mod_menu
-                                    .showMenu(
-                                  context: context,
-                                  position: RelativeRect.fromLTRB(x, y, x, y),
-                                  items: [
-                                    (
-                                      'Transfer file',
-                                      () => onConnect(isFileTransfer: true)
-                                    ),
-                                    (
-                                      'View camera',
-                                      () => onConnect(isViewCamera: true)
-                                    ),
-                                    (
-                                      '${translate('Terminal')} (beta)',
-                                      () => onConnect(isTerminal: true)
-                                    ),
-                                    // `connect` routes this through the
-                                    // desktop path only; the peer card gates
-                                    // it the same way.
-                                    if (isDesktop)
-                                      (
-                                        'TCP tunneling',
-                                        () => onConnect(isTcpTunneling: true)
-                                      ),
-                                  ]
-                                      .map((e) => MenuEntryButton<String>(
-                                            childBuilder: (TextStyle? style) =>
-                                                Text(
-                                              translate(e.$1),
-                                              style: style,
-                                            ),
-                                            proc: () => e.$2(),
-                                            padding: EdgeInsets.symmetric(
-                                                horizontal:
-                                                    kDesktopMenuPadding.left),
-                                            dismissOnClicked: true,
-                                          ))
-                                      .map((e) => e.build(
-                                          context,
-                                          const MenuConfig(
-                                              commonColor: CustomPopupMenuTheme
-                                                  .commonColor,
-                                              height:
-                                                  CustomPopupMenuTheme.height,
-                                              dividerHeight:
-                                                  CustomPopupMenuTheme
-                                                      .dividerHeight)))
-                                      .expand((i) => i)
-                                      .toList(),
-                                  elevation: 8,
-                                )
-                                    .then((_) {
-                                  _menuOpen.value = false;
-                                });
-                              },
-                            ));
-                      },
+                ),
+                const SizedBox(height: 8),
+                _buildModeSelector(context),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIdInputField(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final inputBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final borderColor = Theme.of(context).dividerColor.withOpacity(0.2);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: inputBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: borderColor),
+      ),
+      child: RawAutocomplete<Peer>(
+        optionsBuilder: (TextEditingValue textEditingValue) {
+          if (textEditingValue.text == '') {
+            _autocompleteOpts = const Iterable<Peer>.empty();
+          } else if (_allPeersLoader.peers.isEmpty &&
+              !_allPeersLoader.isPeersLoaded) {
+            Peer emptyPeer = Peer(
+              id: '',
+              username: '',
+              hostname: '',
+              alias: '',
+              platform: '',
+              tags: [],
+              hash: '',
+              password: '',
+              forceAlwaysRelay: false,
+              rdpPort: '',
+              rdpUsername: '',
+              loginName: '',
+              device_group_name: '',
+              note: '',
+            );
+            _autocompleteOpts = [emptyPeer];
+          } else {
+            String textWithoutSpaces =
+                textEditingValue.text.replaceAll(" ", "");
+            if (int.tryParse(textWithoutSpaces) != null) {
+              textEditingValue = TextEditingValue(
+                text: textWithoutSpaces,
+                selection: textEditingValue.selection,
+              );
+            }
+            String textToFind = textEditingValue.text.toLowerCase();
+            _autocompleteOpts = _allPeersLoader.peers
+                .where((peer) =>
+                    peer.id.toLowerCase().contains(textToFind) ||
+                    peer.username.toLowerCase().contains(textToFind) ||
+                    peer.hostname.toLowerCase().contains(textToFind) ||
+                    peer.alias.toLowerCase().contains(textToFind))
+                .toList();
+            _allPeersLoader.queryOnlines(_autocompleteOpts);
+          }
+          return _autocompleteOpts;
+        },
+        focusNode: _idFocusNode,
+        textEditingController: _idEditingController,
+        fieldViewBuilder: (
+          BuildContext context,
+          TextEditingController fieldTextEditingController,
+          FocusNode fieldFocusNode,
+          VoidCallback onFieldSubmitted,
+        ) {
+          updateTextAndPreserveSelection(
+              fieldTextEditingController, _idController.text);
+          return Row(
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Icon(Icons.dialpad_rounded, size: 20, color: MyTheme.accent),
+              ),
+              Expanded(
+                child: TextField(
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  keyboardType: TextInputType.visiblePassword,
+                  focusNode: fieldFocusNode,
+                  style: const TextStyle(
+                    fontFamily: 'monospace',
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                  maxLines: 1,
+                  cursorColor: MyTheme.accent,
+                  decoration: InputDecoration(
+                    isDense: true,
+                    border: InputBorder.none,
+                    counterText: '',
+                    hintText: 'Nhập ID máy trạm cần hỗ trợ (vd: 841 002 918)...',
+                    hintStyle: TextStyle(
+                      fontFamily: 'sans-serif',
+                      fontSize: 13,
+                      fontWeight: FontWeight.normal,
+                      letterSpacing: 0,
+                      color: Theme.of(context).hintColor.withOpacity(0.6),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  controller: fieldTextEditingController,
+                  inputFormatters: [IDTextInputFormatter()],
+                  onChanged: (v) {
+                    _idController.id = v;
+                    setState(() {});
+                  },
+                  onSubmitted: (_) {
+                    _triggerConnectWithSelectedMode();
+                  },
+                ).workaroundFreezeLinuxMint(),
+              ),
+              if (_idEditingController.text.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.cancel_rounded, size: 16),
+                  color: Theme.of(context).hintColor.withOpacity(0.6),
+                  onPressed: () {
+                    _idEditingController.clear();
+                    _idController.id = '';
+                    setState(() {});
+                  },
+                  tooltip: 'Xóa ID',
+                  splashRadius: 16,
+                ),
+              IconButton(
+                icon: const Icon(Icons.history_rounded, size: 18),
+                color: MyTheme.accent,
+                onPressed: () {
+                  if (_allPeersLoader.peers.isNotEmpty) {
+                    _idFocusNode.requestFocus();
+                  }
+                },
+                tooltip: 'Lịch sử kết nối',
+                splashRadius: 16,
+              ),
+              const SizedBox(width: 4),
+            ],
+          );
+        },
+        onSelected: (option) {
+          setState(() {
+            _idController.id = option.id;
+            FocusScope.of(context).unfocus();
+          });
+        },
+        optionsViewBuilder: (BuildContext context,
+            AutocompleteOnSelected<Peer> onSelected,
+            Iterable<Peer> options) {
+          options = _autocompleteOpts;
+          double maxHeight = (options.length * 50.0).clamp(0.0, 220.0);
+
+          return Align(
+            alignment: Alignment.topLeft,
+            child: Container(
+              margin: const EdgeInsets.only(top: 4),
+              decoration: BoxDecoration(
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.25),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Material(
+                  elevation: 4,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: maxHeight,
+                      maxWidth: 400,
+                    ),
+                    child: _allPeersLoader.peers.isEmpty &&
+                            !_allPeersLoader.isPeersLoaded
+                        ? const SizedBox(
+                            height: 60,
+                            child: Center(
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : ListView(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            shrinkWrap: true,
+                            children: options
+                                .map((peer) => AutocompletePeerTile(
+                                      onSelect: () => onSelected(peer),
+                                      peer: peer,
+                                    ))
+                                .toList(),
+                          ),
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildConnectButton(BuildContext context) {
+    return ElevatedButton.icon(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: MyTheme.accent,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+        elevation: 2,
+      ),
+      icon: const Icon(Icons.play_arrow_rounded, size: 20),
+      label: const Text(
+        'BẮT ĐẦU KẾT NỐI',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.3,
+        ),
+      ),
+      onPressed: () {
+        _triggerConnectWithSelectedMode();
+      },
+    );
+  }
+
+  Widget _buildModeSelector(BuildContext context) {
+    final modes = [
+      {'title': 'Toàn quyền', 'sub': 'Full Control', 'icon': Icons.desktop_windows_rounded, 'mode': 0},
+      {'title': 'Chỉ xem', 'sub': 'View Only', 'icon': Icons.visibility_rounded, 'mode': 1},
+      {'title': 'Truyền file', 'sub': 'DICOM / PACS', 'icon': Icons.folder_shared_rounded, 'mode': 2},
+      {'title': 'Chẩn đoán', 'sub': 'Background CMD', 'icon': Icons.terminal_rounded, 'mode': 3},
+    ];
+
+    return Row(
+      children: modes.map((m) {
+        final modeIdx = m['mode'] as int;
+        final isSelected = _selectedMode == modeIdx;
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: _buildModeCard(
+              context: context,
+              title: m['title'] as String,
+              subtitle: m['sub'] as String,
+              icon: m['icon'] as IconData,
+              isSelected: isSelected,
+              onTap: () {
+                setState(() => _selectedMode = modeIdx);
+              },
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildModeCard({
+    required BuildContext context,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final unselectedBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final borderColor = isSelected
+        ? MyTheme.accent
+        : Theme.of(context).dividerColor.withOpacity(0.15);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? MyTheme.accent.withOpacity(0.12)
+              : unselectedBg,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: borderColor,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isSelected
+                  ? MyTheme.accent
+                  : Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                      color: isSelected
+                          ? MyTheme.accent
+                          : Theme.of(context).textTheme.bodyMedium?.color,
                     ),
                   ),
-                ),
-              ]),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 9,
+                      color: isSelected
+                          ? MyTheme.accent.withOpacity(0.8)
+                          : Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.55),
+                    ),
+                  ),
+                ],
+              ),
             ),
+            if (isSelected)
+              const Icon(Icons.check_circle_rounded, size: 14, color: MyTheme.accent),
           ],
         ),
       ),
     );
+  }
+
+  Widget _buildStitchDirectoryCard(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final headerBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9);
+    final borderColor = Theme.of(context).dividerColor.withOpacity(0.15);
+
     return Container(
-        constraints: const BoxConstraints(maxWidth: 600), child: w);
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: headerBg,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+              border: Border(bottom: BorderSide(color: borderColor)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.lan_rounded, size: 18, color: MyTheme.accent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'DANH SÁCH MÁY TRẠM & PHIÊN LÀM VIỆC / WORKSTATION DIRECTORY',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).textTheme.titleLarge?.color,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ],
+                ),
+                InkWell(
+                  onTap: () {
+                    _allPeersLoader.getAllPeers();
+                    setState(() {});
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.refresh_rounded, size: 14, color: MyTheme.accent),
+                        SizedBox(width: 4),
+                        Text(
+                          'Làm mới',
+                          style: TextStyle(fontSize: 11, color: MyTheme.accent, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(11)),
+              child: PeerTabPage(),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

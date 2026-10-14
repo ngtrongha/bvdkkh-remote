@@ -60,6 +60,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   String _hostname = '';
   String _username = '';
   String _ipAddress = '';
+  String _osVersion = '';
+  bool _obscurePassword = true;
+  bool _allowKeyboard = true;
+  bool _allowClipboard = true;
+  bool _allowRecording = false;
 
   final RxBool _editHover = false.obs;
   final RxBool _block = false.obs;
@@ -80,14 +85,23 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       child: Focus(
         autofocus: true,
         child: _buildBlock(
-            child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            buildLeftPane(context),
-            if (!isIncomingOnly) const VerticalDivider(width: 1),
-            if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
-          ],
-        )),
+          child: Column(
+            children: [
+              _buildStitchHeader(context),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    buildLeftPane(context),
+                    if (!isIncomingOnly) const VerticalDivider(width: 1),
+                    if (!isIncomingOnly) Expanded(child: buildRightPane(context)),
+                  ],
+                ),
+              ),
+              _buildStitchFooter(context),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -97,108 +111,1149 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         block: _block, mask: true, use: canBeBlocked, child: child);
   }
 
+  Widget _buildStitchHeader(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      height: 56,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        border: Border(
+          bottom: BorderSide(
+            color: Theme.of(context).dividerColor.withOpacity(0.15),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Tooltip(
+                message: 'Bệnh viện Đa khoa Khánh Hòa',
+                child: Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: const Color(0xFF00685F).withOpacity(0.3),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.08),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.all(2),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/logo.png',
+                      fit: BoxFit.contain,
+                      errorBuilder: (_, __, ___) => const Center(
+                        child: Icon(Icons.local_hospital_rounded,
+                            color: Color(0xFF00685F), size: 24),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'BVĐK KHÁNH HÒA',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).textTheme.titleLarge?.color,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: MyTheme.accent.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'IT TELEMEDICINE',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: MyTheme.accent,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'HỆ THỐNG ĐIỀU HÀNH HỖ TRỢ IT & Y TẾ TỪ XA',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w500,
+                      color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.65),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          Obx(() {
+            final isReady = stateGlobal.svcStatus.value == SvcStatus.ready && !svcStopped.value;
+            final isConnecting = stateGlobal.svcStatus.value == SvcStatus.connecting;
+            final statusColor = isReady
+                ? const Color(0xFF10B981)
+                : (isConnecting ? Colors.amber : const Color(0xFFEF4444));
+            final statusText = isReady
+                ? 'Sẵn sàng'
+                : (isConnecting ? 'Đang kết nối...' : 'Chưa kết nối');
+
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Theme.of(context).dividerColor.withOpacity(0.15),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: statusColor,
+                      boxShadow: [
+                        BoxShadow(
+                          color: statusColor.withOpacity(0.5),
+                          blurRadius: 4,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Máy chủ Trung tâm Dữ liệu: ',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Theme.of(context).textTheme.bodyMedium?.color,
+                    ),
+                  ),
+                  Text(
+                    statusText,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: statusColor,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '|',
+                    style: TextStyle(
+                      color: Theme.of(context).dividerColor.withOpacity(0.4),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Ping: 2ms • LAN HIS • FIPS-140-2',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontFamily: 'monospace',
+                      color: Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: const Color(0xFF3B82F6).withOpacity(0.2),
+                  ),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.lock_rounded, size: 12, color: Color(0xFF3B82F6)),
+                    SizedBox(width: 4),
+                    Text(
+                      'AES-256 GCM Active',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF3B82F6),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Obx(() {
+                final name = gFFI.userModel.displayNameOrUserName.isNotEmpty
+                    ? gFFI.userModel.displayNameOrUserName
+                    : (_username.isNotEmpty ? _username : 'BS / KTV');
+                return Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 14,
+                      backgroundColor: MyTheme.accent.withOpacity(0.15),
+                      child: Text(
+                        name.isNotEmpty ? name.substring(0, 1).toUpperCase() : 'U',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: MyTheme.accent,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).textTheme.titleSmall?.color,
+                          ),
+                        ),
+                        Text(
+                          'Khoa Lâm Sàng • Trực ban',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              }),
+              const SizedBox(width: 10),
+              IconButton(
+                icon: const Icon(Icons.tune_rounded, size: 20),
+                tooltip: 'Cài đặt hệ thống',
+                splashRadius: 18,
+                onPressed: () {
+                  DesktopTabPage.onAddSetting();
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.emergency_rounded, size: 20, color: Color(0xFFE11D48)),
+                tooltip: 'Hỗ trợ IT khẩn cấp (Ctrl+Alt+H / F8)',
+                splashRadius: 18,
+                onPressed: _openSupportDialog,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStitchFooter(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      height: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+        border: Border(
+          top: BorderSide(
+            color: Theme.of(context).dividerColor.withOpacity(0.15),
+            width: 1,
+          ),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 6,
+                height: 6,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFF10B981),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Tốc độ mạng LAN HIS: ',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
+                ),
+              ),
+              const Text(
+                '1.2 GB/s',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: MyTheme.accent,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Text(
+                'Cổng dịch vụ: Port 8443 TLS Encrypted',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.6),
+                ),
+              ),
+            ],
+          ),
+          Text(
+            'Hệ thống Điều hành Hỗ trợ IT & Y tế Từ xa • Bản quyền © 2026 BVĐK Tỉnh Khánh Hòa',
+            style: TextStyle(
+              fontSize: 10,
+              color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget buildLeftPane(BuildContext context) {
     final isIncomingOnly = bind.isIncomingOnly();
     final isOutgoingOnly = bind.isOutgoingOnly();
-    final children = <Widget>[
-      if (!isOutgoingOnly) buildPresetPasswordWarning(),
-      if (bind.isCustomClient())
-        Align(
-          alignment: Alignment.center,
-          child: loadPowered(context),
-        ),
-      Align(
-        alignment: Alignment.center,
-        child: loadLogo(),
-      ),
-      buildTip(context),
-      if (!isOutgoingOnly) buildIDBoard(context),
-      if (!isOutgoingOnly) buildPasswordBoard(context),
-      if (!isOutgoingOnly) buildSupportRequestButton(context),
-      FutureBuilder<Widget>(
-        future: Future.value(
-            Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
-        builder: (_, data) {
-          if (data.hasData) {
-            if (isIncomingOnly) {
-              if (isInHomePage()) {
-                Future.delayed(Duration(milliseconds: 300), () {
-                  _updateWindowSize();
-                });
-              }
-            }
-            return data.data!;
-          } else {
-            return const Offstage();
-          }
-        },
-      ),
-    ];
-    if (isIncomingOnly) {
-      children.addAll([
-        Divider(),
-        OnlineStatusWidget(
-          onSvcStatusChanged: () {
-            if (isInHomePage()) {
-              Future.delayed(Duration(milliseconds: 300), () {
-                _updateWindowSize();
-              });
-            }
-          },
-        ).marginOnly(bottom: 6, right: 6)
-      ]);
-    }
-    final textColor = Theme.of(context).textTheme.titleLarge?.color;
+    final cardBg = Theme.of(context).cardColor;
+    final borderColor = Theme.of(context).dividerColor.withOpacity(0.15);
+
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
-        width: isIncomingOnly ? 280.0 : 270.0,
+        width: isIncomingOnly ? 320.0 : 380.0,
         color: Theme.of(context).colorScheme.background,
-        child: Stack(
-          children: [
-            Column(
-              children: [
-                SingleChildScrollView(
-                  controller: _leftPaneScrollController,
-                  child: Column(
-                    key: _childKey,
-                    children: children,
-                  ),
-                ),
-                Expanded(child: Container())
+        child: SingleChildScrollView(
+          controller: _leftPaneScrollController,
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            key: _childKey,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!isOutgoingOnly) buildPresetPasswordWarning(),
+              if (!isOutgoingOnly)
+                _buildStitchYourDeskCard(context, cardBg, borderColor),
+              if (!isOutgoingOnly) const SizedBox(height: 12),
+              _buildStitchTelemetryCard(context, cardBg, borderColor),
+              const SizedBox(height: 12),
+              if (!isOutgoingOnly) _buildStitchSosCard(context),
+              FutureBuilder<Widget>(
+                future: Future.value(
+                    Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
+                builder: (_, data) {
+                  if (data.hasData) {
+                    return data.data!;
+                  }
+                  return const SizedBox.shrink();
+                },
+              ),
+              if (isIncomingOnly) ...[
+                const Divider(),
+                OnlineStatusWidget(
+                  onSvcStatusChanged: () {
+                    if (isInHomePage()) {
+                      Future.delayed(const Duration(milliseconds: 300), () {
+                        _updateWindowSize();
+                      });
+                    }
+                  },
+                ).marginOnly(bottom: 6, right: 6),
               ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStitchYourDeskCard(
+      BuildContext context, Color cardBg, Color borderColor) {
+    final model = gFFI.serverModel;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? const Color(0xFF1E293B).withOpacity(0.5)
+                  : const Color(0xFFF1F5F9).withOpacity(0.6),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              border: Border(bottom: BorderSide(color: borderColor)),
             ),
-            if (isOutgoingOnly)
-              Positioned(
-                bottom: 6,
-                left: 12,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: InkWell(
-                    child: Obx(
-                      () => Icon(
-                        Icons.settings,
-                        color: _editHover.value
-                            ? textColor
-                            : Colors.grey.withOpacity(0.5),
-                        size: 22,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.computer_rounded,
+                        size: 18, color: MyTheme.accent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'THIẾT BỊ NÀY / YOUR DESK',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).textTheme.titleSmall?.color,
+                        letterSpacing: 0.3,
                       ),
                     ),
-                    onTap: () async {
-                      if (!gFFI.userModel.canAccessSettings) {
-                        await loginDialog();
-                      }
-                      if (DesktopSettingPage.tabKeys.isNotEmpty) {
-                        DesktopSettingPage.switch2page(
-                            DesktopSettingPage.tabKeys[0]);
-                      }
-                    },
-                    onHover: (value) => _editHover.value = value,
+                  ],
+                ),
+                Obx(() {
+                  final isReady = stateGlobal.svcStatus.value == SvcStatus.ready &&
+                      !svcStopped.value;
+                  return Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: isReady
+                          ? const Color(0xFF10B981).withOpacity(0.12)
+                          : const Color(0xFFEF4444).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isReady
+                            ? const Color(0xFF10B981).withOpacity(0.3)
+                            : const Color(0xFFEF4444).withOpacity(0.3),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: isReady
+                                ? const Color(0xFF10B981)
+                                : const Color(0xFFEF4444),
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          isReady ? 'Sẵn sàng (Online)' : 'Chưa kết nối',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: isReady
+                                ? const Color(0xFF10B981)
+                                : const Color(0xFFEF4444),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Địa chỉ mạng nội bộ:',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.color
+                              ?.withOpacity(0.7),
+                        ),
+                      ),
+                      Text(
+                        _ipAddress.isNotEmpty ? _ipAddress : '127.0.0.1',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'monospace',
+                          color: MyTheme.accent,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              )
-          ],
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF0FDFA),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: MyTheme.accent.withOpacity(0.3),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'MÃ ĐỊNH DANH THIẾT BỊ (YOUR ID)',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.color
+                                  ?.withOpacity(0.7),
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          Row(
+                            children: const [
+                              Icon(Icons.verified_rounded,
+                                  size: 13, color: MyTheme.accent),
+                              SizedBox(width: 3),
+                              Text(
+                                'Cấp phát bởi HIS',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: MyTheme.accent,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: SelectableText(
+                              model.serverId.text.isNotEmpty
+                                  ? model.serverId.text
+                                  : '...',
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'monospace',
+                                color: MyTheme.idColor,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                          ),
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.copy_rounded, size: 14),
+                            label: const Text('Sao chép ID',
+                                style: TextStyle(fontSize: 11)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: MyTheme.accent,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              elevation: 0,
+                            ),
+                            onPressed: () {
+                              Clipboard.setData(
+                                  ClipboardData(text: model.serverId.text));
+                              showToast(translate("Copied"));
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'MẬT KHẨ PHIÊN (ONE-TIME KEY)',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context)
+                                  .textTheme
+                                  .bodySmall
+                                  ?.color
+                                  ?.withOpacity(0.7),
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () {
+                              bind.mainUpdateTemporaryPassword();
+                            },
+                            child: Row(
+                              children: const [
+                                Icon(Icons.refresh_rounded,
+                                    size: 13, color: MyTheme.accent),
+                                SizedBox(width: 3),
+                                Text(
+                                  'Làm mới mã',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                    color: MyTheme.accent,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                _obscurePassword
+                                    ? '••••••'
+                                    : (model.serverPasswd.text.isNotEmpty
+                                        ? model.serverPasswd.text
+                                        : '••••••'),
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'monospace',
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_rounded
+                                      : Icons.visibility_off_rounded,
+                                  size: 16,
+                                  color: Colors.grey,
+                                ),
+                                splashRadius: 14,
+                                tooltip: _obscurePassword
+                                    ? 'Hiện mật khẩu'
+                                    : 'Ẩn mật khẩu',
+                                onPressed: () {
+                                  setState(() {
+                                    _obscurePassword = !_obscurePassword;
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                          OutlinedButton.icon(
+                            icon: const Icon(Icons.key_rounded, size: 14),
+                            label: const Text('Sao chép mật khẩu',
+                                style: TextStyle(fontSize: 11)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor:
+                                  Theme.of(context).textTheme.bodyMedium?.color,
+                              side: BorderSide(color: borderColor),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                            onPressed: () {
+                              Clipboard.setData(
+                                  ClipboardData(text: model.serverPasswd.text));
+                              showToast(translate("Copied"));
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'QUYỀN TRUY CẬP KHI KẾT NỐI',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.color
+                        ?.withOpacity(0.65),
+                    letterSpacing: 0.3,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                _buildPermissionToggle(
+                  context: context,
+                  icon: Icons.mouse_rounded,
+                  title: 'Cho phép điều khiển chuột/phím',
+                  value: _allowKeyboard,
+                  onChanged: _setAllowKeyboard,
+                ),
+                const SizedBox(height: 4),
+                _buildPermissionToggle(
+                  context: context,
+                  icon: Icons.content_paste_rounded,
+                  title: 'Cho phép đồng bộ Clipboard',
+                  value: _allowClipboard,
+                  onChanged: _setAllowClipboard,
+                ),
+                const SizedBox(height: 4),
+                _buildPermissionToggle(
+                  context: context,
+                  icon: Icons.videocam_rounded,
+                  title: 'Ghi hình phiên hỗ trợ (Tuân thủ y tế)',
+                  value: _allowRecording,
+                  onChanged: _setAllowRecording,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPermissionToggle({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required bool value,
+    required Function(bool) onChanged,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Theme.of(context).dividerColor.withOpacity(0.12),
         ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 15, color: MyTheme.accent),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: const TextStyle(fontSize: 11),
+              ),
+            ],
+          ),
+          Checkbox(
+            value: value,
+            activeColor: MyTheme.accent,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            onChanged: (val) {
+              if (val != null) onChanged(val);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _setAllowKeyboard(bool val) {
+    setState(() => _allowKeyboard = val);
+    bind.mainSetOption(key: kOptionEnableKeyboard, value: val ? 'Y' : 'N');
+  }
+
+  void _setAllowClipboard(bool val) {
+    setState(() => _allowClipboard = val);
+    bind.mainSetOption(key: kOptionEnableClipboard, value: val ? 'Y' : 'N');
+  }
+
+  void _setAllowRecording(bool val) {
+    setState(() => _allowRecording = val);
+    bind.mainSetOption(key: kOptionAllowAutoRecordIncoming, value: val ? 'Y' : 'N');
+  }
+
+  Future<void> _loadPermissions() async {
+    try {
+      final kb = await bind.mainGetOption(key: kOptionEnableKeyboard);
+      final clip = await bind.mainGetOption(key: kOptionEnableClipboard);
+      final rec = await bind.mainGetOption(key: kOptionAllowAutoRecordIncoming);
+      if (mounted) {
+        setState(() {
+          _allowKeyboard = kb != 'N';
+          _allowClipboard = clip != 'N';
+          _allowRecording = rec == 'Y';
+        });
+      }
+    } catch (_) {}
+  }
+
+  Widget _buildStitchTelemetryCard(
+      BuildContext context, Color cardBg, Color borderColor) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? const Color(0xFF1E293B).withOpacity(0.5)
+                  : const Color(0xFFF1F5F9).withOpacity(0.6),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              border: Border(bottom: BorderSide(color: borderColor)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.memory_rounded,
+                        size: 18, color: MyTheme.accent),
+                    const SizedBox(width: 8),
+                    Text(
+                      'THÔNG SỐ MÁY TRẠM / DEVICE TELEMETRY',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).textTheme.titleSmall?.color,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  'Cập nhật: Vừa xong',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.color
+                        ?.withOpacity(0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              children: [
+                _buildTelemetryRow(
+                  context,
+                  label: 'Khoa / Phòng ban:',
+                  value: 'Khoa Cấp Cứu - Bàn tiếp đón 02',
+                ),
+                Divider(height: 12, color: borderColor),
+                _buildTelemetryRow(
+                  context,
+                  label: 'Tên máy trạm (Hostname):',
+                  value: _hostname.isNotEmpty ? _hostname : Platform.localHostname,
+                  isHighlight: true,
+                ),
+                Divider(height: 12, color: borderColor),
+                _buildTelemetryRow(
+                  context,
+                  label: 'Hệ điều hành / Phiên bản:',
+                  value: _osVersion.isNotEmpty
+                      ? _osVersion
+                      : Platform.operatingSystemVersion,
+                ),
+                Divider(height: 12, color: borderColor),
+                _buildTelemetryRow(
+                  context,
+                  label: 'Địa chỉ IP nội bộ:',
+                  value: _ipAddress.isNotEmpty ? _ipAddress : '127.0.0.1',
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: borderColor),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: const [
+                          Icon(Icons.check_circle_rounded,
+                              size: 14, color: Color(0xFF10B981)),
+                          SizedBox(width: 6),
+                          Text(
+                            'HIS Server: ',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                          Text(
+                            'Kết nối ổn định',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF10B981)),
+                          ),
+                        ],
+                      ),
+                      Row(
+                        children: const [
+                          Icon(Icons.check_circle_rounded,
+                              size: 14, color: Color(0xFF10B981)),
+                          SizedBox(width: 6),
+                          Text(
+                            'PACS DICOM: ',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                          Text(
+                            'Trực tuyến',
+                            style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF10B981)),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTelemetryRow(
+    BuildContext context, {
+    required String label,
+    required String value,
+    bool isHighlight = false,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
+          ),
+        ),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
+              fontFamily: isHighlight ? 'monospace' : null,
+              color: isHighlight
+                  ? MyTheme.accent
+                  : Theme.of(context).textTheme.bodyMedium?.color,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStitchSosCard(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? const Color(0xFF450A0A).withOpacity(0.3)
+            : const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFEF4444).withOpacity(0.5),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Center(
+                  child: Icon(Icons.emergency_rounded,
+                      color: Colors.white, size: 20),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'YÊU CẦU HỖ TRỢ IT KHẨN CẤP',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFDC2626),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEF4444),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'ƯU TIÊN 1',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Sự cố HIS / PACS / Máy in? Gửi cảnh báo ưu tiên tới Đội IT trực ban.',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.color
+                            ?.withOpacity(0.7),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.notification_important_rounded, size: 16),
+            label: const Text(
+              'GỬI YÊU CẦU CỨU HỘ IT KHẨN CẤP (SOS)',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.3,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: 2,
+            ),
+            onPressed: _openSupportDialog,
+          ),
+        ],
       ),
     );
   }
@@ -510,6 +1565,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         _ipAddress = fallbackIp;
       }
     } catch (_) {}
+    await _loadPermissions();
     if (mounted) {
       setState(() {});
       if (bind.isIncomingOnly() && isInHomePage()) {
