@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 import 'dart:convert';
 import 'dart:async';
 
