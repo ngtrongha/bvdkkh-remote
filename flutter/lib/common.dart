@@ -482,7 +482,6 @@ class MyTheme {
     dialogBackgroundColor: Color(0xFF0F172A),
     appBarTheme: AppBarTheme(
       shadowColor: Colors.transparent,
-      backgroundColor: Color(0xFF0F172A),
     ),
     dialogTheme: DialogThemeData(
       backgroundColor: Color(0xFF0F172A),

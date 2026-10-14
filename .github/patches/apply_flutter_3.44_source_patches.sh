@@ -77,7 +77,8 @@ is_complete_patch_state() {
   has_exact_count "$THEME_MATCHES" 'dialogTheme: DialogThemeData(' flutter/lib/common.dart &&
     has_exact_count "$THEME_MATCHES" 'tabBarTheme: const TabBarThemeData(' flutter/lib/common.dart &&
     has_exact_count "$SINGLE_MATCH" 'backgroundColor: Colors.white,' flutter/lib/common.dart &&
-    has_exact_count "$SINGLE_MATCH" 'backgroundColor: Color(0xFF18191E),' flutter/lib/common.dart &&
+    (has_exact_count "$SINGLE_MATCH" 'backgroundColor: Color(0xFF0F172A),' flutter/lib/common.dart ||
+     has_exact_count "$SINGLE_MATCH" 'backgroundColor: Color(0xFF18191E),' flutter/lib/common.dart) &&
     has_exact_count "$SINGLE_MATCH" 'extended_text: 15.0.2' flutter/pubspec.yaml &&
     has_exact_count "$SINGLE_MATCH" 'google_fonts: ^8.1.0' flutter/pubspec.yaml &&
     has_exact_count "$NO_MATCHES" 'dialogTheme: DialogTheme(' flutter/lib/common.dart &&
@@ -87,9 +88,12 @@ is_complete_patch_state() {
     has_dialog_background_in_theme_range 'static ThemeData lightTheme = ThemeData(' \
       'static ThemeData darkTheme = ThemeData(' 'backgroundColor: Colors.white,' \
       flutter/lib/common.dart &&
-    has_dialog_background_in_theme_range 'static ThemeData darkTheme = ThemeData(' \
+    (has_dialog_background_in_theme_range 'static ThemeData darkTheme = ThemeData(' \
+      'scrollbarTheme: scrollbarThemeDark,' 'backgroundColor: Color(0xFF0F172A),' \
+      flutter/lib/common.dart ||
+     has_dialog_background_in_theme_range 'static ThemeData darkTheme = ThemeData(' \
       'scrollbarTheme: scrollbarThemeDark,' 'backgroundColor: Color(0xFF18191E),' \
-      flutter/lib/common.dart
+      flutter/lib/common.dart)
 }
 
 is_unpatched_state() {
@@ -100,6 +104,7 @@ is_unpatched_state() {
     has_exact_count "$NO_MATCHES" 'dialogTheme: DialogThemeData(' flutter/lib/common.dart &&
     has_exact_count "$NO_MATCHES" 'tabBarTheme: const TabBarThemeData(' flutter/lib/common.dart &&
     has_exact_count "$NO_MATCHES" 'backgroundColor: Colors.white,' flutter/lib/common.dart &&
+    has_exact_count "$NO_MATCHES" 'backgroundColor: Color(0xFF0F172A),' flutter/lib/common.dart &&
     has_exact_count "$NO_MATCHES" 'backgroundColor: Color(0xFF18191E),' flutter/lib/common.dart &&
     has_exact_count "$NO_MATCHES" 'extended_text: 15.0.2' flutter/pubspec.yaml &&
     has_exact_count "$NO_MATCHES" 'google_fonts: ^8.1.0' flutter/pubspec.yaml
