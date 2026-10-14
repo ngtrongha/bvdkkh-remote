@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -22,9 +26,6 @@ class DesktopTabPage extends StatefulWidget {
   static void onAddSetting(
       {SettingsTabKey initialPage = SettingsTabKey.general}) async {
     try {
-      if (!gFFI.userModel.canAccessSettings) {
-        await loginDialog();
-      }
       DesktopTabController tabController = Get.find<DesktopTabController>();
       tabController.add(TabInfo(
           key: kTabLabelSettingPage,
