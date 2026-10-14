@@ -15,7 +15,6 @@ import 'package:window_manager/window_manager.dart';
 // import 'package:flutter/services.dart';
 
 import '../../common/shared_state.dart';
-import '../../common/widgets/login.dart';
 
 class DesktopTabPage extends StatefulWidget {
   const DesktopTabPage({Key? key}) : super(key: key);
@@ -112,7 +111,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
                 ),
               ),
             )));
-    return isMacOS || kUseCompatibleUiMode
+    return isMacOS
         ? tabWidget
         : Obx(
             () => DragToResizeArea(
