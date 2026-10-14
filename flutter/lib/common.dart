@@ -186,17 +186,17 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   );
 
   static final dark = ColorThemeExtension(
-    border: Color(0xFF555555),
+    border: Color(0xFF334155),
     border2: Color(0xFFE5E5E5),
-    border3: Colors.white24,
-    highlight: Color(0xFF3F3F3F),
+    border3: Color(0xFF334155),
+    highlight: Color(0xFF1E293B),
     drag_indicator: Colors.grey,
-    shadow: Colors.grey,
+    shadow: Color(0x66000000),
     errorBannerBg: Color(0xFF470F2D),
     me: Colors.greenAccent,
     toastBg: Colors.white.withOpacity(0.6),
     toastText: Colors.black,
-    divider: Colors.white38,
+    divider: Color(0xFF334155),
   );
 
   @override
@@ -254,17 +254,17 @@ class MyTheme {
   MyTheme._();
 
   static const Color grayBg = Color(0xFFEFEFF2);
-  static const Color accent = Color(0xFF0071FF);
-  static const Color accent50 = Color(0x770071FF);
-  static const Color accent80 = Color(0xAA0071FF);
-  static const Color canvasColor = Color(0xFF212121);
-  static const Color border = Color(0xFFCCCCCC);
-  static const Color idColor = Color(0xFF00B6F0);
+  static const Color accent = Color(0xFF0D9488); // BVĐKKH Clinical Teal
+  static const Color accent50 = Color(0x770D9488);
+  static const Color accent80 = Color(0xAA0D9488);
+  static const Color canvasColor = Color(0xFF0F172A); // Clinical Slate
+  static const Color border = Color(0xFF334155);
+  static const Color idColor = Color(0xFF14B8A6); // High-contrast Teal ID
   static const Color darkGray = Color.fromARGB(255, 148, 148, 148);
-  static const Color cmIdColor = Color(0xFF21790B);
+  static const Color cmIdColor = Color(0xFF0D9488);
   static const Color dark = Colors.black87;
-  static const Color button = Color(0xFF2C8CFF);
-  static const Color hoverBorder = Color(0xFF999999);
+  static const Color button = Color(0xFF0D9488); // BVĐKKH Primary Action
+  static const Color hoverBorder = Color(0xFF0F766E);
 
   // ListTile
   static const ListTileThemeData listTileTheme = ListTileThemeData(
@@ -458,7 +458,7 @@ class MyTheme {
         style:
             MenuStyle(backgroundColor: MaterialStatePropertyAll(Colors.white))),
     colorScheme: ColorScheme.light(
-        primary: Colors.blue, secondary: accent, background: grayBg),
+        primary: MyTheme.accent, secondary: accent, background: grayBg),
     popupMenuTheme: PopupMenuThemeData(
         color: Colors.white,
         shape: RoundedRectangleBorder(
@@ -477,20 +477,21 @@ class MyTheme {
   static ThemeData darkTheme = ThemeData(
     useMaterial3: false,
     brightness: Brightness.dark,
-    hoverColor: Color.fromARGB(255, 45, 46, 53),
-    scaffoldBackgroundColor: Color(0xFF18191E),
-    dialogBackgroundColor: Color(0xFF18191E),
+    hoverColor: Color(0xFF1E293B),
+    scaffoldBackgroundColor: Color(0xFF0F172A),
+    dialogBackgroundColor: Color(0xFF0F172A),
     appBarTheme: AppBarTheme(
       shadowColor: Colors.transparent,
+      backgroundColor: Color(0xFF0F172A),
     ),
     dialogTheme: DialogThemeData(
-      backgroundColor: Color(0xFF18191E),
+      backgroundColor: Color(0xFF0F172A),
       elevation: 15,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18.0),
+        borderRadius: BorderRadius.circular(16.0),
         side: BorderSide(
           width: 1,
-          color: Color(0xFF24252B),
+          color: Color(0xFF334155),
         ),
       ),
     ),
@@ -516,7 +517,7 @@ class MyTheme {
         color: accent80,
       ),
     ),
-    cardColor: Color(0xFF24252B),
+    cardColor: Color(0xFF1E293B),
     visualDensity: VisualDensity.adaptivePlatformDensity,
     tabBarTheme: const TabBarThemeData(
       labelColor: Colors.white70,
@@ -550,8 +551,8 @@ class MyTheme {
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        backgroundColor: Color(0xFF24252B),
-        side: BorderSide(color: Colors.white12, width: 0.5),
+        backgroundColor: Color(0xFF1E293B),
+        side: BorderSide(color: Color(0xFF334155), width: 1),
         disabledForegroundColor: Colors.white70,
         foregroundColor: Colors.white70,
         shape: RoundedRectangleBorder(
@@ -565,17 +566,19 @@ class MyTheme {
     listTileTheme: listTileTheme,
     menuBarTheme: MenuBarThemeData(
         style: MenuStyle(
-            backgroundColor: MaterialStatePropertyAll(Color(0xFF121212)))),
+            backgroundColor: MaterialStatePropertyAll(Color(0xFF0F172A)))),
     colorScheme: ColorScheme.dark(
-      primary: Colors.blue,
+      primary: MyTheme.accent,
       secondary: accent,
-      background: Color(0xFF24252B),
+      background: Color(0xFF0F172A),
     ),
     popupMenuTheme: PopupMenuThemeData(
-        shape: RoundedRectangleBorder(
-      side: BorderSide(color: Colors.white24),
-      borderRadius: BorderRadius.all(Radius.circular(8.0)),
-    )),
+      color: Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: Color(0xFF334155)),
+        borderRadius: BorderRadius.all(Radius.circular(8.0)),
+      ),
+    ),
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.dark,
@@ -3919,8 +3922,11 @@ class _LogoState extends State<_Logo> {
             },
           );
           return Container(
-            constraints: BoxConstraints(maxWidth: 300, maxHeight: 60),
-            child: image,
+            constraints: const BoxConstraints(maxWidth: 300, maxHeight: 60),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: image,
+            ),
           ).marginOnly(left: 12, right: 12, top: 12);
         }
         return const Offstage();

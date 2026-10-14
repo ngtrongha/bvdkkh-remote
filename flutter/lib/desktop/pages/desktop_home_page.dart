@@ -39,7 +39,7 @@ class DesktopHomePage extends StatefulWidget {
   State<DesktopHomePage> createState() => _DesktopHomePageState();
 }
 
-const borderColor = Color(0xFF2F65BA);
+const borderColor = Color(0xFF0D9488);
 
 class _DesktopHomePageState extends State<DesktopHomePage>
     with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
@@ -265,6 +265,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         ),
                         style: TextStyle(
                           fontSize: 22,
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.bold,
+                          color: MyTheme.idColor,
                         ),
                       ).workaroundFreezeLinuxMint(),
                     ),
@@ -366,7 +369,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                               contentPadding:
                                   EdgeInsets.only(top: 14, bottom: 10),
                             ),
-                            style: TextStyle(fontSize: 15),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.w600,
+                            ),
                           ).workaroundFreezeLinuxMint(),
                         ),
                       ),
