@@ -28,9 +28,11 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:window_size/window_size.dart' as window_size;
 import '../widgets/button.dart';
+import '../widgets/tabbar_widget.dart';
 import '../../common/widgets/login.dart';
 import '../../common/support_ticket_listener.dart';
 import '../../common/widgets/support_dialog.dart';
+import '../../models/user_model.dart';
 
 class DesktopHomePage extends StatefulWidget {
   const DesktopHomePage({Key? key}) : super(key: key);
@@ -61,12 +63,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   String _username = '';
   String _ipAddress = '';
   String _osVersion = '';
+  String _appVersion = '';
   bool _obscurePassword = true;
   bool _allowKeyboard = true;
   bool _allowClipboard = true;
   bool _allowRecording = false;
 
-  final RxBool _editHover = false.obs;
   final RxBool _block = false.obs;
 
   final GlobalKey _childKey = GlobalKey();
@@ -111,267 +113,372 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         block: _block, mask: true, use: canBeBlocked, child: child);
   }
 
+  String _getDepartmentInfo() {
+    final optDept = bind.mainGetLocalOption(key: 'department');
+    if (optDept.trim().isNotEmpty) return optDept.trim();
+    final optDeviceDept = bind.mainGetLocalOption(key: 'device_department');
+    if (optDeviceDept.trim().isNotEmpty) return optDeviceDept.trim();
+
+    final userInfo = UserModel.getLocalUserInfo();
+    if (userInfo != null) {
+      final dept = userInfo['department'] ??
+          userInfo['dept'] ??
+          userInfo['group'] ??
+          userInfo['group_name'] ??
+          userInfo['unit'] ??
+          userInfo['note'];
+      if (dept != null && dept.toString().trim().isNotEmpty) {
+        return dept.toString().trim();
+      }
+    }
+
+    if (gFFI.groupModel.deviceGroups.isNotEmpty) {
+      final gName = gFFI.groupModel.deviceGroups.first.name;
+      if (gName.trim().isNotEmpty) return gName.trim();
+    }
+
+    final builtinDept = bind.mainGetBuildinOption(key: 'department');
+    if (builtinDept.trim().isNotEmpty) return builtinDept.trim();
+
+    return 'Chưa cấu hình';
+  }
+
+  String _getUserRoleOrDept() {
+    final dept = _getDepartmentInfo();
+    if (dept != 'Chưa cấu hình') {
+      return dept;
+    }
+    if (gFFI.userModel.isAdmin.value) {
+      return 'Quản trị viên IT';
+    }
+    return '';
+  }
+
   Widget _buildStitchHeader(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      height: 56,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).dividerColor.withOpacity(0.15),
-            width: 1,
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onPanStart: (_) => windowManager.startDragging(),
+      onDoubleTap: () =>
+          toggleMaximize(true).then((val) => stateGlobal.setMaximized(val)),
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : Colors.white,
+          border: Border(
+            bottom: BorderSide(
+              color: Theme.of(context).dividerColor.withOpacity(0.15),
+              width: 1,
+            ),
           ),
         ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              Tooltip(
-                message: 'Bệnh viện Đa khoa Khánh Hòa',
-                child: Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: const Color(0xFF00685F).withOpacity(0.3),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Tooltip(
+                  message: 'Bệnh viện Đa khoa Khánh Hòa',
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: const Color(0xFF00685F).withOpacity(0.3),
+                        width: 1.5,
                       ),
-                    ],
-                  ),
-                  padding: const EdgeInsets.all(2),
-                  child: ClipOval(
-                    child: Image.asset(
-                      'assets/logo.png',
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const Center(
-                        child: Icon(Icons.local_hospital_rounded,
-                            color: Color(0xFF00685F), size: 24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    padding: const EdgeInsets.all(2),
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/logo.png',
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Center(
+                          child: Icon(Icons.local_hospital_rounded,
+                              color: Color(0xFF00685F), size: 22),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        'BVĐK KHÁNH HÒA',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).textTheme.titleLarge?.color,
-                          letterSpacing: 0.2,
+                const SizedBox(width: 10),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'BVĐK KHÁNH HÒA',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).textTheme.titleLarge?.color,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1.5),
+                          decoration: BoxDecoration(
+                            color: MyTheme.accent.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'IT TELEMEDICINE',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              color: MyTheme.accent,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      'HỆ THỐNG ĐIỀU HÀNH HỖ TRỢ IT & Y TẾ TỪ XA',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                        color: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.color
+                            ?.withOpacity(0.65),
+                        letterSpacing: 0.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            Obx(() {
+              final isReady =
+                  stateGlobal.svcStatus.value == SvcStatus.ready && !svcStopped.value;
+              final isConnecting =
+                  stateGlobal.svcStatus.value == SvcStatus.connecting;
+              final statusColor = isReady
+                  ? const Color(0xFF10B981)
+                  : (isConnecting ? Colors.amber : const Color(0xFFEF4444));
+              final statusText = isReady
+                  ? 'Sẵn sàng'
+                  : (isConnecting ? 'Đang kết nối...' : 'Chưa kết nối');
+
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color:
+                      isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: Theme.of(context).dividerColor.withOpacity(0.15),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: statusColor,
+                        boxShadow: [
+                          BoxShadow(
+                            color: statusColor.withOpacity(0.5),
+                            blurRadius: 3,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    Text(
+                      'Máy chủ: ',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Theme.of(context).textTheme.bodyMedium?.color,
+                      ),
+                    ),
+                    Text(
+                      statusText,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: statusColor,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+            Row(
+              children: [
+                Obx(() {
+                  final name = gFFI.userModel.displayNameOrUserName.isNotEmpty
+                      ? gFFI.userModel.displayNameOrUserName
+                      : _username;
+                  final deptOrRole = _getUserRoleOrDept();
+                  if (name.isEmpty) {
+                    return Tooltip(
+                      message: 'Đăng nhập tài khoản',
+                      child: InkWell(
+                        onTap: () => DesktopTabPage.onAddSetting(),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.account_circle_outlined,
+                                size: 18,
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.color
+                                    ?.withOpacity(0.7),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'Chưa đăng nhập',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.color
+                                      ?.withOpacity(0.7),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                        decoration: BoxDecoration(
-                          color: MyTheme.accent.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text(
-                          'IT TELEMEDICINE',
-                          style: TextStyle(
-                            fontSize: 10,
+                    );
+                  }
+                  return Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 13,
+                        backgroundColor: MyTheme.accent.withOpacity(0.15),
+                        child: Text(
+                          name.substring(0, 1).toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 11,
                             fontWeight: FontWeight.bold,
                             color: MyTheme.accent,
                           ),
                         ),
                       ),
+                      const SizedBox(width: 6),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color:
+                                  Theme.of(context).textTheme.titleSmall?.color,
+                            ),
+                          ),
+                          if (deptOrRole.isNotEmpty)
+                            Text(
+                              deptOrRole,
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.color
+                                    ?.withOpacity(0.6),
+                              ),
+                            ),
+                        ],
+                      ),
                     ],
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'HỆ THỐNG ĐIỀU HÀNH HỖ TRỢ IT & Y TẾ TỪ XA',
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w500,
-                      color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.65),
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          Obx(() {
-            final isReady = stateGlobal.svcStatus.value == SvcStatus.ready && !svcStopped.value;
-            final isConnecting = stateGlobal.svcStatus.value == SvcStatus.connecting;
-            final statusColor = isReady
-                ? const Color(0xFF10B981)
-                : (isConnecting ? Colors.amber : const Color(0xFFEF4444));
-            final statusText = isReady
-                ? 'Sẵn sàng'
-                : (isConnecting ? 'Đang kết nối...' : 'Chưa kết nối');
-
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Theme.of(context).dividerColor.withOpacity(0.15),
+                  );
+                }),
+                const SizedBox(width: 6),
+                IconButton(
+                  icon: const Icon(Icons.tune_rounded, size: 19),
+                  tooltip: 'Cài đặt hệ thống',
+                  splashRadius: 16,
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                  onPressed: () {
+                    DesktopTabPage.onAddSetting();
+                  },
                 ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: statusColor,
-                      boxShadow: [
-                        BoxShadow(
-                          color: statusColor.withOpacity(0.5),
-                          blurRadius: 4,
-                          spreadRadius: 1,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Máy chủ Trung tâm Dữ liệu: ',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Theme.of(context).textTheme.bodyMedium?.color,
-                    ),
-                  ),
-                  Text(
-                    statusText,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: statusColor,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '|',
-                    style: TextStyle(
-                      color: Theme.of(context).dividerColor.withOpacity(0.4),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Ping: 2ms • LAN HIS • FIPS-140-2',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontFamily: 'monospace',
-                      color: Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFEFF6FF),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: const Color(0xFF3B82F6).withOpacity(0.2),
-                  ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.emergency_rounded,
+                      size: 19, color: Color(0xFFE11D48)),
+                  tooltip: 'Hỗ trợ IT khẩn cấp (Ctrl+Alt+H / F8)',
+                  splashRadius: 16,
+                  padding: const EdgeInsets.all(6),
+                  constraints: const BoxConstraints(),
+                  onPressed: _openSupportDialog,
                 ),
-                child: Row(
-                  children: const [
-                    Icon(Icons.lock_rounded, size: 12, color: Color(0xFF3B82F6)),
-                    SizedBox(width: 4),
-                    Text(
-                      'AES-256 GCM Active',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFF3B82F6),
-                      ),
-                    ),
-                  ],
+                const SizedBox(width: 6),
+                Container(
+                  height: 18,
+                  width: 1,
+                  color: Theme.of(context).dividerColor.withOpacity(0.2),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Obx(() {
-                final name = gFFI.userModel.displayNameOrUserName.isNotEmpty
-                    ? gFFI.userModel.displayNameOrUserName
-                    : (_username.isNotEmpty ? _username : 'BS / KTV');
-                return Row(
+                const SizedBox(width: 4),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    CircleAvatar(
-                      radius: 14,
-                      backgroundColor: MyTheme.accent.withOpacity(0.15),
-                      child: Text(
-                        name.isNotEmpty ? name.substring(0, 1).toUpperCase() : 'U',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: MyTheme.accent,
-                        ),
+                    ActionIcon(
+                      message: 'Minimize',
+                      icon: IconFont.min,
+                      boxSize: 30,
+                      iconSize: 13,
+                      onTap: () => windowManager.minimize(),
+                    ),
+                    Obx(
+                      () => ActionIcon(
+                        message: stateGlobal.isMaximized.isTrue
+                            ? 'Restore'
+                            : 'Maximize',
+                        icon: stateGlobal.isMaximized.isTrue
+                            ? IconFont.restore
+                            : IconFont.max,
+                        boxSize: 30,
+                        iconSize: 13,
+                        onTap: () => toggleMaximize(true)
+                            .then((val) => stateGlobal.setMaximized(val)),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).textTheme.titleSmall?.color,
-                          ),
-                        ),
-                        Text(
-                          'Khoa Lâm Sàng • Trực ban',
-                          style: TextStyle(
-                            fontSize: 9,
-                            color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.6),
-                          ),
-                        ),
-                      ],
+                    ActionIcon(
+                      message: 'Close',
+                      icon: IconFont.close,
+                      isClose: true,
+                      boxSize: 30,
+                      iconSize: 13,
+                      onTap: () => windowManager.close(),
                     ),
                   ],
-                );
-              }),
-              const SizedBox(width: 10),
-              IconButton(
-                icon: const Icon(Icons.tune_rounded, size: 20),
-                tooltip: 'Cài đặt hệ thống',
-                splashRadius: 18,
-                onPressed: () {
-                  DesktopTabPage.onAddSetting();
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.emergency_rounded, size: 20, color: Color(0xFFE11D48)),
-                tooltip: 'Hỗ trợ IT khẩn cấp (Ctrl+Alt+H / F8)',
-                splashRadius: 18,
-                onPressed: _openSupportDialog,
-              ),
-            ],
-          ),
-        ],
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -395,42 +502,53 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         children: [
           Row(
             children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Color(0xFF10B981),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Tốc độ mạng LAN HIS: ',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
-                ),
-              ),
-              const Text(
-                '1.2 GB/s',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: MyTheme.accent,
-                ),
-              ),
+              Obx(() {
+                final isReady = stateGlobal.svcStatus.value == SvcStatus.ready &&
+                    !svcStopped.value;
+                return Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isReady
+                            ? const Color(0xFF10B981)
+                            : const Color(0xFFEF4444),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      isReady ? 'Dịch vụ: Sẵn sàng' : 'Dịch vụ: Chưa sẵn sàng',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.color
+                            ?.withOpacity(0.7),
+                      ),
+                    ),
+                  ],
+                );
+              }),
               const SizedBox(width: 14),
-              Text(
-                'Cổng dịch vụ: Port 8443 TLS Encrypted',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.6),
+              if (_appVersion.isNotEmpty)
+                Text(
+                  'Phiên bản: $_appVersion',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.color
+                        ?.withOpacity(0.6),
+                  ),
                 ),
-              ),
             ],
           ),
           Text(
-            'Hệ thống Điều hành Hỗ trợ IT & Y tế Từ xa • Bản quyền © 2026 BVĐK Tỉnh Khánh Hòa',
+            'Bản quyền © 2026 Bệnh viện Đa khoa Tỉnh Khánh Hòa',
             style: TextStyle(
               fontSize: 10,
               color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.5),
@@ -459,13 +577,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             key: _childKey,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (!isOutgoingOnly) _buildStitchSosCard(context),
+              if (!isOutgoingOnly) const SizedBox(height: 12),
               if (!isOutgoingOnly) buildPresetPasswordWarning(),
               if (!isOutgoingOnly)
                 _buildStitchYourDeskCard(context, cardBg, borderColor),
               if (!isOutgoingOnly) const SizedBox(height: 12),
               _buildStitchTelemetryCard(context, cardBg, borderColor),
-              const SizedBox(height: 12),
-              if (!isOutgoingOnly) _buildStitchSosCard(context),
               FutureBuilder<Widget>(
                 future: Future.value(
                     Obx(() => buildHelpCards(stateGlobal.updateUrl.value))),
@@ -664,21 +782,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                   ?.withOpacity(0.7),
                               letterSpacing: 0.3,
                             ),
-                          ),
-                          Row(
-                            children: const [
-                              Icon(Icons.verified_rounded,
-                                  size: 13, color: MyTheme.accent),
-                              SizedBox(width: 3),
-                              Text(
-                                'Cấp phát bởi HIS',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: MyTheme.accent,
-                                ),
-                              ),
-                            ],
                           ),
                         ],
                       ),
@@ -990,33 +1093,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
               border: Border(bottom: BorderSide(color: borderColor)),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.memory_rounded,
-                        size: 18, color: MyTheme.accent),
-                    const SizedBox(width: 8),
-                    Text(
-                      'THÔNG SỐ MÁY TRẠM / DEVICE TELEMETRY',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).textTheme.titleSmall?.color,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ],
-                ),
+                const Icon(Icons.memory_rounded,
+                    size: 16, color: MyTheme.accent),
+                const SizedBox(width: 8),
                 Text(
-                  'Cập nhật: Vừa xong',
+                  'THÔNG SỐ MÁY TRẠM',
                   style: TextStyle(
-                    fontSize: 10,
-                    color: Theme.of(context)
-                        .textTheme
-                        .bodySmall
-                        ?.color
-                        ?.withOpacity(0.6),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).textTheme.titleSmall?.color,
+                    letterSpacing: 0.3,
                   ),
                 ),
               ],
@@ -1029,7 +1116,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 _buildTelemetryRow(
                   context,
                   label: 'Khoa / Phòng ban:',
-                  value: 'Khoa Cấp Cứu - Bàn tiếp đón 02',
+                  value: _getDepartmentInfo(),
+                  isHighlight: _getDepartmentInfo() != 'Chưa cấu hình',
                 ),
                 Divider(height: 12, color: borderColor),
                 _buildTelemetryRow(
@@ -1051,59 +1139,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                   context,
                   label: 'Địa chỉ IP nội bộ:',
                   value: _ipAddress.isNotEmpty ? _ipAddress : '127.0.0.1',
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF0F172A)
-                        : const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: borderColor),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: const [
-                          Icon(Icons.check_circle_rounded,
-                              size: 14, color: Color(0xFF10B981)),
-                          SizedBox(width: 6),
-                          Text(
-                            'HIS Server: ',
-                            style: TextStyle(fontSize: 11),
-                          ),
-                          Text(
-                            'Kết nối ổn định',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF10B981)),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: const [
-                          Icon(Icons.check_circle_rounded,
-                              size: 14, color: Color(0xFF10B981)),
-                          SizedBox(width: 6),
-                          Text(
-                            'PACS DICOM: ',
-                            style: TextStyle(fontSize: 11),
-                          ),
-                          Text(
-                            'Trực tuyến',
-                            style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF10B981)),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
                 ),
               ],
             ),
@@ -1129,7 +1164,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
           ),
         ),
-        Flexible(
+        const SizedBox(width: 8),
+        Expanded(
           child: Text(
             value,
             textAlign: TextAlign.right,
@@ -1185,38 +1221,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        const Text(
-                          'YÊU CẦU HỖ TRỢ IT KHẨN CẤP',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFDC2626),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEF4444),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'ƯU TIÊN 1',
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      'YÊU CẦU HỖ TRỢ IT KHẨN CẤP',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFDC2626),
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Sự cố HIS / PACS / Máy in? Gửi cảnh báo ưu tiên tới Đội IT trực ban.',
+                      'Gửi yêu cầu hỗ trợ kỹ thuật trực tiếp tới phòng CNTT',
                       style: TextStyle(
                         fontSize: 10,
                         color: Theme.of(context)
@@ -1235,7 +1250,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           ElevatedButton.icon(
             icon: const Icon(Icons.notification_important_rounded, size: 16),
             label: const Text(
-              'GỬI YÊU CẦU CỨU HỘ IT KHẨN CẤP (SOS)',
+              'GỬI YÊU CẦU HỖ TRỢ IT (SOS)',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
@@ -1536,6 +1551,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     _hostname = Platform.localHostname;
     _username =
         Platform.environment['USERNAME'] ?? Platform.environment['USER'] ?? '';
+    try {
+      _appVersion = await bind.mainGetVersion();
+    } catch (_) {}
     try {
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,

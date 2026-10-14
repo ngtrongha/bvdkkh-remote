@@ -169,7 +169,7 @@ class _ConnectionPageState extends State<ConnectionPage>
   final TextEditingController _idEditingController = TextEditingController();
 
   String selectedConnectionType = 'Connect';
-  int _selectedMode = 0;
+  final int _selectedMode = 0;
 
   bool isWindowMinimized = false;
 
@@ -351,35 +351,17 @@ class _ConnectionPageState extends State<ConnectionPage>
               border: Border(bottom: BorderSide(color: borderColor)),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.screen_share_rounded, size: 18, color: MyTheme.accent),
-                    const SizedBox(width: 8),
-                    Text(
-                      'KẾT NỐI ĐẾN MÁY TRẠM KHÁC / REMOTE CONNECTION',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).textTheme.titleLarge?.color,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    const Icon(Icons.bolt_rounded, size: 14, color: Colors.amber),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Kênh điều khiển tốc độ cao',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
-                      ),
-                    ),
-                  ],
+                const Icon(Icons.screen_share_rounded, size: 18, color: MyTheme.accent),
+                const SizedBox(width: 8),
+                Text(
+                  'KẾT NỐI ĐẾN MÁY TRẠM KHÁC / REMOTE CONNECTION',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).textTheme.titleLarge?.color,
+                    letterSpacing: 0.2,
+                  ),
                 ),
               ],
             ),
@@ -408,18 +390,6 @@ class _ConnectionPageState extends State<ConnectionPage>
                     _buildConnectButton(context),
                   ],
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  'CHẾ ĐỘ KẾT NỐI LÂM SÀNG:',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.65),
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _buildModeSelector(context),
               ],
             ),
           ),
@@ -650,111 +620,6 @@ class _ConnectionPageState extends State<ConnectionPage>
       onPressed: () {
         _triggerConnectWithSelectedMode();
       },
-    );
-  }
-
-  Widget _buildModeSelector(BuildContext context) {
-    final modes = [
-      {'title': 'Toàn quyền', 'sub': 'Full Control', 'icon': Icons.desktop_windows_rounded, 'mode': 0},
-      {'title': 'Chỉ xem', 'sub': 'View Only', 'icon': Icons.visibility_rounded, 'mode': 1},
-      {'title': 'Truyền file', 'sub': 'DICOM / PACS', 'icon': Icons.folder_shared_rounded, 'mode': 2},
-      {'title': 'Chẩn đoán', 'sub': 'Background CMD', 'icon': Icons.terminal_rounded, 'mode': 3},
-    ];
-
-    return Row(
-      children: modes.map((m) {
-        final modeIdx = m['mode'] as int;
-        final isSelected = _selectedMode == modeIdx;
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3),
-            child: _buildModeCard(
-              context: context,
-              title: m['title'] as String,
-              subtitle: m['sub'] as String,
-              icon: m['icon'] as IconData,
-              isSelected: isSelected,
-              onTap: () {
-                setState(() => _selectedMode = modeIdx);
-              },
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-
-  Widget _buildModeCard({
-    required BuildContext context,
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final unselectedBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
-    final borderColor = isSelected
-        ? MyTheme.accent
-        : Theme.of(context).dividerColor.withOpacity(0.15);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? MyTheme.accent.withOpacity(0.12)
-              : unselectedBg,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: borderColor,
-            width: isSelected ? 1.5 : 1.0,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: isSelected
-                  ? MyTheme.accent
-                  : Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                      color: isSelected
-                          ? MyTheme.accent
-                          : Theme.of(context).textTheme.bodyMedium?.color,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 9,
-                      color: isSelected
-                          ? MyTheme.accent.withOpacity(0.8)
-                          : Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.55),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (isSelected)
-              const Icon(Icons.check_circle_rounded, size: 14, color: MyTheme.accent),
-          ],
-        ),
-      ),
     );
   }
 

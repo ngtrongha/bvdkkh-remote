@@ -244,10 +244,6 @@ void runMultiWindow(
     widget,
     MyTheme.currentThemeMode(),
   );
-  // we do not hide titlebar on win7 because of the frame overflow.
-  if (kUseCompatibleUiMode) {
-    WindowController.fromWindowId(kWindowId!).showTitleBar(true);
-  }
   switch (appType) {
     case kAppTypeDesktopRemote:
       // If screen rect is set, the window will be moved to the target screen and then set fullscreen.
@@ -413,11 +409,7 @@ WindowOptions getHiddenTitleBarWindowOptions(
     Size? size,
     bool center = false,
     bool? alwaysOnTop}) {
-  var defaultTitleBarStyle = TitleBarStyle.hidden;
-  // we do not hide titlebar on win7 because of the frame overflow.
-  if (kUseCompatibleUiMode) {
-    defaultTitleBarStyle = TitleBarStyle.normal;
-  }
+  const defaultTitleBarStyle = TitleBarStyle.hidden;
   return WindowOptions(
     size: size,
     center: center,
