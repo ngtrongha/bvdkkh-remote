@@ -20,9 +20,6 @@ flutter --version | grep -q "Flutter 3\.44\." || {
   exit 1
 }
 
-# Shared 3.44 source/pubspec patches own their complete-state validation.
-bash .github/patches/apply_flutter_3.44_source_patches.sh
-
 # Populate the pub cache with the 3.44 dependency resolution.
 (cd flutter && flutter pub get)
 
