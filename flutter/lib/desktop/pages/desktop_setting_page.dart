@@ -91,9 +91,6 @@ class DesktopSettingPage extends StatefulWidget {
 
   static void switch2page(SettingsTabKey page) async {
     try {
-      if (!gFFI.userModel.canAccessSettings) {
-        await loginDialog();
-      }
       int index = tabKeys.indexOf(page);
       if (index == -1) {
         return;
@@ -378,35 +375,30 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
     super.build(context);
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
-      body: Obx(() {
-        if (!gFFI.userModel.canAccessSettings) {
-          return _buildLockedSettings(context);
-        }
-        return _buildBlock(
-          children: <Widget>[
-            SizedBox(
-              width: _kTabWidth,
-              child: Column(
-                children: [
-                  _header(context),
-                  Flexible(child: _listView(tabs: _settingTabs())),
-                ],
+      body: _buildBlock(
+        children: <Widget>[
+          SizedBox(
+            width: _kTabWidth,
+            child: Column(
+              children: [
+                _header(context),
+                Flexible(child: _listView(tabs: _settingTabs())),
+              ],
+            ),
+          ),
+          const VerticalDivider(width: 1),
+          Expanded(
+            child: Container(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: PageView(
+                controller: controller,
+                physics: const NeverScrollableScrollPhysics(),
+                children: _children(),
               ),
             ),
-            const VerticalDivider(width: 1),
-            Expanded(
-              child: Container(
-                color: Theme.of(context).scaffoldBackgroundColor,
-                child: PageView(
-                  controller: controller,
-                  physics: NeverScrollableScrollPhysics(),
-                  children: _children(),
-                ),
-              ),
-            )
-          ],
-        );
-      }),
+          )
+        ],
+      ),
     );
   }
 
@@ -1874,7 +1866,35 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   Widget build(BuildContext context) {
     super.build(context);
     return ListView(controller: scrollController, children: [
-      _lock(locked, 'Unlock Network Settings', () {
+      Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: MyTheme.accent.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.security_rounded, color: MyTheme.accent, size: 24),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Cấu hình Máy chủ & Mạng được BVĐK Khánh Hòa quản lý tập trung và khóa tự động. Cần quyền Quản trị viên để chỉnh sửa.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).textTheme.bodyMedium?.color,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      _lock(locked, 'Unlock Network Settings', () async {
+        if (!gFFI.userModel.canAccessSettings) {
+          await loginDialog();
+          if (!gFFI.userModel.canAccessSettings) return;
+        }
         locked = false;
         setState(() => {});
       }),
