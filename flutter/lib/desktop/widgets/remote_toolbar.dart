@@ -328,13 +328,13 @@ class ToolbarState {
 }
 
 class _ToolbarTheme {
-  static const Color blueColor = MyTheme.button;
-  static const Color hoverBlueColor = MyTheme.accent;
-  static Color inactiveColor = Colors.grey[800]!;
-  static Color hoverInactiveColor = Colors.grey[850]!;
+  static const Color blueColor = Color(0xFF0D9488);
+  static const Color hoverBlueColor = Color(0xFF14B8A6);
+  static const Color inactiveColor = Color(0xFF1E293B);
+  static const Color hoverInactiveColor = Color(0xFF334155);
 
-  static const Color redColor = Colors.redAccent;
-  static const Color hoverRedColor = Colors.red;
+  static const Color redColor = Color(0xFFEF4444);
+  static const Color hoverRedColor = Color(0xFFDC2626);
   // kMinInteractiveDimension
   static const double height = 20.0;
   static const double dividerHeight = 12.0;
@@ -343,32 +343,45 @@ class _ToolbarTheme {
   static const double buttonHMargin = 2;
   static const double buttonVMargin = 6;
   static const double iconRadius = 8;
-  static const double elevation = 4;
+  static const double elevation = 6;
 
   static double dividerSpaceToAction = isWindows ? 8 : 14;
 
-  static double menuBorderRadius = 8.0;
+  static double menuBorderRadius = 10.0;
   static EdgeInsets menuPadding = isWindows
-      ? EdgeInsets.fromLTRB(4, 10, 4, 10)
-      : EdgeInsets.fromLTRB(6, 12, 6, 12);
+      ? const EdgeInsets.fromLTRB(4, 8, 4, 8)
+      : const EdgeInsets.fromLTRB(6, 10, 6, 10);
   static const double menuButtonBorderRadius = 6.0;
 
   static Color borderColor(BuildContext context) =>
-      MyTheme.color(context).border3 ?? MyTheme.border;
+      const Color(0xFF0D9488).withOpacity(0.35);
+
+  static Color toolbarBackgroundColor(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return isDark ? const Color(0xFF0F172A) : const Color(0xFFFFFFFF);
+  }
 
   static Color? dividerColor(BuildContext context) =>
-      MyTheme.color(context).divider;
+      const Color(0xFF0D9488).withOpacity(0.2);
 
-  static MenuStyle defaultMenuStyle(BuildContext context) => MenuStyle(
-        side: MaterialStateProperty.all(BorderSide(
-          width: 1,
-          color: borderColor(context),
-        )),
-        shape: MaterialStatePropertyAll(RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.circular(_ToolbarTheme.menuBorderRadius))),
-        padding: MaterialStateProperty.all(_ToolbarTheme.menuPadding),
-      );
+  static MenuStyle defaultMenuStyle(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return MenuStyle(
+      backgroundColor: MaterialStatePropertyAll(
+        isDark ? const Color(0xFF0F172A) : Colors.white,
+      ),
+      elevation: const MaterialStatePropertyAll(8),
+      shadowColor: MaterialStatePropertyAll(Colors.black.withOpacity(0.3)),
+      side: MaterialStateProperty.all(const BorderSide(
+        width: 1.2,
+        color: Color(0xFF0D9488),
+      )),
+      shape: MaterialStatePropertyAll(RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.circular(_ToolbarTheme.menuBorderRadius))),
+      padding: MaterialStateProperty.all(_ToolbarTheme.menuPadding),
+    );
+  }
   static final defaultMenuButtonStyle = ButtonStyle(
     backgroundColor: MaterialStatePropertyAll(Colors.transparent),
     padding: MaterialStatePropertyAll(EdgeInsets.zero),
@@ -868,11 +881,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       elevation: _ToolbarTheme.elevation,
       shadowColor: MyTheme.color(context).shadow,
       borderRadius: toolbarBorderRadius,
-      color: Theme.of(context)
-          .menuBarTheme
-          .style
-          ?.backgroundColor
-          ?.resolve(MaterialState.values.toSet()),
+      color: _ToolbarTheme.toolbarBackgroundColor(context),
       child: SingleChildScrollView(
         scrollDirection: innerAxis,
         child: Theme(
@@ -925,12 +934,12 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
       ),
       menuBarTheme: MenuBarThemeData(
           style: MenuStyle(
-        padding: MaterialStatePropertyAll(EdgeInsets.zero),
-        elevation: MaterialStatePropertyAll(0),
-        shape: MaterialStatePropertyAll(BeveledRectangleBorder()),
-      ).copyWith(
-              backgroundColor:
-                  Theme.of(context).menuBarTheme.style?.backgroundColor)),
+        padding: const MaterialStatePropertyAll(EdgeInsets.zero),
+        elevation: const MaterialStatePropertyAll(0),
+        shape: const MaterialStatePropertyAll(BeveledRectangleBorder()),
+        backgroundColor: MaterialStatePropertyAll(
+            _ToolbarTheme.toolbarBackgroundColor(context)),
+      )),
     );
   }
 }
@@ -3632,11 +3641,7 @@ class _DraggableShowHideState extends State<_DraggableShowHide> {
       data: TextButtonThemeData(style: buttonStyle),
       child: Container(
         decoration: BoxDecoration(
-          color: Theme.of(context)
-              .menuBarTheme
-              .style
-              ?.backgroundColor
-              ?.resolve(MaterialState.values.toSet()),
+          color: _ToolbarTheme.toolbarBackgroundColor(context),
           border: Border.all(
             color: _ToolbarTheme.borderColor(context),
             width: 1,
