@@ -8,13 +8,41 @@ html {
     background-color: transparent;
 }
 
+header {
+    height: 34px;
+    background: #0F172A;
+    color: #F1F5F9;
+    flow: horizontal;
+    border-bottom: 1px solid #1E293B;
+}
+
+header caption {
+    height: *;
+    line-height: 34px;
+    padding-left: 10px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #F1F5F9;
+    width: *;
+}
+
+header div.window-icon {
+    size: 34px;
+    padding: 7px;
+}
+
+header div.window-buttons {
+    height: *;
+    flow: horizontal;
+}
+
 body {
     overflow: hidden;
 }
 
 @media platform != "OSX" {
     body {
-        border-top: color(border) solid 1px;
+        border-top: none;
     }
 }
 
@@ -33,7 +61,7 @@ body {
 }
 
 .left-pane {
-    width: 260px;
+    width: 280px;
     height: *;
     background: color(bg);
     border-right: color(border) 1px solid;
@@ -475,6 +503,8 @@ div.device-info-card {
     border: 1px solid color(border);
     border-radius: 6px;
     padding: 6px 8px;
+    box-sizing: border-box;
+    overflow: hidden;
 }
 
 div.device-info-row {
@@ -482,6 +512,7 @@ div.device-info-row {
     cursor: pointer;
     padding: 4px 2px;
     border-radius: 4px;
+    overflow: hidden;
 }
 
 div.device-info-row:hover {
@@ -501,6 +532,8 @@ div.device-info-row span.value {
     font-size: 0.82em;
     margin-left: 6px;
     @ELLIPSIS;
+    overflow-x: hidden;
+    white-space: nowrap;
     width: *;
 }
 
@@ -525,11 +558,13 @@ button.button-support {
     border: none;
     border-radius: 6px;
     width: 100%;
-    margin-top: 10px;
+    margin-top: 0;
+    margin-bottom: 12px;
     font-weight: bold;
-    font-size: 0.85em;
-    height: 2.2em;
+    font-size: 0.88em;
+    height: 2.5em;
     cursor: pointer;
+    box-shadow: 0 2px 4px rgba(225, 29, 72, 0.25);
 }
 
 button.button-support:hover {
