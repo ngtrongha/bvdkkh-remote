@@ -63,6 +63,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   String _username = '';
   String _ipAddress = '';
   String _osVersion = '';
+  String _appVersion = '';
   bool _obscurePassword = true;
   bool _allowKeyboard = true;
   bool _allowClipboard = true;
@@ -150,10 +151,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     if (gFFI.userModel.isAdmin.value) {
       return 'Quản trị viên IT';
     }
-    if (gFFI.userModel.isLogin) {
-      return 'Nhân viên Y tế';
-    }
-    return 'Khoa / Phòng lâm sàng';
+    return '';
   }
 
   Widget _buildStitchHeader(BuildContext context) {
@@ -322,70 +320,61 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         color: statusColor,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '|',
-                      style: TextStyle(
-                        color: Theme.of(context).dividerColor.withOpacity(0.4),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Ping: 2ms • LAN HIS',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontFamily: 'monospace',
-                        color: Colors.grey,
-                      ),
-                    ),
                   ],
                 ),
               );
             }),
             Row(
               children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
-                  decoration: BoxDecoration(
-                    color:
-                        isDark ? const Color(0xFF0F172A) : const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                      color: const Color(0xFF3B82F6).withOpacity(0.2),
-                    ),
-                  ),
-                  child: Row(
-                    children: const [
-                      Icon(Icons.lock_rounded,
-                          size: 11, color: Color(0xFF3B82F6)),
-                      SizedBox(width: 4),
-                      Text(
-                        'AES-256 GCM',
-                        style: TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF3B82F6),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 10),
                 Obx(() {
                   final name = gFFI.userModel.displayNameOrUserName.isNotEmpty
                       ? gFFI.userModel.displayNameOrUserName
-                      : (_username.isNotEmpty ? _username : 'BS / KTV');
+                      : _username;
                   final deptOrRole = _getUserRoleOrDept();
+                  if (name.isEmpty) {
+                    return Tooltip(
+                      message: 'Đăng nhập tài khoản',
+                      child: InkWell(
+                        onTap: () => DesktopTabPage.onAddSetting(),
+                        borderRadius: BorderRadius.circular(6),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.account_circle_outlined,
+                                size: 18,
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.color
+                                    ?.withOpacity(0.7),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                'Chưa đăng nhập',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.color
+                                      ?.withOpacity(0.7),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  }
                   return Row(
                     children: [
                       CircleAvatar(
                         radius: 13,
                         backgroundColor: MyTheme.accent.withOpacity(0.15),
                         child: Text(
-                          name.isNotEmpty
-                              ? name.substring(0, 1).toUpperCase()
-                              : 'U',
+                          name.substring(0, 1).toUpperCase(),
                           style: const TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
@@ -407,17 +396,18 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                   Theme.of(context).textTheme.titleSmall?.color,
                             ),
                           ),
-                          Text(
-                            deptOrRole,
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.color
-                                  ?.withOpacity(0.6),
+                          if (deptOrRole.isNotEmpty)
+                            Text(
+                              deptOrRole,
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.color
+                                    ?.withOpacity(0.6),
+                              ),
                             ),
-                          ),
                         ],
                       ),
                     ],
@@ -512,42 +502,53 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         children: [
           Row(
             children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Color(0xFF10B981),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                'Tốc độ mạng LAN HIS: ',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
-                ),
-              ),
-              const Text(
-                '1.2 GB/s',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: MyTheme.accent,
-                ),
-              ),
+              Obx(() {
+                final isReady = stateGlobal.svcStatus.value == SvcStatus.ready &&
+                    !svcStopped.value;
+                return Row(
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: isReady
+                            ? const Color(0xFF10B981)
+                            : const Color(0xFFEF4444),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      isReady ? 'Dịch vụ: Sẵn sàng' : 'Dịch vụ: Chưa sẵn sàng',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.color
+                            ?.withOpacity(0.7),
+                      ),
+                    ),
+                  ],
+                );
+              }),
               const SizedBox(width: 14),
-              Text(
-                'Cổng dịch vụ: Port 8443 TLS Encrypted',
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.6),
+              if (_appVersion.isNotEmpty)
+                Text(
+                  'Phiên bản: $_appVersion',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.color
+                        ?.withOpacity(0.6),
+                  ),
                 ),
-              ),
             ],
           ),
           Text(
-            'Hệ thống Điều hành Hỗ trợ IT & Y tế Từ xa • Bản quyền © 2026 BVĐK Tỉnh Khánh Hòa',
+            'Bản quyền © 2026 Bệnh viện Đa khoa Tỉnh Khánh Hòa',
             style: TextStyle(
               fontSize: 10,
               color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.5),
@@ -781,21 +782,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                   ?.withOpacity(0.7),
                               letterSpacing: 0.3,
                             ),
-                          ),
-                          Row(
-                            children: const [
-                              Icon(Icons.verified_rounded,
-                                  size: 13, color: MyTheme.accent),
-                              SizedBox(width: 3),
-                              Text(
-                                'Cấp phát bởi HIS',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: MyTheme.accent,
-                                ),
-                              ),
-                            ],
                           ),
                         ],
                       ),
@@ -1107,49 +1093,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
               border: Border(bottom: BorderSide(color: borderColor)),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      const Icon(Icons.memory_rounded,
-                          size: 16, color: MyTheme.accent),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          'THÔNG SỐ MÁY TRẠM',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: Theme.of(context).textTheme.titleSmall?.color,
-                            letterSpacing: 0.3,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.circle, size: 6, color: Color(0xFF10B981)),
-                      SizedBox(width: 4),
-                      Text(
-                        'Vừa xong',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF10B981),
-                        ),
-                      ),
-                    ],
+                const Icon(Icons.memory_rounded,
+                    size: 16, color: MyTheme.accent),
+                const SizedBox(width: 8),
+                Text(
+                  'THÔNG SỐ MÁY TRẠM',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).textTheme.titleSmall?.color,
+                    letterSpacing: 0.3,
                   ),
                 ),
               ],
@@ -1185,67 +1139,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                   context,
                   label: 'Địa chỉ IP nội bộ:',
                   value: _ipAddress.isNotEmpty ? _ipAddress : '127.0.0.1',
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF0F172A)
-                        : const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: borderColor),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(Icons.check_circle_rounded,
-                                size: 13, color: Color(0xFF10B981)),
-                            SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                'HIS: Sẵn sàng',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF10B981),
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: const [
-                            Icon(Icons.check_circle_rounded,
-                                size: 13, color: Color(0xFF10B981)),
-                            SizedBox(width: 4),
-                            Flexible(
-                              child: Text(
-                                'PACS: Trực tuyến',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF10B981),
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ],
             ),
@@ -1328,38 +1221,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        const Text(
-                          'YÊU CẦU HỖ TRỢ IT KHẨN CẤP',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFFDC2626),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFEF4444),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'ƯU TIÊN 1',
-                            style: TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      'YÊU CẦU HỖ TRỢ IT KHẨN CẤP',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFFDC2626),
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Sự cố HIS / PACS / Máy in? Gửi cảnh báo ưu tiên tới Đội IT trực ban.',
+                      'Gửi yêu cầu hỗ trợ kỹ thuật trực tiếp tới phòng CNTT',
                       style: TextStyle(
                         fontSize: 10,
                         color: Theme.of(context)
@@ -1378,7 +1250,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           ElevatedButton.icon(
             icon: const Icon(Icons.notification_important_rounded, size: 16),
             label: const Text(
-              'GỬI YÊU CẦU CỨU HỘ IT KHẨN CẤP (SOS)',
+              'GỬI YÊU CẦU HỖ TRỢ IT (SOS)',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
@@ -1679,6 +1551,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     _hostname = Platform.localHostname;
     _username =
         Platform.environment['USERNAME'] ?? Platform.environment['USER'] ?? '';
+    try {
+      _appVersion = await bind.mainGetVersion();
+    } catch (_) {}
     try {
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,

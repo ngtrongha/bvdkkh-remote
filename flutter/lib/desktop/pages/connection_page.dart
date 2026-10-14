@@ -351,35 +351,17 @@ class _ConnectionPageState extends State<ConnectionPage>
               border: Border(bottom: BorderSide(color: borderColor)),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    const Icon(Icons.screen_share_rounded, size: 18, color: MyTheme.accent),
-                    const SizedBox(width: 8),
-                    Text(
-                      'KẾT NỐI ĐẾN MÁY TRẠM KHÁC / REMOTE CONNECTION',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).textTheme.titleLarge?.color,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    const Icon(Icons.bolt_rounded, size: 14, color: Colors.amber),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Kênh điều khiển tốc độ cao',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.7),
-                      ),
-                    ),
-                  ],
+                const Icon(Icons.screen_share_rounded, size: 18, color: MyTheme.accent),
+                const SizedBox(width: 8),
+                Text(
+                  'KẾT NỐI ĐẾN MÁY TRẠM KHÁC / REMOTE CONNECTION',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).textTheme.titleLarge?.color,
+                    letterSpacing: 0.2,
+                  ),
                 ),
               ],
             ),
