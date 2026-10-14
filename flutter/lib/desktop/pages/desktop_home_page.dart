@@ -32,7 +32,7 @@ import '../widgets/tabbar_widget.dart';
 import '../../common/widgets/login.dart';
 import '../../common/support_ticket_listener.dart';
 import '../../common/widgets/support_dialog.dart';
-import '../../models/user_model.dart';
+import '../../native/win32.dart';
 
 class DesktopHomePage extends StatefulWidget {
   const DesktopHomePage({Key? key}) : super(key: key);
@@ -64,6 +64,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   String _ipAddress = '';
   String _osVersion = '';
   String _appVersion = '';
+  String _cpuInfo = '';
+  String _ramInfo = '';
   bool _obscurePassword = true;
   bool _allowKeyboard = true;
   bool _allowClipboard = true;
@@ -113,41 +115,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         block: _block, mask: true, use: canBeBlocked, child: child);
   }
 
-  String _getDepartmentInfo() {
-    final optDept = bind.mainGetLocalOption(key: 'department');
-    if (optDept.trim().isNotEmpty) return optDept.trim();
-    final optDeviceDept = bind.mainGetLocalOption(key: 'device_department');
-    if (optDeviceDept.trim().isNotEmpty) return optDeviceDept.trim();
-
-    final userInfo = UserModel.getLocalUserInfo();
-    if (userInfo != null) {
-      final dept = userInfo['department'] ??
-          userInfo['dept'] ??
-          userInfo['group'] ??
-          userInfo['group_name'] ??
-          userInfo['unit'] ??
-          userInfo['note'];
-      if (dept != null && dept.toString().trim().isNotEmpty) {
-        return dept.toString().trim();
-      }
-    }
-
-    if (gFFI.groupModel.deviceGroups.isNotEmpty) {
-      final gName = gFFI.groupModel.deviceGroups.first.name;
-      if (gName.trim().isNotEmpty) return gName.trim();
-    }
-
-    final builtinDept = bind.mainGetBuildinOption(key: 'department');
-    if (builtinDept.trim().isNotEmpty) return builtinDept.trim();
-
-    return 'Chưa cấu hình';
-  }
-
   String _getUserRoleOrDept() {
-    final dept = _getDepartmentInfo();
-    if (dept != 'Chưa cấu hình') {
-      return dept;
-    }
     if (gFFI.userModel.isAdmin.value) {
       return 'Quản trị viên IT';
     }
@@ -1115,13 +1083,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
               children: [
                 _buildTelemetryRow(
                   context,
-                  label: 'Khoa / Phòng ban:',
-                  value: _getDepartmentInfo(),
-                  isHighlight: _getDepartmentInfo() != 'Chưa cấu hình',
-                ),
-                Divider(height: 12, color: borderColor),
-                _buildTelemetryRow(
-                  context,
                   label: 'Tên máy trạm (Hostname):',
                   value: _hostname.isNotEmpty ? _hostname : Platform.localHostname,
                   isHighlight: true,
@@ -1134,6 +1095,23 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       ? _osVersion
                       : Platform.operatingSystemVersion,
                 ),
+                if (_cpuInfo.isNotEmpty) ...[
+                  Divider(height: 12, color: borderColor),
+                  _buildTelemetryRow(
+                    context,
+                    label: 'Bộ vi xử lý (CPU):',
+                    value: _cpuInfo,
+                  ),
+                ],
+                if (_ramInfo.isNotEmpty) ...[
+                  Divider(height: 12, color: borderColor),
+                  _buildTelemetryRow(
+                    context,
+                    label: 'Bộ nhớ RAM:',
+                    value: _ramInfo,
+                    isHighlight: true,
+                  ),
+                ],
                 Divider(height: 12, color: borderColor),
                 _buildTelemetryRow(
                   context,
@@ -1166,18 +1144,21 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
-              fontFamily: isHighlight ? 'monospace' : null,
-              color: isHighlight
-                  ? MyTheme.accent
-                  : Theme.of(context).textTheme.bodyMedium?.color,
+          child: Tooltip(
+            message: value,
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
+                fontFamily: isHighlight ? 'monospace' : null,
+                color: isHighlight
+                    ? MyTheme.accent
+                    : Theme.of(context).textTheme.bodyMedium?.color,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
-            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -1554,6 +1535,21 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     try {
       _appVersion = await bind.mainGetVersion();
     } catch (_) {}
+    try {
+      if (Platform.isWindows) {
+        _cpuInfo = getWindowsCpuName();
+        _ramInfo = getWindowsTotalPhysicalMemory();
+      } else if (Platform.isLinux) {
+        final cpuRes = Process.runSync('sh', ['-c', 'grep -m1 "model name" /proc/cpuinfo | cut -d: -f2']);
+        if (cpuRes.exitCode == 0) _cpuInfo = cpuRes.stdout.toString().trim();
+      } else if (Platform.isMacOS) {
+        final cpuRes = Process.runSync('sysctl', ['-n', 'machdep.cpu.brand_string']);
+        if (cpuRes.exitCode == 0) _cpuInfo = cpuRes.stdout.toString().trim();
+      }
+    } catch (_) {}
+    if (_cpuInfo.isEmpty) {
+      _cpuInfo = '${Platform.numberOfProcessors} nhân CPU';
+    }
     try {
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,

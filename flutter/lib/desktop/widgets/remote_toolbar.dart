@@ -367,6 +367,7 @@ class _ToolbarTheme {
       backgroundColor: const MaterialStatePropertyAll(
         Color(0xFF0F172A),
       ),
+      surfaceTintColor: const MaterialStatePropertyAll(Colors.transparent),
       elevation: const MaterialStatePropertyAll(12),
       shadowColor: MaterialStatePropertyAll(Colors.black.withOpacity(0.4)),
       side: MaterialStateProperty.all(BorderSide(
@@ -384,6 +385,110 @@ class _ToolbarTheme {
     padding: MaterialStatePropertyAll(EdgeInsets.zero),
     overlayColor: MaterialStatePropertyAll(Colors.transparent),
   );
+
+  static final ButtonStyle menuItemButtonStyle = ButtonStyle(
+    minimumSize: const MaterialStatePropertyAll(Size(64, 32)),
+    foregroundColor: MaterialStateProperty.resolveWith((states) {
+      if (states.contains(MaterialState.disabled)) {
+        return const Color(0xFF64748B);
+      }
+      if (states.contains(MaterialState.hovered) ||
+          states.contains(MaterialState.focused)) {
+        return const Color(0xFF2DD4BF);
+      }
+      return const Color(0xFFF1F5F9);
+    }),
+    iconColor: MaterialStateProperty.resolveWith((states) {
+      if (states.contains(MaterialState.disabled)) {
+        return const Color(0xFF64748B);
+      }
+      if (states.contains(MaterialState.hovered) ||
+          states.contains(MaterialState.focused)) {
+        return const Color(0xFF2DD4BF);
+      }
+      return const Color(0xFFF1F5F9);
+    }),
+    overlayColor: MaterialStateProperty.resolveWith((states) {
+      if (states.contains(MaterialState.hovered) ||
+          states.contains(MaterialState.focused)) {
+        return const Color(0xFF1E293B).withOpacity(0.9);
+      }
+      return Colors.transparent;
+    }),
+    textStyle: const MaterialStatePropertyAll(
+      TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.normal,
+        color: Color(0xFFF1F5F9),
+      ),
+    ),
+    shape: MaterialStatePropertyAll(
+      RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(menuButtonBorderRadius),
+      ),
+    ),
+  );
+
+  static ThemeData menuTheme(BuildContext context) {
+    final base = Theme.of(context);
+    const darkColorScheme = ColorScheme.dark(
+      primary: Color(0xFF0D9488),
+      secondary: Color(0xFF14B8A6),
+      surface: Color(0xFF0F172A),
+      onSurface: Color(0xFFF1F5F9),
+      onPrimary: Colors.white,
+    );
+    return base.copyWith(
+      brightness: Brightness.dark,
+      colorScheme: darkColorScheme,
+      scaffoldBackgroundColor: const Color(0xFF0F172A),
+      canvasColor: const Color(0xFF0F172A),
+      cardColor: const Color(0xFF0F172A),
+      iconTheme: const IconThemeData(
+        color: Color(0xFFF1F5F9),
+        size: 18,
+      ),
+      menuButtonTheme: MenuButtonThemeData(
+        style: menuItemButtonStyle,
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: MaterialStateProperty.resolveWith((states) {
+          if (states.contains(MaterialState.selected)) {
+            return const Color(0xFF0D9488);
+          }
+          return Colors.transparent;
+        }),
+        checkColor: const MaterialStatePropertyAll(Colors.white),
+        side: const BorderSide(color: Color(0xFF94A3B8), width: 1.5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(3)),
+      ),
+      radioTheme: RadioThemeData(
+        fillColor: MaterialStateProperty.resolveWith((states) {
+          if (states.contains(MaterialState.selected)) {
+            return const Color(0xFF0D9488);
+          }
+          return const Color(0xFF94A3B8);
+        }),
+      ),
+      textTheme: base.textTheme.apply(
+        bodyColor: const Color(0xFFF1F5F9),
+        displayColor: const Color(0xFFF1F5F9),
+      ),
+      dividerTheme: DividerThemeData(
+        space: dividerSpaceToAction,
+        color: dividerColor(context),
+      ),
+      menuBarTheme: MenuBarThemeData(
+        style: MenuStyle(
+          padding: const MaterialStatePropertyAll(EdgeInsets.zero),
+          elevation: const MaterialStatePropertyAll(0),
+          shape: const MaterialStatePropertyAll(BeveledRectangleBorder()),
+          backgroundColor: MaterialStatePropertyAll(
+              toolbarBackgroundColor(context)),
+        ),
+      ),
+    );
+  }
 }
 
 typedef DismissFunc = void Function();
@@ -944,33 +1049,7 @@ class _RemoteToolbarState extends State<RemoteToolbar> {
     );
   }
 
-  ThemeData themeData() {
-    return Theme.of(context).copyWith(
-      menuButtonTheme: MenuButtonThemeData(
-        style: ButtonStyle(
-          minimumSize: MaterialStatePropertyAll(Size(64, 32)),
-          textStyle: MaterialStatePropertyAll(
-            TextStyle(fontWeight: FontWeight.normal),
-          ),
-          shape: MaterialStatePropertyAll(RoundedRectangleBorder(
-              borderRadius:
-                  BorderRadius.circular(_ToolbarTheme.menuButtonBorderRadius))),
-        ),
-      ),
-      dividerTheme: DividerThemeData(
-        space: _ToolbarTheme.dividerSpaceToAction,
-        color: _ToolbarTheme.dividerColor(context),
-      ),
-      menuBarTheme: MenuBarThemeData(
-          style: MenuStyle(
-        padding: const MaterialStatePropertyAll(EdgeInsets.zero),
-        elevation: const MaterialStatePropertyAll(0),
-        shape: const MaterialStatePropertyAll(BeveledRectangleBorder()),
-        backgroundColor: MaterialStatePropertyAll(
-            _ToolbarTheme.toolbarBackgroundColor(context)),
-      )),
-    );
-  }
+  ThemeData themeData() => _ToolbarTheme.menuTheme(context);
 }
 
 class _PinMenu extends StatelessWidget {
@@ -2518,6 +2597,10 @@ class _ResolutionsMenuState extends State<_ResolutionsMenu> {
         isDense: true,
         contentPadding: EdgeInsets.fromLTRB(3, 3, 3, 3),
       ),
+      style: const TextStyle(
+        color: Color(0xFFF1F5F9),
+        fontSize: 13,
+      ),
       keyboardType: TextInputType.number,
       inputFormatters: <TextInputFormatter>[
         FilteringTextInputFormatter.digitsOnly,
@@ -3309,6 +3392,7 @@ class _SubmenuButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SubmenuButton(
       key: key,
+      style: _ToolbarTheme.menuItemButtonStyle,
       child: child,
       menuChildren:
           menuChildren.map((e) => _buildPointerTrackWidget(e, ffi)).toList(),
@@ -3334,6 +3418,7 @@ class MenuButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return MenuItemButton(
         key: key,
+        style: _ToolbarTheme.menuItemButtonStyle,
         onPressed: onPressed != null
             ? () {
                 if (ffi != null) {
@@ -3364,6 +3449,7 @@ class CkbMenuButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return CheckboxMenuButton(
       key: key,
+      style: _ToolbarTheme.menuItemButtonStyle,
       value: value,
       child: child,
       onChanged: onChanged != null
@@ -3399,6 +3485,8 @@ class RdoMenuButton<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return RadioMenuButton(
+      key: key,
+      style: _ToolbarTheme.menuItemButtonStyle,
       value: value,
       groupValue: groupValue,
       child: child,
@@ -3795,12 +3883,29 @@ class InputModeMenu {
 _menuDismissCallback(FFI ffi) => ffi.inputModel.refreshMousePos();
 
 Widget _buildPointerTrackWidget(Widget child, FFI? ffi) {
-  return Listener(
-    onPointerHover: (PointerHoverEvent e) => {
-      if (ffi != null) {ffi.inputModel.lastMousePos = e.position}
-    },
-    child: MouseRegion(
-      child: child,
+  return Builder(
+    builder: (context) => Theme(
+      data: _ToolbarTheme.menuTheme(context),
+      child: DefaultTextStyle.merge(
+        style: const TextStyle(
+          color: Color(0xFFF1F5F9),
+          fontSize: 13,
+        ),
+        child: IconTheme.merge(
+          data: const IconThemeData(
+            color: Color(0xFFF1F5F9),
+            size: 18,
+          ),
+          child: Listener(
+            onPointerHover: (PointerHoverEvent e) => {
+              if (ffi != null) {ffi.inputModel.lastMousePos = e.position}
+            },
+            child: MouseRegion(
+              child: child,
+            ),
+          ),
+        ),
+      ),
     ),
   );
 }

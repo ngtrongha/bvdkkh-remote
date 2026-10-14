@@ -711,7 +711,7 @@ function editDirectAccessPort() {
 
 class DeviceInfo: Reactor.Component {
     function this() {
-        this.device = { hostname: "", ip: "", username: "" };
+        this.device = { hostname: "", ip: "", username: "", cpu: "", ram: "" };
         this.copiedNotice = "";
         this.refresh();
     }
@@ -744,30 +744,44 @@ class DeviceInfo: Reactor.Component {
         var h = this.device.hostname || "...";
         var ip = this.device.ip || "...";
         var u = this.device.username || "...";
+        var cpu = this.device.cpu || "";
+        var ram = this.device.ram || "";
 
         return <div .device-info-box>
             <div .device-info-header>
-                <span .device-info-title>{translate("Device Information")}</span>
+                <span .device-info-title>{translate("THÔNG SỐ MÁY TRẠM")}</span>
                 {this.copiedNotice ? <span .device-info-notice>{this.copiedNotice}</span> : ""}
             </div>
             <div .device-info-card>
-                <div .device-info-row title={translate("Click to copy")} onClick={:: this.copyVal(h, translate("Computer Name"))}>
-                    <span .label>{translate("Computer Name")}:</span>
+                <div .device-info-row title={translate("Click to copy")} onClick={:: this.copyVal(h, translate("Tên máy"))}>
+                    <span .label>{translate("Tên máy")}:</span>
                     <span .value>{h}</span>
                     <span .copy-icon>&#128203;</span>
                 </div>
                 <div .device-info-divider />
-                <div .device-info-row title={translate("Click to copy")} onClick={:: this.copyVal(ip, translate("IP Address"))}>
-                    <span .label>{translate("IP Address")}:</span>
+                <div .device-info-row title={translate("Click to copy")} onClick={:: this.copyVal(ip, translate("Địa chỉ IP"))}>
+                    <span .label>{translate("Địa chỉ IP")}:</span>
                     <span .value>{ip}</span>
                     <span .copy-icon>&#128203;</span>
                 </div>
                 <div .device-info-divider />
-                <div .device-info-row title={translate("Click to copy")} onClick={:: this.copyVal(u, translate("User Account"))}>
-                    <span .label>{translate("User Account")}:</span>
+                <div .device-info-row title={translate("Click to copy")} onClick={:: this.copyVal(u, translate("Tài khoản"))}>
+                    <span .label>{translate("Tài khoản")}:</span>
                     <span .value>{u}</span>
                     <span .copy-icon>&#128203;</span>
                 </div>
+                {cpu ? <div .device-info-divider /> : ""}
+                {cpu ? <div .device-info-row title={translate("Click to copy")} onClick={:: this.copyVal(cpu, "CPU")}>
+                    <span .label>CPU:</span>
+                    <span .value>{cpu}</span>
+                    <span .copy-icon>&#128203;</span>
+                </div> : ""}
+                {ram ? <div .device-info-divider /> : ""}
+                {ram ? <div .device-info-row title={translate("Click to copy")} onClick={:: this.copyVal(ram, "RAM")}>
+                    <span .label>RAM:</span>
+                    <span .value>{ram}</span>
+                    <span .copy-icon>&#128203;</span>
+                </div> : ""}
             </div>
         </div>;
     }
@@ -785,6 +799,7 @@ class App: Reactor.Component
             <div .app>
                     <div .left-pane style={incoming_only ? "width:*" : ""}>
                     <div>
+                        {!outgoing_only && <button #btn-report-support .button-support onClick={:: handler.trigger_support_request()}>&#9888; Báo Sự Cố IT (Ctrl+Alt+H)</button>}
                         {is_custom_client && handler.get_builtin_option("hide-powered-by-me") != "Y" ? <div .link #powered-by style="opacity:0.5;font-size:0.8em;text-decoration:underline">{translate('powered_by_me')}</div> : ""}
                         <div .title style="flow:horizontal; position:relative; height:1.6em; line-height:1.6em">
                             <span>{translate('Your Desktop')}</span>
@@ -792,13 +807,12 @@ class App: Reactor.Component
                         </div>
                         <div .lighter-text>{outgoing_only ? translate('outgoing_only_desk_tip') : translate('desk_tip')}</div>
                         {outgoing_only ? <div style="position:absolute; left:-10000px; top:-10000px; width:0; height:0; overflow:hidden"><MyIdMenu /></div> : ""}
-                        {!outgoing_only && <DeviceInfo />}
                         {!outgoing_only && <div .your-desktop>
                             <MyIdMenu />
                             {key_confirmed ? <input type="text" readonly value={formatId(get_id())}/> : translate("Generating ...")}
                         </div>}
                         {!outgoing_only && <PasswordArea />}
-                        {!outgoing_only && <button #btn-report-support .button-support onClick={:: handler.trigger_support_request()}>Báo Sự Cố IT (Ctrl+Alt+H)</button>}
+                        {!outgoing_only && <DeviceInfo />}
                     </div>
                     {(!is_win || handler.is_installed() || disable_installation) ? "" : <InstallMe />}
                     {software_update_url && !disable_installation ? <UpdateMe /> : ""}

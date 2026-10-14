@@ -922,6 +922,58 @@ struct DeviceDetail {
     hostname: String,
     ip: String,
     username: String,
+    cpu: String,
+    ram: String,
+}
+
+#[cfg(target_os = "windows")]
+fn get_cpu_info() -> String {
+    let hk = winreg::RegKey::predef(winreg::enums::HKEY_LOCAL_MACHINE);
+    if let Ok(cpu_key) = hk.open_subkey("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0") {
+        if let Ok(name) = cpu_key.get_value::<String, _>("ProcessorNameString") {
+            return name.trim().to_string();
+        }
+    }
+    "".to_string()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_cpu_info() -> String {
+    "".to_string()
+}
+
+#[cfg(target_os = "windows")]
+fn get_ram_info() -> String {
+    use std::mem;
+    #[repr(C)]
+    struct MemoryStatusEx {
+        length: u32,
+        memory_load: u32,
+        total_phys: u64,
+        avail_phys: u64,
+        total_page_file: u64,
+        avail_page_file: u64,
+        total_virtual: u64,
+        avail_virtual: u64,
+        avail_extended_virtual: u64,
+    }
+    extern "system" {
+        fn GlobalMemoryStatusEx(status: *mut MemoryStatusEx) -> i32;
+    }
+    unsafe {
+        let mut status: MemoryStatusEx = mem::zeroed();
+        status.length = mem::size_of::<MemoryStatusEx>() as u32;
+        if GlobalMemoryStatusEx(&mut status) != 0 {
+            let gb = (status.total_phys as f64) / (1024.0 * 1024.0 * 1024.0);
+            return format!("{:.1} GB", gb);
+        }
+    }
+    "".to_string()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_ram_info() -> String {
+    "".to_string()
 }
 
 pub fn get_device_detail_json() -> String {
@@ -935,6 +987,8 @@ pub fn get_device_detail_json() -> String {
         hostname,
         ip,
         username,
+        cpu: get_cpu_info(),
+        ram: get_ram_info(),
     };
     serde_json::to_string(&detail).unwrap_or_else(|_| "{}".to_string())
 }
