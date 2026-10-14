@@ -32,6 +32,7 @@ import '../widgets/tabbar_widget.dart';
 import '../../common/widgets/login.dart';
 import '../../common/support_ticket_listener.dart';
 import '../../common/widgets/support_dialog.dart';
+import '../../native/win32.dart';
 
 class DesktopHomePage extends StatefulWidget {
   const DesktopHomePage({Key? key}) : super(key: key);
@@ -63,6 +64,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   String _ipAddress = '';
   String _osVersion = '';
   String _appVersion = '';
+  String _cpuInfo = '';
+  String _ramInfo = '';
   bool _obscurePassword = true;
   bool _allowKeyboard = true;
   bool _allowClipboard = true;
@@ -1092,6 +1095,23 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       ? _osVersion
                       : Platform.operatingSystemVersion,
                 ),
+                if (_cpuInfo.isNotEmpty) ...[
+                  Divider(height: 12, color: borderColor),
+                  _buildTelemetryRow(
+                    context,
+                    label: 'Bộ vi xử lý (CPU):',
+                    value: _cpuInfo,
+                  ),
+                ],
+                if (_ramInfo.isNotEmpty) ...[
+                  Divider(height: 12, color: borderColor),
+                  _buildTelemetryRow(
+                    context,
+                    label: 'Bộ nhớ RAM:',
+                    value: _ramInfo,
+                    isHighlight: true,
+                  ),
+                ],
                 Divider(height: 12, color: borderColor),
                 _buildTelemetryRow(
                   context,
@@ -1124,18 +1144,21 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         ),
         const SizedBox(width: 8),
         Expanded(
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
-              fontFamily: isHighlight ? 'monospace' : null,
-              color: isHighlight
-                  ? MyTheme.accent
-                  : Theme.of(context).textTheme.bodyMedium?.color,
+          child: Tooltip(
+            message: value,
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isHighlight ? FontWeight.bold : FontWeight.w600,
+                fontFamily: isHighlight ? 'monospace' : null,
+                color: isHighlight
+                    ? MyTheme.accent
+                    : Theme.of(context).textTheme.bodyMedium?.color,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
-            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -1512,6 +1535,21 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     try {
       _appVersion = await bind.mainGetVersion();
     } catch (_) {}
+    try {
+      if (Platform.isWindows) {
+        _cpuInfo = getWindowsCpuName();
+        _ramInfo = getWindowsTotalPhysicalMemory();
+      } else if (Platform.isLinux) {
+        final cpuRes = Process.runSync('sh', ['-c', 'grep -m1 "model name" /proc/cpuinfo | cut -d: -f2']);
+        if (cpuRes.exitCode == 0) _cpuInfo = cpuRes.stdout.toString().trim();
+      } else if (Platform.isMacOS) {
+        final cpuRes = Process.runSync('sysctl', ['-n', 'machdep.cpu.brand_string']);
+        if (cpuRes.exitCode == 0) _cpuInfo = cpuRes.stdout.toString().trim();
+      }
+    } catch (_) {}
+    if (_cpuInfo.isEmpty) {
+      _cpuInfo = '${Platform.numberOfProcessors} nhân CPU';
+    }
     try {
       final interfaces = await NetworkInterface.list(
         type: InternetAddressType.IPv4,
