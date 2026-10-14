@@ -3919,8 +3919,11 @@ class _LogoState extends State<_Logo> {
             },
           );
           return Container(
-            constraints: BoxConstraints(maxWidth: 300, maxHeight: 60),
-            child: image,
+            constraints: const BoxConstraints(maxWidth: 300, maxHeight: 60),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: image,
+            ),
           ).marginOnly(left: 12, right: 12, top: 12);
         }
         return const Offstage();
