@@ -1,4 +1,8 @@
-﻿import 'dart:ui' as ui;
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
+import 'dart:ui' as ui;
 
 import 'package:bot_toast/bot_toast.dart';
 import 'package:flutter/material.dart';
@@ -165,13 +169,30 @@ class _PeerTabPageState extends State<PeerTabPage>
                     message: model.tabTooltip(t),
                     onTriggered: isMobile ? mobileShowTabVisibilityMenu : null,
                     child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
                       child: Container(
                         decoration: (hover.value
                             ? (selected ? decoBorder : deco)
                             : (selected ? decoBorder : null)),
-                        child: Icon(model.tabIcon(t), color: color)
-                            .paddingSymmetric(horizontal: 4),
-                      ).paddingSymmetric(horizontal: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(model.tabIcon(t), color: color, size: 16),
+                            if (!isMobile) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                model.tabTooltip(t),
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: 12,
+                                  fontWeight: selected ? FontWeight.bold : FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ).paddingSymmetric(horizontal: 2),
                       onTap: isOptionFixed(kOptionPeerTabIndex)
                           ? null
                           : () async {

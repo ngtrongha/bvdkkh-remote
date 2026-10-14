@@ -1,4 +1,7 @@
-﻿// original cm window in Sciter version.
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+// original cm window in Sciter version.
 
 import 'dart:async';
 import 'dart:math';
@@ -457,17 +460,24 @@ class _CmHeaderState extends State<_CmHeader>
     super.build(context);
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10.0),
-        gradient: LinearGradient(
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
+        borderRadius: BorderRadius.circular(12.0),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: [
-            Color(0xff00bfe1),
-            Color(0xff0071ff),
+            Color(0xFF00685F),
+            Color(0xFF0D9488),
           ],
         ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF00685F).withOpacity(0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
-      margin: EdgeInsets.symmetric(horizontal: 5.0, vertical: 10.0),
+      margin: const EdgeInsets.symmetric(horizontal: 5.0, vertical: 10.0),
       padding: EdgeInsets.only(
         top: 10.0,
         bottom: 10.0,
@@ -594,19 +604,30 @@ class _CmHeaderState extends State<_CmHeader>
 
   Widget _buildInitialAvatar() {
     return Container(
-      width: 70,
-      height: 70,
+      width: 64,
+      height: 64,
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: str2color(client.name),
-        borderRadius: BorderRadius.circular(15.0),
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withOpacity(0.5),
+          width: 2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.12),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Text(
-        client.name.isNotEmpty ? client.name[0] : '?',
-        style: TextStyle(
+        client.name.isNotEmpty ? client.name[0].toUpperCase() : '?',
+        style: const TextStyle(
           fontWeight: FontWeight.bold,
-          color: Colors.white,
-          fontSize: 55,
+          color: Color(0xFF00685F),
+          fontSize: 34,
         ),
       ),
     );
@@ -627,6 +648,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
   Widget buildPermissionIcon(bool enabled, IconData iconData,
       Function(bool)? onTap, String tooltipText,
       {required bool canModify}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Tooltip(
       message: "$tooltipText: ${enabled ? "ON" : "OFF"}",
       waitDuration: Duration.zero,
@@ -636,11 +658,18 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
               ? (canModify
                   ? MyTheme.accent
                   : MyTheme.accent.withOpacity(0.6))
-              : Colors.grey[700],
+              : (isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0)),
           borderRadius: BorderRadius.circular(10.0),
+          border: Border.all(
+            color: enabled
+                ? MyTheme.accent
+                : Theme.of(context).dividerColor.withOpacity(0.15),
+            width: 1.2,
+          ),
         ),
-        padding: EdgeInsets.all(8.0),
+        padding: const EdgeInsets.all(8.0),
         child: InkWell(
+          borderRadius: BorderRadius.circular(10.0),
           onTap: canModify
               ? () =>
                   checkClickTime(widget.client.id, () => onTap?.call(!enabled))
@@ -651,7 +680,8 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
               Expanded(
                 child: Icon(
                   iconData,
-                  color: Colors.white,
+                  color: enabled ? Colors.white : (isDark ? Colors.white60 : Colors.black45),
+                  size: 22,
                 ),
               ),
             ],
@@ -1040,13 +1070,13 @@ class _CmControlPanel extends StatelessWidget {
           children: [
             Expanded(
               child: buildButton(context,
-                  color: Colors.redAccent,
+                  color: const Color(0xFFEF4444),
                   onClick: handleDisconnect,
                   text: 'Disconnect',
-                  icon: Icon(
+                  icon: const Icon(
                     Icons.link_off_rounded,
                     color: Colors.white,
-                    size: 14,
+                    size: 16,
                   ),
                   textColor: Colors.white),
             ),
