@@ -1,8 +1,9 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 import UIKit
 import Flutter
-
-@_silgen_name("kSCNetworkInterfaceTypeIrDA")
-public let kSCNetworkInterfaceTypeIrDA: CFString = "IrDA" as CFString
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {

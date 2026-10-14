@@ -70,16 +70,22 @@ git push origin feat/upgrade-flutter-win10
 ```
 
 #### B. Merge sang nhánh Windows 7 (`win7-lts`):
-> ⚠️ **LƯU Ý QUAN TRỌNG KHI MERGE SANG WIN7**:
-> Nhánh `win7-lts` có cấu hình build riêng cho Windows 7 LTS. Khi merge từ `main`, **BẮT BUỘC BẢO TOÀN** file `.github/workflows/flutter-build.yml` của `win7-lts` (không để bị ghi đè bởi cấu hình đa nền tảng của main) và đảm bảo không có file `ios.yml`.
+> ⚠️ **LƯU Ý ĐẶC BIỆT KHI MERGE SANG WIN7**:
+> Nhánh `win7-lts` sử dụng Flutter 3.22.3 (Dart 3.4.4) dành riêng cho Windows 7 LTS. Khi merge từ `main`, **BẮT BUỘC BẢO TOÀN** các file sau của `win7-lts` (không để dependencies Dart 3.5+ hoặc workflow đa nền tảng từ main đè lên):
+> 1. `.github/workflows/flutter-build.yml`
+> 2. `.github/workflows/bridge.yml`
+> 3. `flutter/pubspec.yaml`
+> 4. `flutter/pubspec.lock`
+> 5. `flutter/ios/`
+> Và xóa file `ios.yml` nếu có.
 
 ```powershell
 git checkout win7-lts
 git merge main --no-commit
-# Giữ nguyên cấu hình build riêng của Win7
-git checkout HEAD -- .github/workflows/flutter-build.yml flutter/ios/
+# Giữ nguyên cấu hình build và dependencies riêng của Win7
+git checkout HEAD -- .github/workflows/flutter-build.yml .github/workflows/bridge.yml flutter/pubspec.yaml flutter/pubspec.lock flutter/ios/
 if (Test-Path .github/workflows/ios.yml) { Remove-Item -Force .github/workflows/ios.yml }
-git commit -m "chore(sync): merge main into win7-lts"
+git commit -m "chore(sync): merge main into win7-lts preserving win7 build workflow & pubspec"
 git push origin win7-lts
 ```
 
