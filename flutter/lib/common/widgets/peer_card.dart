@@ -100,9 +100,9 @@ class _PeerCardState extends State<_PeerCard>
     final normalBorder = BoxDecoration(
       border: Border.all(
         color: peer.online
-            ? MyTheme.accent.withOpacity(0.35)
+            ? MyTheme.accent.withOpacity(0.5)
             : Theme.of(context).dividerColor.withOpacity(0.15),
-        width: 1.2,
+        width: peer.online ? 1.5 : 1.2,
       ),
       borderRadius: BorderRadius.circular(
         peerCardUiType.value == PeerUiType.grid ? _cardRadius : _tileRadius,
@@ -111,7 +111,7 @@ class _PeerCardState extends State<_PeerCard>
     final hoverBorder = BoxDecoration(
       border: Border.all(
         color: MyTheme.accent,
-        width: 1.5,
+        width: 1.8,
       ),
       borderRadius: BorderRadius.circular(
         peerCardUiType.value == PeerUiType.grid ? _cardRadius : _tileRadius,
@@ -316,10 +316,11 @@ class _PeerCardState extends State<_PeerCard>
             borderRadius: BorderRadius.circular(_cardRadius - _borderWidth),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
                   child: Container(
+                    width: double.infinity,
                     decoration: BoxDecoration(
                       color: Theme.of(context).brightness == Brightness.dark
                           ? const Color(0xFF1E293B)
@@ -329,7 +330,7 @@ class _PeerCardState extends State<_PeerCard>
                           color: peer.online
                               ? MyTheme.accent
                               : Colors.transparent,
-                          width: 3,
+                          width: 3.5,
                         ),
                       ),
                     ),
@@ -395,6 +396,7 @@ class _PeerCardState extends State<_PeerCard>
                   ),
                 ),
                 Container(
+                  width: double.infinity,
                   decoration: BoxDecoration(
                     color: Theme.of(context).brightness == Brightness.dark
                         ? const Color(0xFF0F172A)
