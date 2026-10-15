@@ -226,9 +226,9 @@ namespace BVDKKH.Remote.AutoInstaller
 
         public static string ExtractTagName(string json)
         {
-            if (string.IsNullOrEmpty(json)) return "v1.5.16";
+            if (string.IsNullOrEmpty(json)) return "v1.5.17";
             var match = Regex.Match(json, "\"tag_name\"\\s*:\\s*\"([^\"]+)\"");
-            return match.Success ? match.Groups[1].Value : "v1.5.16";
+            return match.Success ? match.Groups[1].Value : "v1.5.17";
         }
 
         public static KeyValuePair<string, string> ResolveMatchingAsset(DeviceInfo info, string json, string tagName)
@@ -267,7 +267,7 @@ namespace BVDKKH.Remote.AutoInstaller
                 }
             }
 
-            string tag = !string.IsNullOrEmpty(tagName) ? tagName : "v1.5.16";
+            string tag = !string.IsNullOrEmpty(tagName) ? tagName : "v1.5.17";
             string ver = tag.TrimStart('v');
             string fallbackFile = "";
             if (info.Arch == "x86")

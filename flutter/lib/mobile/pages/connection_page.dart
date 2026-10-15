@@ -331,12 +331,26 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         },
                         icon: Icon(Icons.clear, color: MyTheme.darkGray)),
                   )),
+              IconButton(
+                icon: const Icon(Icons.power_settings_new_rounded,
+                    color: Color(0xFF0D9488), size: 28),
+                tooltip: 'Bật máy (WOL)',
+                onPressed: () {
+                  final id = _idController.id.trim();
+                  if (id.isEmpty) {
+                    showToast('Vui lòng nhập ID hoặc địa chỉ MAC cần bật');
+                    return;
+                  }
+                  bind.mainWol(id: id);
+                  showToast('Đã gửi tín hiệu bật máy (WOL) đến $id');
+                },
+              ),
               SizedBox(
-                width: 60,
-                height: 60,
+                width: 50,
+                height: 50,
                 child: IconButton(
                   icon: const Icon(Icons.arrow_forward,
-                      color: MyTheme.darkGray, size: 45),
+                      color: MyTheme.darkGray, size: 36),
                   onPressed: onConnect,
                 ),
               ),

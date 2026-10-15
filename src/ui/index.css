@@ -211,7 +211,7 @@ span.clear-input:hover {
 
 .card-connect {
     @CARD;
-    width: 320px;
+    width: 350px;
 }
 
 .right-buttons {
@@ -219,7 +219,17 @@ span.clear-input:hover {
 }
 
 .right-buttons>button {
-    margin-left: 1.6em;
+    margin-left: 0.8em;
+}
+
+.right-buttons>button#wol {
+    border-color: #0D9488;
+    color: #0D9488;
+}
+
+.right-buttons>button#wol:hover {
+    background-color: #CCFBF1;
+    color: #0F766E;
 }
 
 div.connect-status {

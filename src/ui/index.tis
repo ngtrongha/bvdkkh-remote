@@ -831,6 +831,7 @@ class App: Reactor.Component
                             <div .title>{translate('Control Remote Desktop')}</div>
                             <ID @{this.remote_id} />
                             <div .right-buttons>
+                                <button .button .outline #wol title="Gửi tín hiệu khởi động máy từ xa qua mạng (Wake-on-LAN)">{translate('WOL')}</button>
                                 <button .button .outline #file-transfer>{translate('Transfer file')}</button>
                                 <button .button #connect>{translate('Connect')}</button>
                             </div>
@@ -841,6 +842,16 @@ class App: Reactor.Component
                 </div>}
                 <div #overlay style="position: absolute;size:*;background:black;opacity:0.5;display:none" />
             </div>; 
+    }
+
+    event click $(button#wol) {
+        var id = this.remote_id.value;
+        if (!id) {
+            msgbox("custom-error", "WOL", "Vui lòng nhập ID hoặc địa chỉ MAC của thiết bị cần bật.");
+            return;
+        }
+        handler.send_wol(id);
+        msgbox("info", "Wake on LAN", "Đã gửi tín hiệu khởi động máy qua mạng (WOL) tới: " + id);
     }
 
     event click $(button#connect) {
