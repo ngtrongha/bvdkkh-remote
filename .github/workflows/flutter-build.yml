@@ -50,7 +50,7 @@ env:
   VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
   VCPKG_CMAKE_VERSION: "4.3.0"
   ARMV7_VCPKG_COMMIT_ID: "6f29f12e82a8293156836ad81cc9bf5af41fe836" # 2025.01.13, got "/opt/artifacts/vcpkg/vcpkg: No such file or directory" with latest version
-  VERSION: "1.5.16"
+  VERSION: "1.5.17"
   NDK_VERSION: "r28c"
   #signing keys env variable checks
   ANDROID_SIGNING_KEY: "${{ secrets.ANDROID_SIGNING_KEY }}"
@@ -82,24 +82,53 @@ jobs:
 
       - name: Generate Changelog / Release Notes
         id: release_notes
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          # 1. Thu tao release notes tu GitHub API cua repo nguon (${{ github.repository }})
-          if gh api "repos/${{ github.repository }}/releases/generate-notes" -f tag_name="${{ env.TAG_NAME }}" --jq .body > release_notes.md 2>/dev/null && [ -s release_notes.md ]; then
-            echo "Successfully generated release notes from ${{ github.repository }} using GitHub API"
+          echo "Generating release notes directly from update commits..."
+          echo "## 🚀 Có gì mới trong phiên bản ${{ env.TAG_NAME }}" > release_notes.md
+          echo "" >> release_notes.md
+
+          # Tim tag hoac moc commit truoc do
+          PREV_TAG=$(git describe --tags --abbrev=0 "${{ env.TAG_NAME }}^" 2>/dev/null || git tag --sort=-creatordate | grep -v "^${{ env.TAG_NAME }}$" | head -n 1 || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..HEAD"
+            echo "Lay danh sach commit tu $PREV_TAG den HEAD ($RANGE)"
           else
-            echo "Generating release notes from Git log..."
-            PREV_TAG=$(git describe --tags --abbrev=0 "${{ env.TAG_NAME }}^" 2>/dev/null || git tag --sort=-creatordate | grep -v "^${{ env.TAG_NAME }}$" | head -n 1 || echo "")
-            echo "## 🚀 Có gì mới trong phiên bản ${{ env.TAG_NAME }}" > release_notes.md
-            echo "" >> release_notes.md
-            if [ -n "$PREV_TAG" ]; then
-              echo "### 📝 Danh sách thay đổi (từ $PREV_TAG đến ${{ env.TAG_NAME }}):" >> release_notes.md
-              git log "${PREV_TAG}..HEAD" --pretty=format:"* %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" --no-merges >> release_notes.md
+            BUMP_COMMIT=$(git log --grep="bump version" -n 1 --skip=1 --pretty=format:"%H" 2>/dev/null || git log --grep="bump version to 1.5.16" -n 1 --pretty=format:"%H" 2>/dev/null || echo "")
+            if [ -n "$BUMP_COMMIT" ]; then
+              RANGE="${BUMP_COMMIT}..HEAD"
+              echo "Lay danh sach commit tu $BUMP_COMMIT den HEAD ($RANGE)"
             else
-              echo "### 📝 Danh sách thay đổi gần đây:" >> release_notes.md
-              git log -n 50 --pretty=format:"* %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" --no-merges >> release_notes.md
+              RANGE="HEAD~35..HEAD"
+              echo "Fallback lay 35 commit gan nhat ($RANGE)"
             fi
+          fi
+
+          FEATS=$(git log $RANGE --pretty=format:"* %s (%h)" --no-merges --grep="^feat" || true)
+          FIXES=$(git log $RANGE --pretty=format:"* %s (%h)" --no-merges --grep="^fix" || true)
+          OTHERS=$(git log $RANGE --pretty=format:"* %s (%h)" --no-merges --grep="^feat" --grep="^fix" --invert-grep || true)
+
+          if [ -n "$FEATS" ]; then
+            echo "### ✨ Tính năng mới & Nâng cấp (Features):" >> release_notes.md
+            echo "$FEATS" >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+
+          if [ -n "$FIXES" ]; then
+            echo "### 🛠️ Sửa lỗi & Tối ưu hóa (Fixes & Improvements):" >> release_notes.md
+            echo "$FIXES" >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+
+          if [ -n "$OTHERS" ]; then
+            echo "### 🔧 Các thay đổi & Cập nhật khác (Chores & Maintenance):" >> release_notes.md
+            echo "$OTHERS" >> release_notes.md
+            echo "" >> release_notes.md
+          fi
+
+          # Fallback neu khong co commit nao phan loai duoc
+          if [ -z "$FEATS" ] && [ -z "$FIXES" ] && [ -z "$OTHERS" ]; then
+            echo "### 📝 Danh sách cập nhật chi tiết:" >> release_notes.md
+            git log -n 25 --pretty=format:"* %s (%h)" --no-merges >> release_notes.md
             echo "" >> release_notes.md
           fi
 
