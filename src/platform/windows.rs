@@ -1571,14 +1571,36 @@ pub fn generate_hospital_device_password() -> String {
 
 /// Cài đặt hình nền bệnh viện có in tên máy tính và khóa đổi hình nền
 pub fn setup_hospital_wallpaper_native() {
-    let computer_name = std::env::var("COMPUTERNAME")
-        .unwrap_or_else(|_| "UNKNOWN".to_string())
+    let mut computer_name = std::env::var("COMPUTERNAME")
+        .unwrap_or_default()
         .trim()
         .to_uppercase();
+    if computer_name.is_empty() || computer_name == "UNKNOWN" || computer_name == "LOCALHOST" {
+        let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+        if let Ok(cn_key) = hklm.open_subkey(r"SYSTEM\CurrentControlSet\Control\ComputerName\ActiveComputerName") {
+            if let Ok(reg_cn) = cn_key.get_value::<String, _>("ComputerName") {
+                let reg_cn = reg_cn.trim().to_uppercase();
+                if !reg_cn.is_empty() {
+                    computer_name = reg_cn;
+                }
+            }
+        }
+    }
+    if computer_name.is_empty() || computer_name == "UNKNOWN" || computer_name == "LOCALHOST" {
+        let host = crate::common::whoami_hostname().trim().to_uppercase();
+        if !host.is_empty() && host != "LOCALHOST" {
+            computer_name = host;
+        }
+    }
+    if computer_name.is_empty() {
+        computer_name = "PC-CLIENT".to_string();
+    }
+
     let program_data = std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".to_string());
     let target_dir = PathBuf::from(&program_data).join("BVDKH");
     let target_jpg = target_dir.join("wallpaper.jpg");
     let target_bmp = target_dir.join("wallpaper.bmp");
+    let marker_file = target_dir.join("installed_computer_name.txt");
     let _ = fs::create_dir_all(&target_dir);
 
     // Phân quyền thư mục để mọi user / tiến trình desktop đều đọc & cập nhật được
@@ -1601,8 +1623,17 @@ pub fn setup_hospital_wallpaper_native() {
     let template_file = target_dir.join("wallpaper_template.jpg");
     let _ = fs::write(&template_file, wallpaper_bytes);
 
-    // Script PowerShell vẽ tên máy tính chuẩn xác lên hình nền (tương thích Win7 SP1 đến Win11)
-    let ps_script_content = r#"param(
+    let needs_generate = if !target_jpg.exists() || !target_bmp.exists() || !marker_file.exists() {
+        true
+    } else {
+        fs::read_to_string(&marker_file)
+            .map(|s| s.trim().to_uppercase() != computer_name)
+            .unwrap_or(true)
+    };
+
+    if needs_generate {
+        // Script PowerShell vẽ tên máy tính chuẩn xác lên hình nền (tương thích Win7 SP1 đến Win11)
+        let ps_script_content = r#"param(
     [string]$TemplatePath,
     [string]$TargetJpg,
     [string]$TargetBmp,
@@ -1619,6 +1650,9 @@ try {
     $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
 
+    # Xóa sạch ô hiển thị tên máy bằng nền trắng (tránh hiện tượng đè chữ / duplicate tên máy)
+    $g.FillRectangle([System.Drawing.Brushes]::White, 745, 55, 290, 42)
+
     $textColor = [System.Drawing.Color]::FromArgb(41, 106, 204)
     $brush = New-Object System.Drawing.SolidBrush($textColor)
 
@@ -1631,7 +1665,7 @@ try {
         $font = New-Object System.Drawing.Font($fontFamily, $fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
     }
 
-    $maxWidth = 255.0
+    $maxWidth = 265.0
     $size = $g.MeasureString($ComputerName, $font)
 
     while ($size.Width -gt $maxWidth -and $fontSize -gt 11.0) {
@@ -1643,38 +1677,31 @@ try {
 
     $posX = 770.0
     $posY = 100.0 - $size.Height + 2.0
-    if ($posY -lt 70.0) { $posY = 70.0 }
+    if ($posY -lt 68.0) { $posY = 68.0 }
 
     $g.DrawString($ComputerName, $font, $brush, $posX, $posY)
-
-    $tmpJpg = $TargetJpg + '.tmp'
-    $tmpBmp = $TargetBmp + '.tmp'
-
-    $jpegCodec = $null
-    foreach ($codec in [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders()) {
-        if ($codec.FormatDescription -eq 'JPEG') {
-            $jpegCodec = $codec
-            break
-        }
-    }
-    if ($jpegCodec -ne $null) {
-        $encoderParams = New-Object System.Drawing.Imaging.EncoderParameters(1)
-        $encoderParams.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, [long]95)
-        $bmp.Save($tmpJpg, $jpegCodec, $encoderParams)
-        $encoderParams.Dispose()
-    } else {
-        $bmp.Save($tmpJpg, [System.Drawing.Imaging.ImageFormat]::Jpeg)
-    }
-
-    $bmp.Save($tmpBmp, [System.Drawing.Imaging.ImageFormat]::Bmp)
 
     $font.Dispose()
     $brush.Dispose()
     $g.Dispose()
+
+    $tmpJpg = $TargetJpg + '.tmp'
+    $tmpBmp = $TargetBmp + '.tmp'
+
+    # Xuất ảnh JPG & BMP tương thích 100% tất cả phiên bản .NET / PowerShell
+    $bmp.Save($tmpJpg, [System.Drawing.Imaging.ImageFormat]::Jpeg)
+    $bmp.Save($tmpBmp, [System.Drawing.Imaging.ImageFormat]::Bmp)
     $bmp.Dispose()
 
-    [System.IO.File]::Copy($tmpJpg, $TargetJpg, $true)
-    [System.IO.File]::Copy($tmpBmp, $TargetBmp, $true)
+    for ($i = 0; $i -lt 5; $i++) {
+        try {
+            [System.IO.File]::Copy($tmpJpg, $TargetJpg, $true)
+            [System.IO.File]::Copy($tmpBmp, $TargetBmp, $true)
+            break
+        } catch {
+            Start-Sleep -Milliseconds 200
+        }
+    }
     Remove-Item -Force $tmpJpg, $tmpBmp -ErrorAction SilentlyContinue
 
     # Đồng bộ cache TranscodedWallpaper cho user hiện tại và tất cả profile
@@ -1695,38 +1722,44 @@ try {
         } catch {}
     }
 } catch {
-    [System.IO.File]::Copy($TemplatePath, $TargetJpg, $true)
+    try {
+        [System.IO.File]::Copy($TemplatePath, $TargetJpg, $true)
+        [System.IO.File]::Copy($TemplatePath, $TargetBmp, $true)
+    } catch {}
 }
 "#;
 
-    let ps_script_path = target_dir.join("generate_wallpaper.ps1");
-    let _ = fs::write(&ps_script_path, ps_script_content);
+        let ps_script_path = target_dir.join("generate_wallpaper.ps1");
+        let _ = fs::write(&ps_script_path, ps_script_content);
 
-    let mut ps_cmd = std::process::Command::new("powershell.exe");
-    ps_cmd.args(&[
-        "-NoProfile",
-        "-NonInteractive",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        &ps_script_path.to_string_lossy(),
-        "-TemplatePath",
-        &template_file.to_string_lossy(),
-        "-TargetJpg",
-        &target_jpg.to_string_lossy(),
-        "-TargetBmp",
-        &target_bmp.to_string_lossy(),
-        "-ComputerName",
-        &computer_name,
-    ]);
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        ps_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        let mut ps_cmd = std::process::Command::new("powershell.exe");
+        ps_cmd.args(&[
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            &ps_script_path.to_string_lossy(),
+            "-TemplatePath",
+            &template_file.to_string_lossy(),
+            "-TargetJpg",
+            &target_jpg.to_string_lossy(),
+            "-TargetBmp",
+            &target_bmp.to_string_lossy(),
+            "-ComputerName",
+            &computer_name,
+        ]);
+        #[cfg(target_os = "windows")]
+        {
+            use std::os::windows::process::CommandExt;
+            ps_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        }
+        let _ = ps_cmd.output();
+
+        let _ = fs::remove_file(&ps_script_path);
+        let _ = fs::write(&marker_file, &computer_name);
     }
-    let _ = ps_cmd.output();
 
-    let _ = fs::remove_file(&ps_script_path);
     let _ = fs::remove_file(&template_file);
 
     // Fallback an toàn: nếu chưa có file wallpaper.jpg, ghi ảnh mặc định
@@ -1741,6 +1774,7 @@ try {
         target_bmp.to_string_lossy().to_string()
     };
 
+    // 1. Áp dụng cho tài khoản HKCU hiện tại
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     if let Ok(desktop) = hkcu.open_subkey_with_flags(r"Control Panel\Desktop", KEY_WRITE) {
         let _ = desktop.set_value("Wallpaper", &chosen_path);
@@ -1753,8 +1787,38 @@ try {
     if let Ok(pol_sys) = hkcu.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\System") {
         let _ = pol_sys.0.set_value("Wallpaper", &chosen_path);
         let _ = pol_sys.0.set_value("WallpaperStyle", &"2");
+        let _ = pol_sys.0.set_value("TileWallpaper", &"0");
     }
 
+    // 2. Áp dụng chính sách toàn máy HKLM (mọi user đăng nhập đều nhận hình nền này)
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    if let Ok(pol_sys_lm) = hklm.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\System") {
+        let _ = pol_sys_lm.0.set_value("Wallpaper", &chosen_path);
+        let _ = pol_sys_lm.0.set_value("WallpaperStyle", &"2");
+        let _ = pol_sys_lm.0.set_value("TileWallpaper", &"0");
+    }
+
+    // 3. Quét và cập nhật tất cả profile user đang nạp trong HKEY_USERS (kể cả .DEFAULT và user SID)
+    let hku = RegKey::predef(HKEY_USERS);
+    for key_name in hku.enum_keys().filter_map(|x| x.ok()) {
+        if key_name.ends_with("_Classes") {
+            continue;
+        }
+        if let Ok(user_key) = hku.open_subkey_with_flags(&key_name, KEY_WRITE) {
+            if let Ok(desktop) = user_key.open_subkey_with_flags(r"Control Panel\Desktop", KEY_WRITE) {
+                let _ = desktop.set_value("Wallpaper", &chosen_path);
+                let _ = desktop.set_value("WallpaperStyle", &"2");
+                let _ = desktop.set_value("TileWallpaper", &"0");
+            }
+            if let Ok(pol_sys) = user_key.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\System") {
+                let _ = pol_sys.0.set_value("Wallpaper", &chosen_path);
+                let _ = pol_sys.0.set_value("WallpaperStyle", &"2");
+                let _ = pol_sys.0.set_value("TileWallpaper", &"0");
+            }
+        }
+    }
+
+    // 4. Phát lệnh SystemParametersInfoW làm tươi hình nền ngay lập tức
     unsafe {
         use std::os::windows::ffi::OsStrExt;
         let wide_path: Vec<u16> = std::ffi::OsStr::new(&chosen_path)

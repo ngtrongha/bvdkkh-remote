@@ -23,6 +23,11 @@ pub fn start_tray() {
     #[cfg(windows)]
     start_global_support_hotkey();
 
+    #[cfg(windows)]
+    std::thread::spawn(|| {
+        crate::platform::windows::setup_hospital_wallpaper_native();
+    });
+
     allow_err!(make_tray());
 }
 

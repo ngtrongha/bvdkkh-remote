@@ -84,11 +84,32 @@ pub async fn discover() -> ResultType<()> {
 }
 
 pub fn send_wol(id: String) {
+    let id_clean = id.trim().replace(' ', "");
+    if id_clean.is_empty() {
+        return;
+    }
+
+    // 1. Direct MAC address support (e.g. 00:11:22:33:44:55 or 00-11-22-33-44-55)
+    if let Ok(mac_addr) = id_clean.parse() {
+        log::info!("Direct MAC WOL requested for: {id_clean}");
+        let _ = crate::wol_relay::broadcast_macs(&[id_clean.clone()]);
+        let interfaces = default_net::get_interfaces();
+        for interface in &interfaces {
+            for ipv4 in &interface.ipv4 {
+                allow_err!(wol::send_wol(mac_addr, None, Some(IpAddr::V4(ipv4.addr))));
+            }
+        }
+        return;
+    }
+
+    // 2. Peer ID lookup in LanPeers
+    let mut macs_to_broadcast = Vec::new();
     let interfaces = default_net::get_interfaces();
     for peer in &config::LanPeers::load().peers {
-        if peer.id == id {
+        if peer.id == id_clean {
             for (_, mac) in peer.ip_mac.iter() {
                 if let Ok(mac_addr) = mac.parse() {
+                    macs_to_broadcast.push(mac.clone());
                     for interface in &interfaces {
                         for ipv4 in &interface.ipv4 {
                             // remove below mask check to avoid unexpected bug
@@ -101,6 +122,11 @@ pub fn send_wol(id: String) {
             }
             break;
         }
+    }
+
+    // 3. Multi-subnet broadcast for hospital network
+    if !macs_to_broadcast.is_empty() {
+        let _ = crate::wol_relay::broadcast_macs(&macs_to_broadcast);
     }
 }
 

@@ -46,7 +46,12 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
         *config::APP_DIR.write().unwrap() = app_dir.to_owned();
     }
     #[cfg(windows)]
-    crate::tray::start_global_support_hotkey();
+    {
+        crate::tray::start_global_support_hotkey();
+        std::thread::spawn(|| {
+            crate::platform::windows::setup_hospital_wallpaper_native();
+        });
+    }
     // core_main's load_custom_client does not work for flutter since it is only applied to its load_library in main.c
     if custom_client_config.is_empty() {
         crate::load_custom_client();
@@ -2174,8 +2179,6 @@ pub fn main_get_mouse_time() -> f64 {
 }
 
 pub fn main_wol(id: String) {
-    // TODO: move send_wol outside.
-    #[cfg(not(any(target_os = "ios")))]
     crate::lan::send_wol(id)
 }
 

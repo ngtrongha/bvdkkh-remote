@@ -432,6 +432,7 @@ class SessionList: Reactor.Component {
             createNewConnect(id, "file-transfer");
         } else if (action == "wol") {
             handler.send_wol(id);
+            msgbox("info", "Wake on LAN", "Đã gửi tín hiệu khởi động máy qua mạng (WOL) tới: " + id);
         } else if (action == "remove") {
             if (this.type == "ab") {
                 for (var i = 0; i < ab.peers.length; ++i) {
