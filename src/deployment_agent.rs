@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 use hbb_common::{
 	bytes::Bytes,
 	config::Config,
@@ -253,7 +257,7 @@ async fn start_ws_client_loop() {
 
 		log::info!("Connecting Agent WebSocket to: {}", ws_url);
 
-		match WsFramedStream::new(&ws_url, None, None, 10000).await {
+		match WsFramedStream::new(&ws_url, None, 10000).await {
 			Ok(mut ws) => {
 				log::info!("Agent WebSocket connected successfully!");
 				IS_WS_CONNECTED.store(true, Ordering::SeqCst);
