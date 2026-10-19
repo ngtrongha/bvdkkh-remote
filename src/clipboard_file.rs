@@ -146,23 +146,16 @@ pub fn clip_2_msg(clip: ClipboardFile) -> Message {
         ClipboardFile::Files { files } => {
             let files = files
                 .iter()
-                .filter_map(|(f, s)| {
-                    if *s == 0 {
-                        if let Ok(meta) = std::fs::metadata(f) {
-                            Some(CliprdrFile {
-                                name: f.to_owned(),
-                                size: meta.len(),
-                                ..Default::default()
-                            })
-                        } else {
-                            None
-                        }
+                .map(|(f, s)| {
+                    let size = if *s == 0 {
+                        std::fs::metadata(f).map(|m| m.len()).unwrap_or(0)
                     } else {
-                        Some(CliprdrFile {
-                            name: f.to_owned(),
-                            size: *s,
-                            ..Default::default()
-                        })
+                        *s
+                    };
+                    CliprdrFile {
+                        name: f.to_owned(),
+                        size,
+                        ..Default::default()
                     }
                 })
                 .collect::<Vec<_>>();
