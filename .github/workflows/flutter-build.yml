@@ -62,6 +62,7 @@ env:
 
 jobs:
   generate-sbom:
+    if: false
     runs-on: ubuntu-latest
 
     permissions:
@@ -505,7 +506,6 @@ jobs:
   # The fallback for the flutter version, we use Sciter for 32bit Windows.
   build-for-windows-sciter:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
-    needs: [generate-sbom]
     runs-on: ${{ matrix.job.os }}
     # Temporarily disable this action due to additional test is needed.
     # if: false
