@@ -932,7 +932,7 @@ impl Connection {
                                         FileAuditType::RemoteSend,
                                         "",
                                         files,
-                                        json!({}),
+                                        json!({"is_clipboard": true}),
                                     );
                                 }
                                 _ => {
@@ -1605,7 +1605,12 @@ impl Connection {
         let mut files = files;
         files.sort_by(|a, b| b.1.cmp(&a.1));
         files.truncate(10);
-        let is_file = files.len() == 1 && files[0].0.is_empty();
+        let is_file = files.len() == 1 && (files[0].0.is_empty() || path.is_empty());
+        let resolved_path = if path.is_empty() {
+            files.first().map(|(name, _)| name.as_str()).unwrap_or("")
+        } else {
+            path
+        };
         let mut info = info;
         info["ip"] = json!(self.ip.clone());
         info["name"] = json!(self.lr.my_name.clone());
@@ -1617,7 +1622,7 @@ impl Connection {
             "peer_id":json!(self.lr.my_id),
             "conn_id":json!(self.inner.id()),
             "type": r#type as i8,
-            "path":path,
+            "path":resolved_path,
             "is_file":is_file,
             "info":json!(info).to_string(),
             "nonce": uuid::Uuid::new_v4().to_string(),
@@ -3481,7 +3486,7 @@ impl Connection {
                                 .iter()
                                 .map(|f| (f.name.clone(), f.size as i64))
                                 .collect::<Vec<(String, i64)>>(),
-                            json!({}),
+                            json!({"is_clipboard": true}),
                         );
                     } else if is_file_data_request(&clip)
                         && crate::get_builtin_option(keys::OPTION_ONE_WAY_FILE_TRANSFER) == "Y"
@@ -3540,7 +3545,7 @@ impl Connection {
                                                 .iter()
                                                 .map(|f| (f.name.clone(), f.size as i64))
                                                 .collect::<Vec<(String, i64)>>(),
-                                            json!({}),
+                                            json!({"is_clipboard": true}),
                                         );
                                         continue;
                                     }

@@ -1044,6 +1044,7 @@ extern "C" fn handle_clipboard_files(
 
     let data = unsafe {
         let mut files = Vec::new();
+        let mut fallback_dirs = Vec::new();
         use std::ffi::OsString;
         use std::os::windows::ffi::OsStringExt;
         for i in 0..n_files {
@@ -1055,11 +1056,14 @@ extern "C" fn handle_clipboard_files(
                 }
                 let slice = std::slice::from_raw_parts(file_name_ptr, len as usize);
                 let os_string = OsString::from_wide(slice);
-                match os_string.to_str() {
-                    Some(n) => match std::fs::metadata(n) {
+                let n = os_string.to_string_lossy().into_owned();
+                if !n.is_empty() {
+                    match std::fs::metadata(&n) {
                         Ok(meta) => {
                             if meta.is_file() {
-                                files.push((n.to_owned(), meta.len()));
+                                files.push((n, meta.len()));
+                            } else if fallback_dirs.len() < 10 {
+                                fallback_dirs.push((n, 0));
                             }
                         }
                         Err(e) => {
@@ -1068,13 +1072,14 @@ extern "C" fn handle_clipboard_files(
                                 n,
                                 e
                             );
+                            files.push((n, 0));
                         }
-                    },
-                    None => {
-                        log::warn!("handle_clipboard_files: Failed to convert file name to UTF-8");
                     }
-                };
+                }
             }
+        }
+        if files.is_empty() {
+            files = fallback_dirs;
         }
         if files.is_empty() {
             return 0;
