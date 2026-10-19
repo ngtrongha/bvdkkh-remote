@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
@@ -126,6 +130,14 @@ fn inventory_signature(sysinfo: &Value) -> String {
         "disks": disks,
         "peripherals": peripherals,
         "network": network,
+        "motherboard": hardware.get("motherboard"),
+        "bios": hardware.get("bios"),
+        "cpu_details": hardware.get("cpu_details"),
+        "ram_modules": hardware.get("ram_modules"),
+        "storage_drives": hardware.get("storage_drives"),
+        "monitors": hardware.get("monitors"),
+        "printers": hardware.get("printers"),
+        "usb_devices": hardware.get("usb_devices"),
     })
     .to_string()
 }
