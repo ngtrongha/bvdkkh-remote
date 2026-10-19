@@ -1181,91 +1181,319 @@ fn collect_default_network_info() -> Vec<Value> {
 #[cfg(windows)]
 lazy_static::lazy_static! {
     static ref WINDOWS_INVENTORY_CACHE: Mutex<
-        Option<(std::time::Instant, Vec<Value>, Vec<Value>)>,
+        Option<(std::time::Instant, Value)>,
     > = Mutex::new(None);
 }
 
 #[cfg(windows)]
-fn collect_windows_inventory() -> Option<(Vec<Value>, Vec<Value>)> {
+fn collect_windows_inventory() -> Option<Value> {
     use std::os::windows::process::CommandExt;
 
-    if let Some((collected_at, peripherals, networks)) =
+    if let Some((collected_at, inventory)) =
         WINDOWS_INVENTORY_CACHE.lock().unwrap().as_ref()
     {
         // Sysinfo is checked every few seconds; WMI inventory is much more expensive.
         if collected_at.elapsed() < std::time::Duration::from_secs(120) {
-            return Some((peripherals.clone(), networks.clone()));
+            return Some(inventory.clone());
         }
     }
 
     const SCRIPT: &str = r#"
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'SilentlyContinue'
 $ProgressPreference = 'SilentlyContinue'
-$OutputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 
-$excludedDevicePattern = '(?i)(virtual|remote desktop|\brdp\b|vmware|virtualbox|vbox|hyper-v|rustdesk|spacedesk|parsec|miracast|wireless display|root hub|host controller|composite device|generic usb hub)'
-$allowedClasses = @('USB', 'USBDevice', 'Monitor', 'Keyboard', 'Mouse', 'Camera', 'Image', 'MEDIA', 'AudioEndpoint', 'WPD', 'Ports', 'DiskDrive', 'CDROM')
-$canResolveDeviceParents = [bool](Get-Command Get-PnpDeviceProperty -ErrorAction SilentlyContinue)
-function Test-UsbBackedDevice([string]$instanceId) {
-    if (-not $canResolveDeviceParents) {
-        return $true
+function Get-WmiCompat([string]$className, [string]$namespace = 'root\cimv2') {
+    if (Get-Command Get-CimInstance -ErrorAction SilentlyContinue) {
+        Get-CimInstance -ClassName $className -Namespace $namespace -ErrorAction SilentlyContinue
+    } else {
+        Get-WmiObject -Class $className -Namespace $namespace -ErrorAction SilentlyContinue
     }
-    $currentId = $instanceId
-    for ($depth = 0; $depth -lt 8; $depth++) {
-        if (($currentId -like 'USB\*') -or ($currentId -like 'USBPRINT\*')) {
-            return $true
-        }
-        if ($currentId -match '^(BTH|BTHENUM|SWD|ROOT|HTREE)\\') {
-            return $false
-        }
-        try {
-            $currentId = [string](Get-PnpDeviceProperty -InstanceId $currentId -KeyName 'DEVPKEY_Device_Parent' -ErrorAction Stop).Data
-        } catch {
-            return $false
-        }
-        if (-not $currentId) {
-            return $false
-        }
-    }
-    return $false
 }
-$pnpDevices = @(
-    Get-CimInstance Win32_PnPEntity | Where-Object {
-        $id = [string]$_.PNPDeviceID
-        $class = [string]$_.PNPClass
-        $label = "$($_.Name) $($_.Manufacturer) $id"
-        $directDevice =
-            (($id -like 'USB\VID_*') -and ($class -in $allowedClasses)) -or
-            (($id -like 'HID\*') -and ($class -in @('Keyboard', 'Mouse')) -and (Test-UsbBackedDevice $id)) -or
-            (($id -like 'DISPLAY\*') -and ($class -eq 'Monitor'))
-        ($_.Present -ne $false) -and ($_.ConfigManagerErrorCode -eq 0) -and $directDevice -and ($label -notmatch $excludedDevicePattern)
+
+function Decode-Ascii([int[]]$bytes) {
+    if (-not $bytes) { return '' }
+    ($bytes | Where-Object { $_ -gt 0 } | ForEach-Object { [char]$_ }) -join ''
+}
+
+# 1. Mainboard
+$mbRaw = Get-WmiCompat 'Win32_BaseBoard' | Select-Object -First 1
+$motherboard = [pscustomobject]@{
+    Manufacturer = [string]$mbRaw.Manufacturer
+    Product = [string]$mbRaw.Product
+    SerialNumber = [string]$mbRaw.SerialNumber
+    Version = [string]$mbRaw.Version
+    AssetTag = [string]$mbRaw.AssetTag
+}
+
+# 2. BIOS
+$biosRaw = Get-WmiCompat 'Win32_BIOS' | Select-Object -First 1
+$biosVer = [string]$biosRaw.SMBIOSBIOSVersion
+if (-not $biosVer) { $biosVer = [string]$biosRaw.Version }
+$bios = [pscustomobject]@{
+    Manufacturer = [string]$biosRaw.Manufacturer
+    Version = $biosVer
+    SerialNumber = [string]$biosRaw.SerialNumber
+    ReleaseDate = Format-WmiDate $biosRaw.ReleaseDate
+}
+
+# 3. System & Chassis
+$csRaw = Get-WmiCompat 'Win32_ComputerSystem' | Select-Object -First 1
+$cspRaw = Get-WmiCompat 'Win32_ComputerSystemProduct' | Select-Object -First 1
+$chassisRaw = Get-WmiCompat 'Win32_SystemEnclosure' | Select-Object -First 1
+
+$chassisMap = @{
+    1='Other'; 2='Unknown'; 3='Desktop'; 4='Low Profile Desktop';
+    5='Pizza Box'; 6='Mini Tower'; 7='Tower'; 8='Portable';
+    9='Laptop'; 10='Notebook / Laptop'; 11='Hand Held'; 12='Docking Station';
+    13='All-in-One'; 14='Sub Notebook'; 15='Space-Saving'; 16='Lunch Box';
+    17='Main System Chassis'; 18='Expansion Chassis'; 19='SubChassis';
+    20='Bus Expansion Chassis'; 21='Peripheral Chassis'; 22='Storage Chassis';
+    23='Rack Mount Chassis'; 24='Sealed-Case PC'
+}
+$chassisTypeName = 'Desktop / PC'
+if ($chassisRaw -and $chassisRaw.ChassisTypes) {
+    $firstType = [int]($chassisRaw.ChassisTypes[0])
+    if ($chassisMap.ContainsKey($firstType)) {
+        $chassisTypeName = $chassisMap[$firstType]
+    }
+}
+
+$system = [pscustomobject]@{
+    Manufacturer = [string]$csRaw.Manufacturer
+    Model = [string]$csRaw.Model
+    SystemType = [string]$csRaw.SystemType
+    UUID = [string]$cspRaw.UUID
+    Domain = [string]$csRaw.Domain
+    PartOfDomain = [bool]$csRaw.PartOfDomain
+    ChassisType = $chassisTypeName
+    AssetTag = ([string]$chassisRaw.SMBIOSAssetTag).Trim()
+}
+
+# 4. OS Details
+$osRaw = Get-WmiCompat 'Win32_OperatingSystem' | Select-Object -First 1
+$uptimeStr = ''
+try {
+    $bootDate = if ($osRaw.LastBootUpTime -is [datetime]) { $osRaw.LastBootUpTime } else { [System.Management.ManagementDateTimeConverter]::ToDateTime([string]$osRaw.LastBootUpTime) }
+    $diff = (Get-Date) - $bootDate
+    $uptimeStr = '{0} ngày, {1} giờ {2} phút' -f $diff.Days, $diff.Hours, $diff.Minutes
+} catch {}
+
+$osDetails = [pscustomobject]@{
+    Caption = [string]$osRaw.Caption
+    Version = [string]$osRaw.Version
+    BuildNumber = [string]$osRaw.BuildNumber
+    OSArchitecture = [string]$osRaw.OSArchitecture
+    InstallDate = Format-WmiDate $osRaw.InstallDate
+    LastBootUpTime = Format-WmiDate $osRaw.LastBootUpTime
+    Uptime = $uptimeStr
+    WindowsSerial = [string]$osRaw.SerialNumber
+}
+
+# 5. CPU Details
+$cpuRaw = Get-WmiCompat 'Win32_Processor' | Select-Object -First 1
+$cpuDetails = [pscustomobject]@{
+    Name = [string]$cpuRaw.Name
+    Manufacturer = [string]$cpuRaw.Manufacturer
+    ProcessorId = [string]$cpuRaw.ProcessorId
+    Cores = [int]$cpuRaw.NumberOfCores
+    Threads = [int]$cpuRaw.NumberOfLogicalProcessors
+    MaxClockSpeed = [int]$cpuRaw.MaxClockSpeed
+    Socket = [string]$cpuRaw.SocketDesignation
+}
+
+# 6. RAM Modules
+$ramModules = @(Get-WmiCompat 'Win32_PhysicalMemory' | ForEach-Object {
+    $cap = 0
+    if ($_.Capacity) { $cap = [math]::Round([double]$_.Capacity / 1GB, 2) }
+    [pscustomobject]@{
+        BankLabel = [string]$_.BankLabel
+        DeviceLocator = [string]$_.DeviceLocator
+        CapacityGB = $cap
+        Speed = [int]$_.Speed
+        Manufacturer = [string]$_.Manufacturer
+        PartNumber = ([string]$_.PartNumber).Trim()
+        SerialNumber = ([string]$_.SerialNumber).Trim()
+    }
+})
+
+# 7. Physical Disks (SSD / HDD)
+$physDisks = @(Get-WmiCompat 'Win32_DiskDrive' | ForEach-Object {
+    $size = 0
+    if ($_.Size) { $size = [math]::Round([double]$_.Size / 1GB, 2) }
+    $mType = [string]$_.MediaType
+    $model = [string]$_.Model
+    $bus = [string]$_.InterfaceType
+    if ($model -match '(?i)(nvme|ssd|solid state)') {
+        $mType = 'SSD'
+    }
+    [pscustomobject]@{
+        Model = $model
+        SerialNumber = ([string]$_.SerialNumber).Trim()
+        SizeGB = $size
+        InterfaceType = $bus
+        MediaType = $mType
+        Partitions = [int]$_.Partitions
+        Status = [string]$_.Status
+    }
+})
+
+# 8. Monitors
+$monitors = @(
+    $pnpMons = @(Get-WmiCompat 'Win32_PnPEntity' | Where-Object { $_.PNPClass -eq 'Monitor' -and $_.Present -ne $false })
+    $wmiMons = @(Get-WmiCompat 'WmiMonitorID' 'root\wmi')
+    if ($wmiMons.Count -gt 0) {
+        $idx = 0
+        foreach ($wm in $wmiMons) {
+            $mfg = Decode-Ascii $wm.ManufacturerName
+            $name = Decode-Ascii $wm.UserFriendlyName
+            $ser = Decode-Ascii $wm.SerialNumberID
+            if (-not $name -and $idx -lt $pnpMons.Count) {
+                $name = [string]$pnpMons[$idx].Name
+            }
+            if (-not $name) { $name = $mfg }
+            $idx++
+            [pscustomobject]@{
+                Name = $name
+                Manufacturer = $mfg
+                SerialNumber = $ser
+                Year = [int]$wm.YearOfManufacture
+                Week = [int]$wm.WeekOfManufacture
+            }
+        }
+    } else {
+        $pnpMons | ForEach-Object {
+            [pscustomobject]@{
+                Name = [string]$_.Name
+                Manufacturer = [string]$_.Manufacturer
+                SerialNumber = ([string]$_.PNPDeviceID -split '\\', 3)[-1]
+                Year = 0
+                Week = 0
+            }
+        }
+    }
+)
+
+# 9. GPUs
+$gpus = @(Get-WmiCompat 'Win32_VideoController' | ForEach-Object {
+    $res = ''
+    if ($_.CurrentHorizontalResolution) {
+        $res = ('{0}x{1}@{2}Hz' -f $_.CurrentHorizontalResolution, $_.CurrentVerticalResolution, $_.CurrentRefreshRate)
+    }
+    $vram = 0
+    if ($_.AdapterRAM) { $vram = [math]::Round([double]$_.AdapterRAM / 1MB, 0) }
+    [pscustomobject]@{
+        Name = [string]$_.Name
+        DriverVersion = [string]$_.DriverVersion
+        AdapterRAM_MB = $vram
+        Resolution = $res
+    }
+})
+
+# 10. Printers (All installed printers including USB & Network)
+$printers = @(Get-WmiCompat 'Win32_Printer' | ForEach-Object {
+    [pscustomobject]@{
+        Name = [string]$_.Name
+        PortName = [string]$_.PortName
+        DriverName = [string]$_.DriverName
+        Default = [bool]$_.Default
+        Network = [bool]$_.Network
+        WorkOffline = [bool]$_.WorkOffline
+        Shared = [bool]$_.Shared
+    }
+})
+
+# 11. USB Devices
+$usbHubPattern = '(?i)(root hub|host controller|generic usb hub|composite device)'
+$usbDevices = @(
+    Get-WmiCompat 'Win32_PnPEntity' | Where-Object {
+        ($_.PNPDeviceID -like 'USB\*' -or $_.PNPDeviceID -like 'USBPRINT\*') -and
+        ($_.Name -notmatch $usbHubPattern) -and
+        ($_.Present -ne $false)
     } | ForEach-Object {
-        $connection = ([string]$_.PNPDeviceID -split '\\', 2)[0]
+        $idParts = [string]$_.PNPDeviceID -split '\\'
+        $ser = if ($idParts.Length -ge 3 -and $idParts[2] -notmatch '&') { $idParts[2] } else { '' }
         [pscustomobject]@{
             Name = [string]$_.Name
+            Description = [string]$_.Description
             Class = [string]$_.PNPClass
             Manufacturer = [string]$_.Manufacturer
-            Connection = $connection
+            DeviceID = [string]$_.DeviceID
+            SerialNumber = $ser
+            Status = [string]$_.Status
         }
     }
 )
 
-$directPrinters = @(
-    Get-CimInstance Win32_Printer | Where-Object {
-        (-not $_.Network) -and ([string]$_.PortName -match '^(USB|DOT4|LPT|COM)\d*$') -and ("$($_.Name) $($_.DriverName)" -notmatch $excludedDevicePattern)
-    } | ForEach-Object {
+# 12. Audio Devices (Card âm thanh / Loa / Mic)
+$soundDevices = @(Get-WmiCompat 'Win32_SoundDevice' | Where-Object { $_.Status -eq 'OK' } | ForEach-Object {
+    [pscustomobject]@{
+        Name = [string]$_.Name
+        Manufacturer = [string]$_.Manufacturer
+        Status = [string]$_.Status
+    }
+})
+
+# 13. COM / Serial Ports (Cổng giao tiếp thiết bị y tế, cân, máy in nhiệt)
+$comPorts = @(Get-WmiCompat 'Win32_SerialPort' | ForEach-Object {
+    [pscustomobject]@{
+        DeviceID = [string]$_.DeviceID
+        Name = [string]$_.Name
+        Description = [string]$_.Description
+    }
+})
+
+# 14. Battery (Nếu là Laptop / All-in-One / UPS)
+$battery = @(Get-WmiCompat 'Win32_Battery' | ForEach-Object {
+    [pscustomobject]@{
+        Name = [string]$_.Name
+        EstimatedChargeRemaining = [int]$_.EstimatedChargeRemaining
+        BatteryStatus = [int]$_.BatteryStatus
+    }
+})
+
+# 15. Antivirus Products
+$antivirus = @(
+    Get-WmiCompat 'AntiVirusProduct' 'root\SecurityCenter2' | ForEach-Object {
         [pscustomobject]@{
-            Name = [string]$_.Name
-            Class = 'Printer'
-            Manufacturer = [string]$_.DriverName
-            Connection = [string]$_.PortName
+            Name = [string]$_.displayName
+            Path = [string]$_.pathToSignedProductExe
         }
     }
 )
 
-$peripherals = @($pnpDevices + $directPrinters) | Sort-Object Class, Name
+# Backward-compatible peripherals
+$peripherals = @(
+    $usbDevices | ForEach-Object {
+        [pscustomobject]@{
+            Name = $_.Name
+            Class = if ($_.Class) { $_.Class } else { 'USB' }
+            Manufacturer = $_.Manufacturer
+            Connection = 'USB'
+        }
+    }
+    $printers | ForEach-Object {
+        [pscustomobject]@{
+            Name = $_.Name
+            Class = 'Printer'
+            Manufacturer = $_.DriverName
+            Connection = $_.PortName
+        }
+    }
+    $monitors | ForEach-Object {
+        [pscustomobject]@{
+            Name = $_.Name
+            Class = 'Monitor'
+            Manufacturer = $_.Manufacturer
+            Connection = 'Display'
+        }
+    }
+) | Sort-Object Class, Name
 
+# 16. Networks with Gateway, DNS, DHCP
 $excludedAdapterPattern = '(?i)(anyconnect|bluetooth|container|docker|fortinet|hamachi|hyper-v|loopback|npcap|openvpn|parallels|qemu|tailscale|tunnel|virtual|virtio|vbox|vethernet|vmware|vpn|wireguard|wsl|xen|zerotier)'
+$adapterConfigs = @(Get-WmiCompat 'Win32_NetworkAdapterConfiguration' | Where-Object { $_.IPEnabled -eq $true })
+
 $networks = @(
     try {
         [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces() | Where-Object {
@@ -1274,39 +1502,74 @@ $networks = @(
             (($_.Name + ' ' + $_.Description) -notmatch $excludedAdapterPattern)
         } | ForEach-Object {
             $rawMac = $_.GetPhysicalAddress().GetAddressBytes()
-            $mac = if ($rawMac.Length -eq 6) { ($rawMac | ForEach-Object { $_.ToString("X2") }) -join ":" } else { "" }
+            $mac = if ($rawMac.Length -eq 6) { ($rawMac | ForEach-Object { $_.ToString('X2') }) -join ':' } else { '' }
             $ips = @($_.GetIPProperties().UnicastAddresses | Where-Object {
                 $addr = $_.Address.IPAddressToString
                 $addr -notmatch '^(127\.|169\.254\.|fe80:)' -and $_.Address.AddressFamily -eq 'InterNetwork'
             } | ForEach-Object { $_.Address.IPAddressToString })
+            
+            $cfg = $adapterConfigs | Where-Object { [string]$_.MACAddress -replace '[:-]', '' -eq ($mac -replace '[:-]', '') } | Select-Object -First 1
+            $gateway = if ($cfg -and $cfg.DefaultIPGateway) { [string]$cfg.DefaultIPGateway[0] } else { '' }
+            $dns = if ($cfg -and $cfg.DNSServerSearchOrder) { @($cfg.DNSServerSearchOrder) } else { @() }
+            $dhcp = if ($cfg -and $cfg.DHCPServer) { [string]$cfg.DHCPServer } else { '' }
+            $subnet = if ($cfg -and $cfg.IPSubnet) { [string]$cfg.IPSubnet[0] } else { '' }
+
             [pscustomobject]@{
                 name = [string]$_.Name
                 description = [string]$_.Description
                 mac = $mac
                 ips = @($ips)
+                gateway = $gateway
+                dns = @($dns)
+                dhcp = $dhcp
+                subnet = $subnet
             }
         } | Where-Object { $_.ips.Count -gt 0 -or ($_.mac -and $_.mac -ne '00:00:00:00:00:00') }
     } catch {
-        Get-CimInstance Win32_NetworkAdapter | Where-Object {
-            $label = "$($_.Name) $($_.Description) $($_.Manufacturer) $($_.PNPDeviceID)"
+        Get-WmiCompat 'Win32_NetworkAdapter' | Where-Object {
+            $label = ($_.Name + ' ' + $_.Description + ' ' + $_.Manufacturer + ' ' + $_.PNPDeviceID)
             ($_.PhysicalAdapter -eq $true) -and $_.MACAddress -and ($label -notmatch $excludedAdapterPattern)
         } | ForEach-Object {
             $adapter = $_
-            $configuration = Get-CimInstance Win32_NetworkAdapterConfiguration -Filter "Index = $($adapter.Index)" -ErrorAction SilentlyContinue
+            $configuration = Get-WmiCompat 'Win32_NetworkAdapterConfiguration' | Where-Object { $_.Index -eq $adapter.Index }
             $name = if ($adapter.NetConnectionID) { [string]$adapter.NetConnectionID } else { [string]$adapter.Name }
             $ipList = @()
             if ($configuration -and $configuration.IPAddress) { $ipList = @($configuration.IPAddress) }
+            $gateway = if ($configuration -and $configuration.DefaultIPGateway) { [string]$configuration.DefaultIPGateway[0] } else { '' }
+            $dns = if ($configuration -and $configuration.DNSServerSearchOrder) { @($configuration.DNSServerSearchOrder) } else { @() }
+            $dhcp = if ($configuration -and $configuration.DHCPServer) { [string]$configuration.DHCPServer } else { '' }
+            $subnet = if ($configuration -and $configuration.IPSubnet) { [string]$configuration.IPSubnet[0] } else { '' }
+
             [pscustomobject]@{
                 name = $name
                 description = [string]$adapter.Description
                 mac = [string]$adapter.MACAddress
                 ips = $ipList
+                gateway = $gateway
+                dns = @($dns)
+                dhcp = $dhcp
+                subnet = $subnet
             }
         }
-    } | Sort-Object name
-)
+    }
+) | Sort-Object name
 
 [pscustomobject]@{
+    motherboard = $motherboard
+    bios = $bios
+    system = $system
+    os_detail = $osDetails
+    cpu_details = $cpuDetails
+    ram_modules = @($ramModules)
+    storage_drives = @($physDisks)
+    monitors = @($monitors)
+    gpus = @($gpus)
+    printers = @($printers)
+    usb_devices = @($usbDevices)
+    sound_devices = @($soundDevices)
+    com_ports = @($comPorts)
+    battery = @($battery)
+    antivirus = @($antivirus)
     peripherals = @($peripherals)
     networks = @($networks)
 } | ConvertTo-Json -Compress -Depth 5
@@ -1333,30 +1596,24 @@ $networks = @(
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    let inventory: Value = match serde_json::from_str(stdout.trim_start_matches('\u{feff}').trim()) {
+    let mut inventory: Value = match serde_json::from_str(stdout.trim_start_matches('\u{feff}').trim()) {
         Ok(inventory) => inventory,
         Err(error) => {
             log::warn!("failed to parse Windows inventory: {error}");
             return None;
         }
     };
-    let peripherals = inventory
-        .get("peripherals")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let networks = inventory
-        .get("networks")
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default();
-    let networks = sanitize_network_info(networks);
+    if let Some(networks) = inventory.get("networks").and_then(Value::as_array) {
+        let sanitized = sanitize_network_info(networks.clone());
+        if let Some(obj) = inventory.as_object_mut() {
+            obj.insert("networks".to_string(), json!(sanitized));
+        }
+    }
     *WINDOWS_INVENTORY_CACHE.lock().unwrap() = Some((
         std::time::Instant::now(),
-        peripherals.clone(),
-        networks.clone(),
+        inventory.clone(),
     ));
-    Some((peripherals, networks))
+    Some(inventory)
 }
 
 #[inline]
@@ -1396,7 +1653,9 @@ pub fn get_sysinfo() -> serde_json::Value {
     #[cfg(windows)]
     let interfaces_info = windows_inventory
         .as_ref()
-        .map(|(_, networks)| networks.clone())
+        .and_then(|inv| inv.get("networks"))
+        .and_then(Value::as_array)
+        .cloned()
         .unwrap_or_else(collect_default_network_info);
     #[cfg(all(
         not(windows),
@@ -1424,7 +1683,10 @@ pub fn get_sysinfo() -> serde_json::Value {
     }
     #[cfg(windows)]
     let peripherals = windows_inventory
-        .map(|(peripherals, _)| peripherals)
+        .as_ref()
+        .and_then(|inv| inv.get("peripherals"))
+        .and_then(Value::as_array)
+        .cloned()
         .unwrap_or_default();
     #[cfg(not(windows))]
     let mut peripherals: Vec<Value> = Vec::new();
@@ -1463,6 +1725,41 @@ pub fn get_sysinfo() -> serde_json::Value {
         }
     }
 
+    #[cfg(windows)]
+    let hardware_info = {
+        let mut hw = json!({
+            "disks": disks_info,
+            "total_swap_gb": system.total_swap() / 1024 / 1024 / 1024,
+            "peripherals": peripherals,
+        });
+        if let Some(inv) = windows_inventory.as_ref() {
+            if let Some(obj) = hw.as_object_mut() {
+                for key in &[
+                    "motherboard",
+                    "bios",
+                    "system",
+                    "cpu_details",
+                    "ram_modules",
+                    "storage_drives",
+                    "monitors",
+                    "gpus",
+                    "printers",
+                    "usb_devices",
+                    "os_detail",
+                    "sound_devices",
+                    "com_ports",
+                    "battery",
+                    "antivirus",
+                ] {
+                    if let Some(val) = inv.get(*key) {
+                        obj.insert(key.to_string(), val.clone());
+                    }
+                }
+            }
+        }
+        hw.to_string()
+    };
+    #[cfg(not(windows))]
     let hardware_info = json!({
         "disks": disks_info,
         "total_swap_gb": system.total_swap() / 1024 / 1024 / 1024,
