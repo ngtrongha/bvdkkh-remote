@@ -132,12 +132,18 @@ fn inventory_signature(sysinfo: &Value) -> String {
         "network": network,
         "motherboard": hardware.get("motherboard"),
         "bios": hardware.get("bios"),
+        "system": hardware.get("system"),
         "cpu_details": hardware.get("cpu_details"),
         "ram_modules": hardware.get("ram_modules"),
         "storage_drives": hardware.get("storage_drives"),
         "monitors": hardware.get("monitors"),
+        "gpus": hardware.get("gpus"),
         "printers": hardware.get("printers"),
         "usb_devices": hardware.get("usb_devices"),
+        "sound_devices": hardware.get("sound_devices"),
+        "com_ports": hardware.get("com_ports"),
+        "battery": hardware.get("battery"),
+        "antivirus": hardware.get("antivirus"),
     })
     .to_string()
 }

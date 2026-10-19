@@ -1701,7 +1701,7 @@ try {
     $brush = New-Object System.Drawing.SolidBrush($textColor)
 
     $fontFamily = 'Segoe UI'
-    $fontSize = 22.0
+    $fontSize = 32.0
     try {
         $font = New-Object System.Drawing.Font($fontFamily, $fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
     } catch {
@@ -1719,9 +1719,8 @@ try {
         $size = $g.MeasureString($ComputerName, $font)
     }
 
-    $posX = 770.0
-    $posY = 100.0 - $size.Height + 2.0
-    if ($posY -lt 68.0) { $posY = 68.0 }
+    $posX = 760.0
+    $posY = 101.0 - $size.Height
 
     $g.DrawString($ComputerName, $font, $brush, $posX, $posY)
 
