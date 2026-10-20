@@ -2645,11 +2645,10 @@ Future<String?> resolveDevicePassword(String id) async {
         for (final path in [
           '/api/devices/$cleanId/control-password',
           '/admin/devices/$cleanId/control-password',
-          '/api/admin/devices/$cleanId/control-password',
         ]) {
           try {
             final uri = Uri.parse('$server$path');
-            final resp = await http.get(uri, headers: headers).timeout(const Duration(seconds: 3));
+            final resp = await http.get(uri, headers: headers).timeout(const Duration(milliseconds: 1500));
             if (resp.statusCode == 200) {
               final json = jsonDecode(resp.body);
               final data = json['data'] ?? json;
@@ -2659,6 +2658,8 @@ Future<String?> resolveDevicePassword(String id) async {
                   return pwd;
                 }
               }
+            } else if (resp.statusCode == 401 || resp.statusCode == 403) {
+              break;
             }
           } catch (_) {}
         }

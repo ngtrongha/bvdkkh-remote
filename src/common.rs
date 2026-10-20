@@ -1180,23 +1180,60 @@ fn collect_default_network_info() -> Vec<Value> {
 
 #[cfg(windows)]
 lazy_static::lazy_static! {
-    static ref WINDOWS_INVENTORY_CACHE: Mutex<
-        Option<(std::time::Instant, Value)>,
-    > = Mutex::new(None);
+    static ref WINDOWS_INVENTORY_CACHE: Mutex<Option<(std::time::Instant, Value)>> = Mutex::new(None);
+    static ref WINDOWS_INVENTORY_FETCHING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+}
+
+#[cfg(windows)]
+fn trigger_windows_inventory_collection() {
+    use std::sync::atomic::Ordering;
+    if WINDOWS_INVENTORY_FETCHING
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        return;
+    }
+
+    std::thread::spawn(move || {
+        struct FetchGuard;
+        impl Drop for FetchGuard {
+            fn drop(&mut self) {
+                WINDOWS_INVENTORY_FETCHING.store(false, Ordering::SeqCst);
+            }
+        }
+        let _guard = FetchGuard;
+
+        if let Some(inventory) = run_powershell_inventory() {
+            *WINDOWS_INVENTORY_CACHE.lock().unwrap() =
+                Some((std::time::Instant::now(), inventory));
+        }
+    });
 }
 
 #[cfg(windows)]
 fn collect_windows_inventory() -> Option<Value> {
-    use std::os::windows::process::CommandExt;
-
-    if let Some((collected_at, inventory)) =
-        WINDOWS_INVENTORY_CACHE.lock().unwrap().as_ref()
-    {
-        // Sysinfo is checked every few seconds; WMI inventory is much more expensive.
-        if collected_at.elapsed() < std::time::Duration::from_secs(120) {
-            return Some(inventory.clone());
+    let (cached_val, need_refresh) = {
+        let guard = WINDOWS_INVENTORY_CACHE.lock().unwrap();
+        if let Some((collected_at, inventory)) = guard.as_ref() {
+            (
+                Some(inventory.clone()),
+                collected_at.elapsed() >= std::time::Duration::from_secs(300),
+            )
+        } else {
+            (None, true)
         }
+    };
+
+    if need_refresh {
+        trigger_windows_inventory_collection();
     }
+
+    cached_val
+}
+
+#[cfg(windows)]
+fn run_powershell_inventory() -> Option<Value> {
+    use std::os::windows::process::CommandExt;
 
     const SCRIPT: &str = r#"
 $ErrorActionPreference = 'SilentlyContinue'
@@ -1214,6 +1251,47 @@ function Get-WmiCompat([string]$className, [string]$namespace = 'root\cimv2') {
 function Decode-Ascii([int[]]$bytes) {
     if (-not $bytes) { return '' }
     ($bytes | Where-Object { $_ -gt 0 } | ForEach-Object { [char]$_ }) -join ''
+}
+
+function Format-WmiDate($val) {
+    if (-not $val) { return '' }
+    try {
+        $dt = if ($val -is [datetime]) { $val } else { [System.Management.ManagementDateTimeConverter]::ToDateTime([string]$val) }
+        return $dt.ToString('yyyy-MM-dd HH:mm:ss')
+    } catch {
+        return [string]$val
+    }
+}
+
+function Convert-ToJsonCompat($val) {
+    if (Get-Command ConvertTo-Json -ErrorAction SilentlyContinue) {
+        return ($val | ConvertTo-Json -Compress -Depth 5)
+    }
+    function Inner-Json($v) {
+        if ($null -eq $v) { return 'null' }
+        if ($v -is [bool]) { return $v.ToString().ToLower() }
+        if ($v -is [byte] -or $v -is [int] -or $v -is [long] -or $v -is [double] -or $v -is [float]) {
+            return $v.ToString([System.Globalization.CultureInfo]::InvariantCulture)
+        }
+        if ($v -is [System.Collections.IEnumerable] -and -not ($v -is [string])) {
+            $arr = @()
+            foreach ($elem in $v) { $arr += (Inner-Json $elem) }
+            return '[' + ($arr -join ',') + ']'
+        }
+        if ($v -is [System.Management.Automation.PSCustomObject] -or $v -is [System.Collections.IDictionary]) {
+            $fields = @()
+            if ($v -is [System.Collections.IDictionary]) {
+                foreach ($k in $v.Keys) { $fields += ('"' + $k + '":' + (Inner-Json $v[$k])) }
+            } else {
+                foreach ($p in $v.PSObject.Properties) { $fields += ('"' + $p.Name + '":' + (Inner-Json $p.Value)) }
+            }
+            return '{' + ($fields -join ',') + '}'
+        }
+        $s = [string]$v
+        $escaped = $s.Replace('\', '\\').Replace('"', '\"').Replace("`r", '').Replace("`n", '\n').Replace("`t", '\t')
+        return '"' + $escaped + '"'
+    }
+    return Inner-Json $val
 }
 
 # 1. Mainboard
@@ -1554,7 +1632,7 @@ $networks = @(
     }
 ) | Sort-Object name
 
-[pscustomobject]@{
+$inventoryObj = [pscustomobject]@{
     motherboard = $motherboard
     bios = $bios
     system = $system
@@ -1572,7 +1650,8 @@ $networks = @(
     antivirus = @($antivirus)
     peripherals = @($peripherals)
     networks = @($networks)
-} | ConvertTo-Json -Compress -Depth 5
+}
+Convert-ToJsonCompat $inventoryObj
 "#;
 
     let mut command = std::process::Command::new("powershell");
@@ -1609,16 +1688,12 @@ $networks = @(
             obj.insert("networks".to_string(), json!(sanitized));
         }
     }
-    *WINDOWS_INVENTORY_CACHE.lock().unwrap() = Some((
-        std::time::Instant::now(),
-        inventory.clone(),
-    ));
     Some(inventory)
 }
 
 #[inline]
 pub fn get_sysinfo() -> serde_json::Value {
-    use hbb_common::sysinfo::{System, Disks};
+    use hbb_common::sysinfo::System;
     let mut system = System::new();
     system.refresh_memory();
     system.refresh_cpu();
@@ -1666,20 +1741,24 @@ pub fn get_sysinfo() -> serde_json::Value {
     let interfaces_info: Vec<Value> = Vec::new();
     let network_info = json!(interfaces_info).to_string();
 
-    // Collect disk info using Disks
+    // Collect disk info using Disks (skip on mobile to avoid statvfs hangs on Android FUSE/storage mounts)
     let mut disks_info = Vec::new();
-    let disks = Disks::new_with_refreshed_list();
-    for disk in &disks {
-        let name = disk.name().to_string_lossy().to_string();
-        let mount_point = disk.mount_point().to_string_lossy().to_string();
-        let total = disk.total_space() / 1024 / 1024 / 1024; // in GB
-        let available = disk.available_space() / 1024 / 1024 / 1024; // in GB
-        disks_info.push(json!({
-            "name": name,
-            "mount_point": mount_point,
-            "total_gb": total,
-            "available_gb": available,
-        }));
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        use hbb_common::sysinfo::Disks;
+        let disks = Disks::new_with_refreshed_list();
+        for disk in &disks {
+            let name = disk.name().to_string_lossy().to_string();
+            let mount_point = disk.mount_point().to_string_lossy().to_string();
+            let total = disk.total_space() / 1024 / 1024 / 1024; // in GB
+            let available = disk.available_space() / 1024 / 1024 / 1024; // in GB
+            disks_info.push(json!({
+                "name": name,
+                "mount_point": mount_point,
+                "total_gb": total,
+                "available_gb": available,
+            }));
+        }
     }
     #[cfg(windows)]
     let peripherals = windows_inventory
