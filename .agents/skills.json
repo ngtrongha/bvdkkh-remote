@@ -1,0 +1,23 @@
+{
+  "entries": [
+    {
+      "path": "skills",
+      "exclude": [
+        "nextjs-react-expert",
+        "tailwind-patterns",
+        "frontend-architecture",
+        "frontend-design",
+        "web-design-guidelines",
+        "webapp-testing",
+        "database-design",
+        "game-development",
+        "geo-fundamentals",
+        "seo-fundamentals",
+        "nodejs-best-practices",
+        "red-team-tactics",
+        "vulnerability-scanner",
+        "mcp-builder"
+      ]
+    }
+  ]
+}
