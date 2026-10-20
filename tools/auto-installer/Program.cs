@@ -1,9 +1,10 @@
 // Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
-// Project: BVĐKKH - Remoter
+// Project: BVĐKKH - Remote
 // Author: Nguyễn Trọng Hà
 // Description: Trình cài đặt tự động (GUI + Silent Bootstrapper) cho BVĐKKH - Remote
 //              Tự động nhận diện Windows (Win7/8 vs Win10/11, x64/x86/ARM64),
-//              tải bản mới nhất từ GitHub Releases và cài đặt ngầm vào hệ thống.
+//              ưu tiên lấy file cài từ máy chủ nội bộ LAN (\\172.16.2.9\chuongtrinhtest\_RushDesk),
+//              tự động xác thực tài khoản chia sẻ nếu cần, và tự động dự phòng tải từ GitHub Releases.
 
 using System;
 using System.Collections.Generic;
@@ -25,6 +26,13 @@ namespace BVDKKH.Remote.AutoInstaller
 {
     static class Program
     {
+        // 1. Cấu hình máy chủ chia sẻ nội bộ mạng LAN bệnh viện
+        public const string DEFAULT_LAN_SHARE = @"\\172.16.2.9\chuongtrinhtest\_RushDesk";
+        public static string LanSharePath = DEFAULT_LAN_SHARE;
+        public static string LanShareUsername = "tiepdon"; // Tài khoản chia sẻ nội bộ BVĐKKH
+        public static string LanSharePassword = "tiepdon";
+
+        // 2. Cấu hình dự phòng qua GitHub Releases (khi ngoài mạng bệnh viện hoặc không vào được share)
         private const string GITHUB_API_URL = "https://api.github.com/repos/ngtrongha/bvdkkh-remote-release/releases/latest";
         private const string GITHUB_LATEST_WEB_URL = "https://github.com/ngtrongha/bvdkkh-remote-release/releases/latest";
         private const string GITHUB_EXPANDED_ASSETS_URL = "https://github.com/ngtrongha/bvdkkh-remote-release/releases/expanded_assets/";
@@ -57,6 +65,23 @@ namespace BVDKKH.Remote.AutoInstaller
         private const ushort PROCESSOR_ARCHITECTURE_AMD64 = 9;
         private const ushort PROCESSOR_ARCHITECTURE_ARM64 = 12;
 
+        // P/Invoke kết nối thư mục mạng có xác thực mật khẩu qua Windows Networking (mpr.dll)
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        public class NETRESOURCE
+        {
+            public uint dwScope = 2; // RESOURCE_GLOBALNET
+            public uint dwType = 1;  // RESOURCETYPE_DISK
+            public uint dwDisplayType = 3; // RESOURCEDISPLAYTYPE_SHARE
+            public uint dwUsage = 1; // RESOURCEUSAGE_CONNECTABLE
+            public string lpLocalName = null;
+            public string lpRemoteName;
+            public string lpComment = null;
+            public string lpProvider = null;
+        }
+
+        [DllImport("mpr.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern int WNetAddConnection2(NETRESOURCE lpNetResource, string lpPassword, string lpUsername, int dwFlags);
+
         [STAThread]
         static int Main(string[] args)
         {
@@ -67,14 +92,27 @@ namespace BVDKKH.Remote.AutoInstaller
 
             foreach (var arg in args)
             {
-                string a = arg.Trim().ToLowerInvariant();
-                if (a == "/s" || a == "-s" || a == "/silent" || a == "--silent" || a == "/quiet" || a == "/q")
+                string a = (arg ?? "").Trim();
+                string lower = a.ToLowerInvariant();
+                if (lower == "/s" || lower == "-s" || lower == "/silent" || lower == "--silent" || lower == "/quiet" || lower == "/q")
                 {
                     isSilent = true;
                 }
-                else if (a == "--check" || a == "/check" || a == "--test" || a == "/test")
+                else if (lower == "--check" || lower == "/check" || lower == "--test" || lower == "/test")
                 {
                     isCheckOnly = true;
+                }
+                else if (lower.StartsWith("/user:") || lower.StartsWith("--user:"))
+                {
+                    LanShareUsername = a.Substring(a.IndexOf(':') + 1).Trim();
+                }
+                else if (lower.StartsWith("/pass:") || lower.StartsWith("--pass:") || lower.StartsWith("/password:"))
+                {
+                    LanSharePassword = a.Substring(a.IndexOf(':') + 1).Trim();
+                }
+                else if (lower.StartsWith("/share:") || lower.StartsWith("--share:"))
+                {
+                    LanSharePath = a.Substring(a.IndexOf(':') + 1).Trim();
                 }
             }
 
@@ -116,12 +154,33 @@ namespace BVDKKH.Remote.AutoInstaller
                 catch { }
 
                 var info = DetectEnvironment();
-                var rel = FetchLatestRelease();
-                var asset = ResolveMatchingAsset(info, rel);
-                Console.WriteLine("Thiết bị: " + info.OsName + " (" + info.Arch + ")");
-                Console.WriteLine("Phiên bản: " + rel.TagName);
-                Console.WriteLine("Gói tải: " + asset.Key);
-                Console.WriteLine("Link: " + asset.Value);
+                Console.WriteLine("=================================================");
+                Console.WriteLine("BVĐKKH - Remote Auto Installer | Thông tin thiết bị");
+                Console.WriteLine("=================================================");
+                Console.WriteLine("Hệ điều hành: " + info.OsName + " (" + info.Arch + ")");
+                Console.WriteLine("Đường dẫn share LAN mặc định: " + LanSharePath);
+
+                string lanFile = null;
+                if (ConnectLanShare(LanSharePath, LanShareUsername, LanSharePassword))
+                {
+                    lanFile = ResolveLanInstallerFile(info, LanSharePath);
+                }
+
+                if (!string.IsNullOrEmpty(lanFile))
+                {
+                    Console.WriteLine("Trạng thái nguồn: KẾT NỐI MÁY CHỦ NỘI BỘ LAN THÀNH CÔNG");
+                    Console.WriteLine("Tập tin cài đặt:  " + Path.GetFileName(lanFile));
+                    Console.WriteLine("Đường dẫn tập tin:" + lanFile);
+                }
+                else
+                {
+                    Console.WriteLine("Trạng thái nguồn: Không tìm thấy gói LAN, chuyển dự phòng GitHub");
+                    var rel = FetchLatestRelease();
+                    var asset = ResolveMatchingAsset(info, rel);
+                    Console.WriteLine("Phiên bản GitHub: " + rel.TagName);
+                    Console.WriteLine("Gói tải:         " + asset.Key);
+                    Console.WriteLine("Link:            " + asset.Value);
+                }
                 return 0;
             }
 
@@ -218,6 +277,127 @@ namespace BVDKKH.Remote.AutoInstaller
             }
 
             return info;
+        }
+
+        public static bool ConnectLanShare(string remotePath, string username, string password)
+        {
+            try
+            {
+                if (Directory.Exists(remotePath)) return true;
+            }
+            catch { }
+
+            if (string.IsNullOrEmpty(remotePath)) return false;
+
+            try
+            {
+                var nr = new NETRESOURCE
+                {
+                    lpRemoteName = remotePath
+                };
+                string u = string.IsNullOrEmpty(username) ? null : username;
+                string p = string.IsNullOrEmpty(password) ? null : password;
+                int ret = WNetAddConnection2(nr, p, u, 0);
+                // 0: NO_ERROR, 1219: ERROR_SESSION_CREDENTIAL_CONFLICT, 85: ERROR_ALREADY_ASSIGNED
+                if (ret == 0 || ret == 1219 || ret == 85)
+                {
+                    return Directory.Exists(remotePath);
+                }
+            }
+            catch { }
+
+            return false;
+        }
+
+        public static string ResolveLanInstallerFile(DeviceInfo info, string sharePath)
+        {
+            try
+            {
+                if (!Directory.Exists(sharePath)) return null;
+
+                var files = Directory.GetFiles(sharePath, "*.exe", SearchOption.TopDirectoryOnly);
+                var candidates = new List<string>();
+
+                foreach (var file in files)
+                {
+                    string name = Path.GetFileName(file).ToLowerInvariant();
+                    if (name.Contains("autoinstall") || name.Contains("setup") || !name.Contains("rustdesk"))
+                        continue;
+
+                    if (info.IsWin10OrLater)
+                    {
+                        // Win10/11: Ưu tiên gói win10, hoặc x86_64 không chứa win7
+                        if (name.Contains("win10") || (name.Contains("x86_64") && !name.Contains("win7")))
+                        {
+                            candidates.Add(file);
+                        }
+                    }
+                    else
+                    {
+                        // Win7/8: Ưu tiên gói win7 hoặc sciter
+                        if (name.Contains("win7") || name.Contains("sciter") || name.Contains("x86"))
+                        {
+                            candidates.Add(file);
+                        }
+                    }
+                }
+
+                if (candidates.Count == 0) return null;
+
+                // Sắp xếp tìm bản mới nhất: ưu tiên version cao nhất trong tên file, sau đó đến ngày sửa đổi
+                candidates.Sort((a, b) =>
+                {
+                    Version vA = ExtractVersion(Path.GetFileName(a));
+                    Version vB = ExtractVersion(Path.GetFileName(b));
+                    int cmp = vB.CompareTo(vA);
+                    if (cmp != 0) return cmp;
+                    return File.GetLastWriteTime(b).CompareTo(File.GetLastWriteTime(a));
+                });
+
+                return candidates[0];
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public static Version ExtractVersion(string fileName)
+        {
+            var m = Regex.Match(fileName ?? "", @"(\d+)\.(\d+)\.(\d+)(?:\.(\d+))?");
+            if (m.Success)
+            {
+                try
+                {
+                    return new Version(m.Value);
+                }
+                catch { }
+            }
+            return new Version(0, 0, 0);
+        }
+
+        public static void CopyFileWithProgress(string sourcePath, string destPath, Action<long, long> onProgress)
+        {
+            const int bufferSize = 65536; // 64 KB
+            byte[] buffer = new byte[bufferSize];
+
+            using (var src = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize))
+            using (var dst = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, bufferSize))
+            {
+                long totalBytes = src.Length;
+                long totalRead = 0;
+                int bytesRead;
+
+                while ((bytesRead = src.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    dst.Write(buffer, 0, bytesRead);
+                    totalRead += bytesRead;
+                    if (onProgress != null)
+                    {
+                        onProgress(totalRead, totalBytes);
+                    }
+                }
+            }
         }
 
         public class ReleaseInfo
@@ -378,19 +558,40 @@ namespace BVDKKH.Remote.AutoInstaller
         private static int RunSilentBackgroundInstall()
         {
             var info = DetectEnvironment();
-            var rel = FetchLatestRelease();
-            var asset = ResolveMatchingAsset(info, rel);
+            string tempPath = null;
 
-            string tempPath = Path.Combine(Path.GetTempPath(), asset.Key);
             try
             {
-                using (var client = new WebClient())
+                // 1. Thử lấy từ máy chủ chia sẻ nội bộ mạng LAN trước
+                string lanFile = null;
+                if (ConnectLanShare(LanSharePath, LanShareUsername, LanSharePassword))
                 {
-                    client.Headers.Add("User-Agent", "BVDKKH-Remote-Installer/1.0");
-                    client.DownloadFile(new Uri(asset.Value), tempPath);
+                    lanFile = ResolveLanInstallerFile(info, LanSharePath);
+                }
+
+                if (!string.IsNullOrEmpty(lanFile) && File.Exists(lanFile))
+                {
+                    string fileName = Path.GetFileName(lanFile);
+                    tempPath = Path.Combine(Path.GetTempPath(), fileName);
+                    CopyFileWithProgress(lanFile, tempPath, null);
+                }
+                else
+                {
+                    // 2. Dự phòng: Tải từ GitHub Releases
+                    var rel = FetchLatestRelease();
+                    var asset = ResolveMatchingAsset(info, rel);
+                    tempPath = Path.Combine(Path.GetTempPath(), asset.Key);
+
+                    using (var client = new WebClient())
+                    {
+                        client.Headers.Add("User-Agent", "BVDKKH-Remote-Installer/1.0");
+                        client.DownloadFile(new Uri(asset.Value), tempPath);
+                    }
                 }
 
                 if (!File.Exists(tempPath)) return 1;
+
+                KillRunningInstancesAndServices(null);
 
                 var psi = new ProcessStartInfo
                 {
@@ -404,6 +605,12 @@ namespace BVDKKH.Remote.AutoInstaller
                 {
                     proc.WaitForExit();
                     try { File.Delete(tempPath); } catch { }
+                    if (proc.ExitCode != 0)
+                    {
+                        string log = Path.Combine(Path.GetTempPath(), LOG_FILE);
+                        File.AppendAllText(log, "[" + DateTime.Now + "] Lỗi cài đặt ngầm: mã lỗi " + proc.ExitCode + Environment.NewLine);
+                        return proc.ExitCode;
+                    }
                     PostInstallConfigureAndSync(null);
                     return proc.ExitCode;
                 }
@@ -414,6 +621,35 @@ namespace BVDKKH.Remote.AutoInstaller
                 File.AppendAllText(log, "[" + DateTime.Now + "] Lỗi cài đặt ngầm: " + ex.Message + Environment.NewLine);
                 return -1;
             }
+        }
+
+        public static void KillRunningInstancesAndServices(Action<string> logMessage)
+        {
+            try
+            {
+                if (logMessage != null) logMessage("Đang dừng dịch vụ và giải phóng tiến trình cũ...");
+                string[] svcs = new string[] { "BVĐKKH - Remote", "BVDKKH - Remote", "rustdesk", "RustDesk Service" };
+                foreach (var s in svcs)
+                {
+                    RunCli("sc.exe", "stop \"" + s + "\"");
+                }
+
+                string[] procs = new string[] { "BVĐKKH - Remote", "BVDKKH - Remote", "rustdesk", "rustdesk-x64", "rustdesk-x86", "RuntimeBroker_rustdesk", "BaoSuCoIT" };
+                foreach (var p in procs)
+                {
+                    try
+                    {
+                        var found = Process.GetProcessesByName(p);
+                        foreach (var proc in found)
+                        {
+                            try { proc.Kill(); } catch { }
+                        }
+                    }
+                    catch { }
+                }
+                Thread.Sleep(1500);
+            }
+            catch { }
         }
 
         public static string DeriveHospitalPassword(string hostname)
@@ -443,33 +679,56 @@ namespace BVDKKH.Remote.AutoInstaller
 
         public static string FindInstalledExecutable()
         {
+            string pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            string pfx86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
             string[] candidates = new string[]
             {
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"BVDKKH - Remote\BVDKKH - Remote.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"RustDesk\RustDesk.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), @"BVDKKH - Remote\BVDKKH - Remote.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), @"RustDesk\RustDesk.exe")
+                Path.Combine(pf, @"BVĐKKH - Remote\BVĐKKH - Remote.exe"),
+                Path.Combine(pf, @"BVDKKH - Remote\BVĐKKH - Remote.exe"),
+                Path.Combine(pf, @"BVĐKKH - Remote\BVDKKH - Remote.exe"),
+                Path.Combine(pf, @"BVDKKH - Remote\BVDKKH - Remote.exe"),
+                Path.Combine(pfx86, @"BVĐKKH - Remote\BVĐKKH - Remote.exe"),
+                Path.Combine(pfx86, @"BVDKKH - Remote\BVĐKKH - Remote.exe"),
+                Path.Combine(pfx86, @"BVĐKKH - Remote\BVDKKH - Remote.exe"),
+                Path.Combine(pfx86, @"BVDKKH - Remote\BVDKKH - Remote.exe"),
+                Path.Combine(pf, @"RustDesk\RustDesk.exe"),
+                Path.Combine(pf, @"RustDesk\rustdesk.exe"),
+                Path.Combine(pfx86, @"RustDesk\RustDesk.exe"),
+                Path.Combine(pfx86, @"RustDesk\rustdesk.exe")
             };
             foreach (var path in candidates)
             {
                 if (File.Exists(path)) return path;
             }
-            try
+
+            string[] regKeys = new string[]
             {
-                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BVDKKH - Remote"))
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BVĐKKH - Remote",
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BVDKKH - Remote",
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\RustDesk"
+            };
+            foreach (var regKey in regKeys)
+            {
+                try
                 {
-                    if (key != null)
+                    using (var key = Registry.LocalMachine.OpenSubKey(regKey))
                     {
-                        string loc = key.GetValue("InstallLocation") as string;
-                        if (!string.IsNullOrEmpty(loc))
+                        if (key != null)
                         {
-                            string exe = Path.Combine(loc, "BVDKKH - Remote.exe");
-                            if (File.Exists(exe)) return exe;
+                            string loc = key.GetValue("InstallLocation") as string;
+                            if (!string.IsNullOrEmpty(loc))
+                            {
+                                foreach (var name in new string[] { "BVĐKKH - Remote.exe", "BVDKKH - Remote.exe", "RustDesk.exe", "rustdesk.exe" })
+                                {
+                                    string exe = Path.Combine(loc, name);
+                                    if (File.Exists(exe)) return exe;
+                                }
+                            }
                         }
                     }
                 }
+                catch { }
             }
-            catch { }
             return null;
         }
 
@@ -554,7 +813,7 @@ namespace BVDKKH.Remote.AutoInstaller
             try
             {
                 Thread.Sleep(1500);
-                string installedExe = FindInstalledExecutable();
+                string installedExe = Program.FindInstalledExecutable();
                 string hostname = Environment.MachineName;
                 string devicePassword = DeriveHospitalPassword(hostname);
 
@@ -764,7 +1023,7 @@ namespace BVDKKH.Remote.AutoInstaller
             // 3. Status Text & Detail
             lblStatus = new Label
             {
-                Text = "Đang kiểm tra phiên bản mới nhất từ máy chủ...",
+                Text = "Đang kiểm tra gói cài đặt...",
                 Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(15, 23, 42),
                 Location = new Point(24, 150),
@@ -774,7 +1033,7 @@ namespace BVDKKH.Remote.AutoInstaller
 
             lblDetail = new Label
             {
-                Text = "Vui lòng giữ kết nối Internet trong quá trình thiết lập.",
+                Text = "Vui lòng giữ kết nối trong quá trình thiết lập.",
                 Font = new Font("Segoe UI", 9f, FontStyle.Regular),
                 ForeColor = Color.FromArgb(100, 116, 139),
                 Location = new Point(24, 178),
@@ -826,7 +1085,7 @@ namespace BVDKKH.Remote.AutoInstaller
             // 6. Footer
             lblFooter = new Label
             {
-                Text = "Tự động tải gói tối ưu cho thiết bị và cấu hình nền bảo mật.",
+                Text = "Tự động tối ưu theo hệ điều hành và đồng bộ cấu hình bảo mật.",
                 Font = new Font("Segoe UI", 8.2f, FontStyle.Italic),
                 ForeColor = Color.FromArgb(148, 163, 184),
                 Location = new Point(24, 310),
@@ -860,49 +1119,107 @@ namespace BVDKKH.Remote.AutoInstaller
                         lblBadge.Text = string.Format("🖥 Hệ điều hành: {0} ({1})   •   Trạng thái: Tương thích", info.OsName, info.Arch);
                     }));
 
-                    // Bước 2: Gọi GitHub API lấy bản mới nhất
+                    // Bước 2: Kiểm tra máy chủ chia sẻ mạng LAN trước
                     this.Invoke(new Action(() =>
                     {
-                        lblStatus.Text = "Đang kiểm tra phiên bản mới nhất từ máy chủ...";
-                        lblDetail.Text = "Đang kết nối kho phát hành chính thức...";
+                        lblStatus.Text = "Đang kiểm tra gói cài đặt từ máy chủ nội bộ...";
+                        lblDetail.Text = "Đang kết nối " + Program.LanSharePath + "...";
                         progressBar.Value = 15;
                     }));
 
-                    var rel = Program.FetchLatestRelease();
-                    var asset = Program.ResolveMatchingAsset(info, rel);
-                    string tag = rel.TagName;
-
-                    this.Invoke(new Action(() =>
+                    string lanFile = null;
+                    if (Program.ConnectLanShare(Program.LanSharePath, Program.LanShareUsername, Program.LanSharePassword))
                     {
-                        lblBadge.Text = string.Format("🖥 {0} ({1})   •   Phiên bản: {2}", info.OsName, info.Arch, tag);
-                        lblStatus.Text = "Đang tải gói cài đặt: " + asset.Key;
-                        lblDetail.Text = "Chuẩn bị tải dữ liệu...";
-                        progressBar.Value = 25;
-                    }));
-
-                    // Bước 3: Tải file về thư mục tạm
-                    string tempPath = Path.Combine(Path.GetTempPath(), asset.Key);
-                    downloadedFile = tempPath;
-
-                    using (webClient = new WebClient())
-                    {
-                        webClient.Headers.Add("User-Agent", "BVDKKH-Remote-Installer/1.0");
-                        webClient.DownloadProgressChanged += (s, e) =>
-                        {
-                            this.BeginInvoke(new Action(() =>
-                            {
-                                int val = 25 + (int)(e.ProgressPercentage * 0.55); // Từ 25% -> 80%
-                                progressBar.Value = Math.Min(val, 80);
-                                double mbRec = e.BytesReceived / 1024.0 / 1024.0;
-                                double mbTotal = e.TotalBytesToReceive / 1024.0 / 1024.0;
-                                lblDetail.Text = string.Format("Đã tải: {0:F1} MB / {1:F1} MB ({2}%)", mbRec, mbTotal, e.ProgressPercentage);
-                            }));
-                        };
-
-                        webClient.DownloadFile(new Uri(asset.Value), tempPath);
+                        lanFile = Program.ResolveLanInstallerFile(info, Program.LanSharePath);
                     }
 
-                    // Bước 4: Thực thi cài đặt ngầm
+                    string tempPath = null;
+
+                    if (!string.IsNullOrEmpty(lanFile) && File.Exists(lanFile))
+                    {
+                        string fileName = Path.GetFileName(lanFile);
+                        tempPath = Path.Combine(Path.GetTempPath(), fileName);
+                        downloadedFile = tempPath;
+
+                        this.Invoke(new Action(() =>
+                        {
+                            lblBadge.Text = string.Format("🖥 {0} ({1})   •   Nguồn: Máy chủ nội bộ LAN", info.OsName, info.Arch);
+                            lblStatus.Text = "Đang sao chép từ máy chủ nội bộ: " + fileName;
+                            lblDetail.Text = "Chuẩn bị sao chép dữ liệu...";
+                            progressBar.Value = 25;
+                        }));
+
+                        Program.CopyFileWithProgress(lanFile, tempPath, (copied, total) =>
+                        {
+                            try
+                            {
+                                this.BeginInvoke(new Action(() =>
+                                {
+                                    int val = 25 + (int)(((double)copied / total) * 55.0); // 25% -> 80%
+                                    progressBar.Value = Math.Min(val, 80);
+                                    double mbRec = copied / 1024.0 / 1024.0;
+                                    double mbTotal = total / 1024.0 / 1024.0;
+                                    int pct = (int)((copied * 100) / total);
+                                    lblDetail.Text = string.Format("Đã sao chép: {0:F1} MB / {1:F1} MB ({2}%)", mbRec, mbTotal, pct);
+                                }));
+                            }
+                            catch { }
+                        });
+                    }
+                    else
+                    {
+                        // Bước 2b: Dự phòng tải qua GitHub Releases khi không kết nối được LAN
+                        this.Invoke(new Action(() =>
+                        {
+                            lblStatus.Text = "Đang kiểm tra phiên bản mới nhất từ GitHub...";
+                            lblDetail.Text = "Đang kết nối kho phát hành chính thức...";
+                            progressBar.Value = 20;
+                        }));
+
+                        var rel = Program.FetchLatestRelease();
+                        var asset = Program.ResolveMatchingAsset(info, rel);
+                        string tag = rel.TagName;
+
+                        this.Invoke(new Action(() =>
+                        {
+                            lblBadge.Text = string.Format("🖥 {0} ({1})   •   Phiên bản: {2}", info.OsName, info.Arch, tag);
+                            lblStatus.Text = "Đang tải gói cài đặt từ GitHub: " + asset.Key;
+                            lblDetail.Text = "Chuẩn bị tải dữ liệu...";
+                            progressBar.Value = 25;
+                        }));
+
+                        tempPath = Path.Combine(Path.GetTempPath(), asset.Key);
+                        downloadedFile = tempPath;
+
+                        using (webClient = new WebClient())
+                        {
+                            webClient.Headers.Add("User-Agent", "BVDKKH-Remote-Installer/1.0");
+                            webClient.DownloadProgressChanged += (s, e) =>
+                            {
+                                try
+                                {
+                                    this.BeginInvoke(new Action(() =>
+                                    {
+                                        int val = 25 + (int)(e.ProgressPercentage * 0.55); // Từ 25% -> 80%
+                                        progressBar.Value = Math.Min(val, 80);
+                                        double mbRec = e.BytesReceived / 1024.0 / 1024.0;
+                                        double mbTotal = e.TotalBytesToReceive / 1024.0 / 1024.0;
+                                        lblDetail.Text = string.Format("Đã tải: {0:F1} MB / {1:F1} MB ({2}%)", mbRec, mbTotal, e.ProgressPercentage);
+                                    }));
+                                }
+                                catch { }
+                            };
+
+                            webClient.DownloadFile(new Uri(asset.Value), tempPath);
+                        }
+                    }
+
+                    // Bước 4: Dừng tiến trình cũ và thực thi cài đặt ngầm
+                    Program.KillRunningInstancesAndServices(msg =>
+                    {
+                        try { this.BeginInvoke(new Action(() => { lblDetail.Text = msg; })); } catch { }
+                    });
+
                     this.Invoke(new Action(() =>
                     {
                         lblStatus.Text = "Đang tiến hành cài đặt ngầm vào hệ thống...";
@@ -926,6 +1243,11 @@ namespace BVDKKH.Remote.AutoInstaller
 
                     // Dọn dẹp file tạm
                     try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+
+                    if (ExitCode != 0)
+                    {
+                        throw new Exception("Trình cài đặt hệ thống kết thúc với mã lỗi " + ExitCode + ". Vui lòng thử lại.");
+                    }
 
                     this.Invoke(new Action(() =>
                     {
@@ -1007,13 +1329,22 @@ namespace BVDKKH.Remote.AutoInstaller
                     };
 
                     bool launched = false;
-                    foreach (var p in possiblePaths)
+                    string installedExe = Program.FindInstalledExecutable();
+                    if (!string.IsNullOrEmpty(installedExe) && File.Exists(installedExe))
                     {
-                        if (File.Exists(p))
+                        Process.Start(installedExe);
+                        launched = true;
+                    }
+                    else
+                    {
+                        foreach (var p in possiblePaths)
                         {
-                            Process.Start(p);
-                            launched = true;
-                            break;
+                            if (File.Exists(p))
+                            {
+                                Process.Start(p);
+                                launched = true;
+                                break;
+                            }
                         }
                     }
 
