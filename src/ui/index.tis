@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
-// Project: BVĐKKH - Remoter
+// Project: BVĐKKH - Remote
 // Author: Nguyễn Trọng Hà
 
 if (is_osx) view.windowBlurbehind = #light;
@@ -607,7 +607,7 @@ class MyIdMenu: Reactor.Component {
 	    <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em; border-radius: 4px;'> \
                 <div style='font-size: 14px; font-weight: bold;'>BỆNH VIỆN ĐA KHOA KHÁNH HÒA</div> \
                 <div>Đơn vị: Tổ Công nghệ thông tin</div> \
-                <div>Phần mềm điều khiển máy tính từ xa nội bộ (BVĐKKH - Remoter)</div> \
+                <div>Phần mềm điều khiển máy tính từ xa nội bộ (BVĐKKH - Remote)</div> \
                 <div>Phiên bản: " + handler.get_version() + "</div> \
                 <hr style='border: 0; border-top: 1px solid rgba(255,255,255,0.3); margin: 8px 0;' /> \
                 <div><b>Lead Developer:</b> Nguyễn Trọng Hà</div> \

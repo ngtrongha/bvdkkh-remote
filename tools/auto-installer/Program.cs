@@ -82,6 +82,9 @@ namespace BVDKKH.Remote.AutoInstaller
         [DllImport("mpr.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern int WNetAddConnection2(NETRESOURCE lpNetResource, string lpPassword, string lpUsername, int dwFlags);
 
+        [DllImport("shell32.dll")]
+        private static extern void SHChangeNotify(int wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
         [STAThread]
         static int Main(string[] args)
         {
@@ -653,6 +656,14 @@ namespace BVDKKH.Remote.AutoInstaller
                         try { File.Copy(sourceExe, Path.Combine(targetDir, "BVĐKKH - Remote.exe"), true); } catch { }
                         try { File.Copy(sourceExe, Path.Combine(targetDir, "BVDKKH - Remote.exe"), true); } catch { }
                         try { File.Copy(sourceExe, Path.Combine(targetDir, "rustdesk.exe"), true); } catch { }
+
+                        string oldUnicodeDir = Path.Combine(pf, "BVĐKKH - Remote");
+                        if (Directory.Exists(oldUnicodeDir) && !oldUnicodeDir.Equals(targetDir, StringComparison.OrdinalIgnoreCase))
+                        {
+                            try { File.Copy(sourceExe, Path.Combine(oldUnicodeDir, "BVĐKKH - Remote.exe"), true); } catch { }
+                            try { File.Copy(sourceExe, Path.Combine(oldUnicodeDir, "BVDKKH - Remote.exe"), true); } catch { }
+                            try { File.Copy(sourceExe, Path.Combine(oldUnicodeDir, "rustdesk.exe"), true); } catch { }
+                        }
                     }
                 }
 
@@ -817,6 +828,9 @@ namespace BVDKKH.Remote.AutoInstaller
         {
             try
             {
+                // Dọn sạch toàn bộ shortcut cũ, rác, hoặc gãy link trên Desktop của mọi User trước khi tạo mới
+                CleanOldShortcuts();
+
                 string publicDesktop = Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory);
                 string lnkPath = Path.Combine(publicDesktop, "BVĐKKH - Remote.lnk");
                 CreateLnk(mainExe, lnkPath, "BVĐKKH - Remote");
@@ -824,6 +838,83 @@ namespace BVDKKH.Remote.AutoInstaller
                 string startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "BVĐKKH - Remote");
                 if (!Directory.Exists(startMenu)) Directory.CreateDirectory(startMenu);
                 CreateLnk(mainExe, Path.Combine(startMenu, "BVĐKKH - Remote.lnk"), "BVĐKKH - Remote");
+
+                RefreshIconCache();
+            }
+            catch { }
+        }
+
+        private static void CleanOldShortcuts()
+        {
+            try
+            {
+                var desktopDirs = new System.Collections.Generic.List<string>();
+                string pubDk = Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory);
+                if (!string.IsNullOrEmpty(pubDk) && Directory.Exists(pubDk)) desktopDirs.Add(pubDk);
+
+                string usrDk = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                if (!string.IsNullOrEmpty(usrDk) && Directory.Exists(usrDk) && !desktopDirs.Contains(usrDk)) desktopDirs.Add(usrDk);
+
+                try
+                {
+                    string userProf = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    string usersRoot = Path.GetDirectoryName(userProf);
+                    if (!string.IsNullOrEmpty(usersRoot) && Directory.Exists(usersRoot))
+                    {
+                        foreach (var uDir in Directory.GetDirectories(usersRoot))
+                        {
+                            string d = Path.Combine(uDir, "Desktop");
+                            if (Directory.Exists(d) && !desktopDirs.Contains(d)) desktopDirs.Add(d);
+                        }
+                    }
+                }
+                catch { }
+
+                string[] patterns = new string[] { "*BVĐKKH - Remote*.lnk", "*BVDKKH - Remote*.lnk", "*RustDesk*.lnk", "*rustdesk*.lnk" };
+                foreach (var d in desktopDirs)
+                {
+                    foreach (var pat in patterns)
+                    {
+                        try
+                        {
+                            foreach (var f in Directory.GetFiles(d, pat))
+                            {
+                                try { File.Delete(f); } catch { }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                var startDirs = new System.Collections.Generic.List<string>();
+                string pubSm = Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms);
+                if (!string.IsNullOrEmpty(pubSm) && Directory.Exists(pubSm)) startDirs.Add(pubSm);
+                string usrSm = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
+                if (!string.IsNullOrEmpty(usrSm) && Directory.Exists(usrSm) && !startDirs.Contains(usrSm)) startDirs.Add(usrSm);
+
+                foreach (var sd in startDirs)
+                {
+                    foreach (var pat in patterns)
+                    {
+                        try
+                        {
+                            foreach (var f in Directory.GetFiles(sd, pat))
+                            {
+                                try { File.Delete(f); } catch { }
+                            }
+                        }
+                        catch { }
+                    }
+                    foreach (var sub in new string[] { "RustDesk", "rustdesk", "BVDKKH - Remote" })
+                    {
+                        try
+                        {
+                            string subDir = Path.Combine(sd, sub);
+                            if (Directory.Exists(subDir)) Directory.Delete(subDir, true);
+                        }
+                        catch { }
+                    }
+                }
             }
             catch { }
         }
@@ -840,8 +931,19 @@ namespace BVDKKH.Remote.AutoInstaller
                     shortcut.TargetPath = targetExe;
                     shortcut.WorkingDirectory = Path.GetDirectoryName(targetExe);
                     shortcut.Description = description;
+                    shortcut.IconLocation = targetExe + ",0";
                     shortcut.Save();
                 }
+            }
+            catch { }
+        }
+
+        private static void RefreshIconCache()
+        {
+            try
+            {
+                // SHCNE_ASSOCCHANGED = 0x08000000, SHCNF_IDLIST = 0
+                SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero);
             }
             catch { }
         }

@@ -38,7 +38,7 @@ description: Quy trình phát triển trên nhánh main, hỏi xác nhận ngư�
    - Kiểm tra Copyright Header bắt buộc ở đầu các file:
      ```dart
      // Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
-     // Project: BVĐKKH - Remoter
+     // Project: BVĐKKH - Remote
      // Author: Nguyễn Trọng Hà
      ```
 4. Commit thay đổi lên `main` theo chuẩn Conventional Commits (`feat(...)`, `fix(...)`, `chore(...)`) và push:
