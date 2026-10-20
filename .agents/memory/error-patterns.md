@@ -39,3 +39,9 @@ Tài liệu ghi nhớ các dạng lỗi phổ biến, triệu chứng nhận bi�
   - *Nguyên nhân*: Desktop Windows hiển thị gộp `Public\Desktop` và `User\Desktop`. Bản cài cũ trỏ vào thư mục cũ bị xóa để lại shortcut gãy link trong profile user; typo `Remoter` trong `Cargo.toml`.
   - *Giải pháp*: `CleanOldShortcuts()` quét dọn sạch shortcut trên mọi profile Desktop trước khi tạo mới; gán tường minh `IconLocation = targetExe + ",0"`; gọi `SHChangeNotify` làm mới icon cache; chuẩn hóa tên hiển thị `BVĐKKH - Remote` và sửa sạch typo `Remoter`.
   - *Quy tắc*: Chi tiết tại [`.agents/rules/error-prevention.md`](file:///c:/Work/bvdkkh-remote/.agents/rules/error-prevention.md#lỗi-06).
+
+## 5. An toàn Bảo mật & Tránh False Positive (Antivirus & Defender Evasion)
+- **Lỗi 07: Windows Defender cảnh báo `Behavior:Win32/DefenseEvasion.A!ml`**:
+  - *Nguyên nhân*: Bộ cài gọi tiến trình con `powershell.exe -Command New-NetFirewallRule ...` hoặc `netsh advfirewall` để mở port và bật EdgeTraversal. Defender AMSI và Machine Learning nhận diện việc gọi PowerShell ẩn để sửa tường lửa là hành vi mã độc né tránh phòng thủ.
+  - *Giải pháp*: Loại bỏ triệt để việc spawn `powershell.exe`/`netsh.exe`; chuyển 100% sang sử dụng **Windows Firewall COM API (`HNetCfg.FwPolicy2`)** nội bộ trong tiến trình; không sinh tiến trình lạ, không bị AMSI quét lệnh.
+  - *Quy tắc*: Chi tiết tại [`.agents/rules/error-prevention.md`](file:///c:/Work/bvdkkh-remote/.agents/rules/error-prevention.md#lỗi-07).

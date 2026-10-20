@@ -172,6 +172,30 @@ Mỗi sự cố phải được ghi chép đầy đủ 4 trường thông tin:
 
 ---
 
+### 🔴 LỖI 07: Windows Defender kích hoạt cảnh báo `Behavior:Win32/DefenseEvasion.A!ml` khi cài đặt
+
+- **Ngày ghi nhận**: 2026-10-20
+- **Phạm vi ảnh hưởng**: Windows 10 / 11, Auto Installer (`BVDKKH-Remote-AutoInstall.exe`).
+- **Triệu chứng (Symptom)**:
+  - Khi chạy file `BVDKKH-Remote-AutoInstall.exe` trên Desktop, Windows Defender bật popup cảnh báo mức Severe:
+    `Behavior:Win32/DefenseEvasion.A!ml`
+    `Category: Suspicious Behavior`
+    `Details: This program is dangerous and executes commands from an attacker.`
+    File cài đặt bị cô lập hoặc chặn thực thi.
+- **Nguyên nhân gốc rễ (Root Cause)**:
+  1. Trong bản cập nhật trước, hàm `ConfigureFirewallRules` gọi tiến trình con `powershell.exe -NoProfile -Command "New-NetFirewallRule ... -EdgeTraversalPolicy Allow ..."` và chuỗi lệnh `netsh advfirewall` để tự động mở cổng tường lửa.
+  2. Windows Defender tích hợp Antimalware Scan Interface (AMSI) và cơ chế phân tích hành vi thời gian thực dựa trên Machine Learning (`!ml`).
+  3. Khi một file thực thi mới trong thư mục cá nhân (`Desktop`, `Downloads`) kích hoạt tiến trình PowerShell ẩn để thay đổi chính sách tường lửa / NAT traversal, Defender nhận định đây là hành vi đặc trưng của mã độc lẩn tránh phòng thủ (Defense Evasion - MITRE ATT&CK TA0005) và lập tức gắn cờ.
+- **Giải pháp triệt để (Resolution)**:
+  - Loại bỏ hoàn toàn các lệnh gọi tiến trình ngoài `powershell.exe` và `netsh.exe`.
+  - Chuyển sang sử dụng trực tiếp **Windows Firewall COM API (`HNetCfg.FwPolicy2` và `HNetCfg.FWRule`)** nội bộ trong tiến trình C#.
+  - Thiết lập đầy đủ các quy tắc tường lửa (Application, Service, TCP 21115-21119, UDP 21116 EdgeTraversal, WOL) qua COM interface.
+  - Vì chạy in-process trực tiếp qua API chính thức của Microsoft, không sinh ra tiến trình command-line con, AMSI không bị kích hoạt và loại trừ 100% cảnh báo `DefenseEvasion.A!ml`.
+- **Quy tắc phòng ngừa (Prevention Rule)**:
+  - **TUYỆT ĐỐI KHÔNG** gọi `powershell.exe -Command` hay các tiện ích dòng lệnh để sửa đổi cấu hình bảo mật/tường lửa từ bên trong các công cụ thực thi `.exe`. Luôn sử dụng Win32/COM API chính quy để thực hiện cấu hình in-process.
+
+---
+
 ## 🔄 Quy trình tự động cập nhật khi gặp lỗi mới
 
 Khi gặp bất kỳ lỗi mới nào trong quá trình phát triển:
