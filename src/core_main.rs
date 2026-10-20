@@ -287,9 +287,10 @@ pub fn core_main() -> Option<CoreMainAction> {
                 let (printer_override, debug) = parse_silent_install_args(&args);
                 let options = platform::get_silent_install_options(printer_override);
                 let res = platform::install_me(options, "".to_owned(), true, debug);
-                let text = match res {
+                let text = match &res {
                     Ok(_) => translate("Installation Successful!".to_string()),
                     Err(err) => {
+                        log::error!("Silent installation failed: {err}");
                         println!("Failed with error: {err}");
                         translate("Installation failed!".to_string())
                     }
@@ -301,6 +302,9 @@ pub fn core_main() -> Option<CoreMainAction> {
                     .duration(Duration::Short)
                     .show()
                     .ok();
+                if res.is_err() {
+                    std::process::exit(1);
+                }
                 return None;
             } else if args[0] == "--uninstall-cert" {
                 #[cfg(windows)]
