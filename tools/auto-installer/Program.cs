@@ -626,11 +626,12 @@ namespace BVDKKH.Remote.AutoInstaller
                     string pfx86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
                     if (!string.IsNullOrEmpty(pfx86)) pf = pfx86;
                 }
-                string targetDir = Path.Combine(pf, "BVDKKH - Remote");
+                string targetDir = Path.Combine(pf, "BVĐKKH - Remote");
                 if (!Directory.Exists(targetDir))
                 {
                     Directory.CreateDirectory(targetDir);
                 }
+                MigrateAndCleanLegacyDirectories(targetDir);
 
                 // 3. Tìm thư mục giải nén và chờ unpacker hoàn tất tối đa 10s
                 string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
@@ -659,16 +660,7 @@ namespace BVDKKH.Remote.AutoInstaller
                     if (File.Exists(sourceExe))
                     {
                         try { File.Copy(sourceExe, Path.Combine(targetDir, "BVĐKKH - Remote.exe"), true); } catch { }
-                        try { File.Copy(sourceExe, Path.Combine(targetDir, "BVDKKH - Remote.exe"), true); } catch { }
                         try { File.Copy(sourceExe, Path.Combine(targetDir, "rustdesk.exe"), true); } catch { }
-
-                        string oldUnicodeDir = Path.Combine(pf, "BVĐKKH - Remote");
-                        if (Directory.Exists(oldUnicodeDir) && !oldUnicodeDir.Equals(targetDir, StringComparison.OrdinalIgnoreCase))
-                        {
-                            try { File.Copy(sourceExe, Path.Combine(oldUnicodeDir, "BVĐKKH - Remote.exe"), true); } catch { }
-                            try { File.Copy(sourceExe, Path.Combine(oldUnicodeDir, "BVDKKH - Remote.exe"), true); } catch { }
-                            try { File.Copy(sourceExe, Path.Combine(oldUnicodeDir, "rustdesk.exe"), true); } catch { }
-                        }
                     }
                 }
 
@@ -678,13 +670,22 @@ namespace BVDKKH.Remote.AutoInstaller
                     if (File.Exists(installerPackagePath))
                     {
                         try { File.Copy(installerPackagePath, Path.Combine(targetDir, "BVĐKKH - Remote.exe"), true); } catch { }
-                        try { File.Copy(installerPackagePath, Path.Combine(targetDir, "BVDKKH - Remote.exe"), true); } catch { }
                         try { File.Copy(installerPackagePath, Path.Combine(targetDir, "rustdesk.exe"), true); } catch { }
                     }
                 }
 
+                // Xóa triệt để tệp trùng lặp BVDKKH - Remote.exe nếu có
+                try
+                {
+                    string dupExe = Path.Combine(targetDir, "BVDKKH - Remote.exe");
+                    if (File.Exists(dupExe)) File.Delete(dupExe);
+                }
+                catch { }
+
+                // Dọn dẹp lại thư mục cũ BVDKKH - Remote sau khi chép file
+                MigrateAndCleanLegacyDirectories(targetDir);
+
                 string mainExe = Path.Combine(targetDir, "BVĐKKH - Remote.exe");
-                if (!File.Exists(mainExe)) mainExe = Path.Combine(targetDir, "BVDKKH - Remote.exe");
                 if (!File.Exists(mainExe)) mainExe = Path.Combine(targetDir, "rustdesk.exe");
 
                 // 4. Đăng ký Registry Uninstall & InstallState
@@ -717,7 +718,11 @@ namespace BVDKKH.Remote.AutoInstaller
                 {
                     using (var runKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true))
                     {
-                        if (runKey != null) runKey.SetValue("BVĐKKH - Remote", "\"" + mainExe + "\" --tray");
+                        if (runKey != null)
+                    {
+                        runKey.SetValue("BVĐKKH - Remote", "\"" + mainExe + "\" --tray");
+                        try { runKey.DeleteValue("BVDKKH - Remote", false); } catch { }
+                    }
                     }
                 }
                 catch { }
@@ -737,6 +742,62 @@ namespace BVDKKH.Remote.AutoInstaller
                 File.AppendAllText(log, "[" + DateTime.Now + "] Lỗi cài đặt trực tiếp: " + ex.Message + Environment.NewLine);
                 return false;
             }
+        }
+
+        private static void MigrateAndCleanLegacyDirectories(string targetDir)
+        {
+            try
+            {
+                string pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                string pfx86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+                string sysDrive = Path.GetPathRoot(Environment.SystemDirectory);
+                if (string.IsNullOrEmpty(sysDrive)) sysDrive = @"C:\";
+
+                var legacyDirs = new System.Collections.Generic.List<string>();
+                if (!string.IsNullOrEmpty(pf)) legacyDirs.Add(Path.Combine(pf, "BVDKKH - Remote"));
+                if (!string.IsNullOrEmpty(pfx86)) legacyDirs.Add(Path.Combine(pfx86, "BVDKKH - Remote"));
+                legacyDirs.Add(Path.Combine(sysDrive, @"Program Files\BVDKKH - Remote"));
+                legacyDirs.Add(Path.Combine(sysDrive, @"Program Files (x86)\BVDKKH - Remote"));
+
+                foreach (var oldDir in legacyDirs)
+                {
+                    if (string.IsNullOrEmpty(oldDir) || !Directory.Exists(oldDir)) continue;
+                    if (oldDir.Equals(targetDir, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    try
+                    {
+                        foreach (var f in Directory.GetFiles(oldDir))
+                        {
+                            string fname = Path.GetFileName(f);
+                            if (fname.Equals("BVDKKH - Remote.exe", StringComparison.OrdinalIgnoreCase)) continue;
+                            string dest = Path.Combine(targetDir, fname);
+                            if (!File.Exists(dest))
+                            {
+                                try { File.Copy(f, dest, true); } catch { }
+                            }
+                        }
+                    }
+                    catch { }
+
+                    try
+                    {
+                        Directory.Delete(oldDir, true);
+                    }
+                    catch
+                    {
+                        try
+                        {
+                            foreach (var f in Directory.GetFiles(oldDir, "*", SearchOption.AllDirectories))
+                            {
+                                try { File.SetAttributes(f, FileAttributes.Normal); File.Delete(f); } catch { }
+                            }
+                            Directory.Delete(oldDir, true);
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
         }
 
         private static void CopyDirectoryForce(string sourceDir, string destinationDir)
@@ -817,35 +878,36 @@ namespace BVDKKH.Remote.AutoInstaller
 
         private static void RegisterSystemInstallation(string targetDir, string mainExe)
         {
-            string[] names = new string[] { "BVĐKKH - Remote", "BVDKKH - Remote" };
-            foreach (var name in names)
+            try
             {
-                try
+                // Xóa subkey gỡ cài đặt cũ BVDKKH - Remote nếu tồn tại
+                try { Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BVDKKH - Remote", false); } catch { }
+                try { Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\BVDKKH - Remote", false); } catch { }
+
+                // Đăng ký Uninstall chính thức cho BVĐKKH - Remote
+                using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BVĐKKH - Remote"))
                 {
-                    using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\" + name))
+                    if (key != null)
                     {
-                        if (key != null)
-                        {
-                            key.SetValue("DisplayName", "BVĐKKH - Remote");
-                            key.SetValue("DisplayIcon", mainExe + ",0");
-                            key.SetValue("DisplayVersion", "1.5.17");
-                            key.SetValue("Version", "1.5.17");
-                            key.SetValue("Publisher", "Bệnh viện Đa khoa Khánh Hòa");
-                            key.SetValue("InstallLocation", targetDir);
-                            key.SetValue("UninstallString", "\"" + mainExe + "\" --uninstall");
-                            key.SetValue("WindowsInstaller", 0, RegistryValueKind.DWord);
-                        }
-                    }
-                    using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\" + name + @"\InstallState\" + name))
-                    {
-                        if (key != null)
-                        {
-                            key.SetValue("InstallLocation", targetDir);
-                        }
+                        key.SetValue("DisplayName", "BVĐKKH - Remote");
+                        key.SetValue("DisplayIcon", mainExe + ",0");
+                        key.SetValue("DisplayVersion", "1.5.17");
+                        key.SetValue("Version", "1.5.17");
+                        key.SetValue("Publisher", "Bệnh viện Đa khoa Khánh Hòa");
+                        key.SetValue("InstallLocation", targetDir);
+                        key.SetValue("UninstallString", "\"" + mainExe + "\" --uninstall");
+                        key.SetValue("WindowsInstaller", 0, RegistryValueKind.DWord);
                     }
                 }
-                catch { }
+                using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\BVĐKKH - Remote\InstallState\BVĐKKH - Remote"))
+                {
+                    if (key != null)
+                    {
+                        key.SetValue("InstallLocation", targetDir);
+                    }
+                }
             }
+            catch { }
         }
 
         private static void ConfigureFirewallRules(string targetDir, string mainExe)
@@ -889,7 +951,7 @@ namespace BVDKKH.Remote.AutoInstaller
                 };
 
                 // 1. Mở tường lửa theo File thực thi (Inbound + Outbound, Domain + Private + Public)
-                string[] exeNames = new string[] { "BVĐKKH - Remote.exe", "BVDKKH - Remote.exe", "rustdesk.exe" };
+                string[] exeNames = new string[] { "BVĐKKH - Remote.exe", "rustdesk.exe" };
                 foreach (var exe in exeNames)
                 {
                     string p = Path.Combine(targetDir, exe);
