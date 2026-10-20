@@ -258,9 +258,11 @@ namespace BVDKKH.Remote.AutoInstaller
                             if (lower.Contains("x86_64") && !lower.Contains("win7"))
                                 return new KeyValuePair<string, string>(name, url);
                         }
-                        else if (!info.IsWin10OrLater && info.Arch == "x64")
+                        else if (!info.IsWin10OrLater)
                         {
-                            if (lower.Contains("win7") && lower.Contains("x86_64"))
+                            if (info.Arch == "x64" && lower.Contains("win7") && lower.Contains("x86_64"))
+                                return new KeyValuePair<string, string>(name, url);
+                            if (lower.Contains("x86-sciter"))
                                 return new KeyValuePair<string, string>(name, url);
                         }
                     }
@@ -270,12 +272,10 @@ namespace BVDKKH.Remote.AutoInstaller
             string tag = !string.IsNullOrEmpty(tagName) ? tagName : "v1.5.17";
             string ver = tag.TrimStart('v');
             string fallbackFile = "";
-            if (info.Arch == "x86")
+            if (info.Arch == "x86" || !info.IsWin10OrLater)
                 fallbackFile = string.Format("rustdesk-{0}-x86-sciter.exe", ver);
             else if (info.IsWin10OrLater)
                 fallbackFile = string.Format("rustdesk-{0}-x86_64.exe", ver);
-            else
-                fallbackFile = string.Format("rustdesk-{0}-win7-x86_64.exe", ver);
 
             string fallbackUrl = string.Format("https://github.com/ngtrongha/bvdkkh-remote-release/releases/download/{0}/{1}", tag, fallbackFile);
             return new KeyValuePair<string, string>(fallbackFile, fallbackUrl);
