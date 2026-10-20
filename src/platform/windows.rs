@@ -1549,10 +1549,26 @@ pub fn rename_exe_cmd(src_exe: &str, path: &str) -> ResultType<String> {
     let app_name = crate::get_app_name();
     Ok(format!(
         "
-        if exist \"{path}\\{src_exe_filename}\" if not exist \"{path}\\{app_name}.exe\" move /Y \"{path}\\{src_exe_filename}\" \"{path}\\{app_name}.exe\"
-        if exist \"{path}\\rustdesk.exe\" if not exist \"{path}\\{app_name}.exe\" move /Y \"{path}\\rustdesk.exe\" \"{path}\\{app_name}.exe\"
-        if exist \"{path}\\rustdesk-x64.exe\" if not exist \"{path}\\{app_name}.exe\" move /Y \"{path}\\rustdesk-x64.exe\" \"{path}\\{app_name}.exe\"
-        if exist \"{path}\\rustdesk-x86.exe\" if not exist \"{path}\\{app_name}.exe\" move /Y \"{path}\\rustdesk-x86.exe\" \"{path}\\{app_name}.exe\"
+        if exist \"{path}\\{src_exe_filename}\" (
+            copy /Y \"{path}\\{src_exe_filename}\" \"{path}\\{app_name}.exe\" >nul 2>&1
+            copy /Y \"{path}\\{src_exe_filename}\" \"{path}\\BVDKKH - Remote.exe\" >nul 2>&1
+            copy /Y \"{path}\\{src_exe_filename}\" \"{path}\\BVĐKKH - Remote.exe\" >nul 2>&1
+        )
+        if exist \"{path}\\rustdesk.exe\" (
+            copy /Y \"{path}\\rustdesk.exe\" \"{path}\\{app_name}.exe\" >nul 2>&1
+            copy /Y \"{path}\\rustdesk.exe\" \"{path}\\BVDKKH - Remote.exe\" >nul 2>&1
+            copy /Y \"{path}\\rustdesk.exe\" \"{path}\\BVĐKKH - Remote.exe\" >nul 2>&1
+        )
+        if exist \"{path}\\rustdesk-x64.exe\" (
+            copy /Y \"{path}\\rustdesk-x64.exe\" \"{path}\\{app_name}.exe\" >nul 2>&1
+            copy /Y \"{path}\\rustdesk-x64.exe\" \"{path}\\BVDKKH - Remote.exe\" >nul 2>&1
+            copy /Y \"{path}\\rustdesk-x64.exe\" \"{path}\\BVĐKKH - Remote.exe\" >nul 2>&1
+        )
+        if exist \"{path}\\rustdesk-x86.exe\" (
+            copy /Y \"{path}\\rustdesk-x86.exe\" \"{path}\\{app_name}.exe\" >nul 2>&1
+            copy /Y \"{path}\\rustdesk-x86.exe\" \"{path}\\BVDKKH - Remote.exe\" >nul 2>&1
+            copy /Y \"{path}\\rustdesk-x86.exe\" \"{path}\\BVĐKKH - Remote.exe\" >nul 2>&1
+        )
         ",
     ))
 }

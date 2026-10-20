@@ -591,6 +591,8 @@ namespace BVDKKH.Remote.AutoInstaller
 
                 if (!File.Exists(tempPath)) return 1;
 
+                KillRunningInstancesAndServices(null);
+
                 var psi = new ProcessStartInfo
                 {
                     FileName = tempPath,
@@ -603,6 +605,12 @@ namespace BVDKKH.Remote.AutoInstaller
                 {
                     proc.WaitForExit();
                     try { File.Delete(tempPath); } catch { }
+                    if (proc.ExitCode != 0)
+                    {
+                        string log = Path.Combine(Path.GetTempPath(), LOG_FILE);
+                        File.AppendAllText(log, "[" + DateTime.Now + "] Lỗi cài đặt ngầm: mã lỗi " + proc.ExitCode + Environment.NewLine);
+                        return proc.ExitCode;
+                    }
                     PostInstallConfigureAndSync(null);
                     return proc.ExitCode;
                 }
@@ -613,6 +621,35 @@ namespace BVDKKH.Remote.AutoInstaller
                 File.AppendAllText(log, "[" + DateTime.Now + "] Lỗi cài đặt ngầm: " + ex.Message + Environment.NewLine);
                 return -1;
             }
+        }
+
+        public static void KillRunningInstancesAndServices(Action<string> logMessage)
+        {
+            try
+            {
+                if (logMessage != null) logMessage("Đang dừng dịch vụ và giải phóng tiến trình cũ...");
+                string[] svcs = new string[] { "BVĐKKH - Remote", "BVDKKH - Remote", "rustdesk", "RustDesk Service" };
+                foreach (var s in svcs)
+                {
+                    RunCli("sc.exe", "stop \"" + s + "\"");
+                }
+
+                string[] procs = new string[] { "BVĐKKH - Remote", "BVDKKH - Remote", "rustdesk", "rustdesk-x64", "rustdesk-x86", "RuntimeBroker_rustdesk", "BaoSuCoIT" };
+                foreach (var p in procs)
+                {
+                    try
+                    {
+                        var found = Process.GetProcessesByName(p);
+                        foreach (var proc in found)
+                        {
+                            try { proc.Kill(); } catch { }
+                        }
+                    }
+                    catch { }
+                }
+                Thread.Sleep(1500);
+            }
+            catch { }
         }
 
         public static string DeriveHospitalPassword(string hostname)
@@ -642,33 +679,56 @@ namespace BVDKKH.Remote.AutoInstaller
 
         public static string FindInstalledExecutable()
         {
+            string pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            string pfx86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
             string[] candidates = new string[]
             {
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"BVDKKH - Remote\BVDKKH - Remote.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), @"RustDesk\RustDesk.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), @"BVDKKH - Remote\BVDKKH - Remote.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), @"RustDesk\RustDesk.exe")
+                Path.Combine(pf, @"BVĐKKH - Remote\BVĐKKH - Remote.exe"),
+                Path.Combine(pf, @"BVDKKH - Remote\BVĐKKH - Remote.exe"),
+                Path.Combine(pf, @"BVĐKKH - Remote\BVDKKH - Remote.exe"),
+                Path.Combine(pf, @"BVDKKH - Remote\BVDKKH - Remote.exe"),
+                Path.Combine(pfx86, @"BVĐKKH - Remote\BVĐKKH - Remote.exe"),
+                Path.Combine(pfx86, @"BVDKKH - Remote\BVĐKKH - Remote.exe"),
+                Path.Combine(pfx86, @"BVĐKKH - Remote\BVDKKH - Remote.exe"),
+                Path.Combine(pfx86, @"BVDKKH - Remote\BVDKKH - Remote.exe"),
+                Path.Combine(pf, @"RustDesk\RustDesk.exe"),
+                Path.Combine(pf, @"RustDesk\rustdesk.exe"),
+                Path.Combine(pfx86, @"RustDesk\RustDesk.exe"),
+                Path.Combine(pfx86, @"RustDesk\rustdesk.exe")
             };
             foreach (var path in candidates)
             {
                 if (File.Exists(path)) return path;
             }
-            try
+
+            string[] regKeys = new string[]
             {
-                using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BVDKKH - Remote"))
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BVĐKKH - Remote",
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BVDKKH - Remote",
+                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\RustDesk"
+            };
+            foreach (var regKey in regKeys)
+            {
+                try
                 {
-                    if (key != null)
+                    using (var key = Registry.LocalMachine.OpenSubKey(regKey))
                     {
-                        string loc = key.GetValue("InstallLocation") as string;
-                        if (!string.IsNullOrEmpty(loc))
+                        if (key != null)
                         {
-                            string exe = Path.Combine(loc, "BVDKKH - Remote.exe");
-                            if (File.Exists(exe)) return exe;
+                            string loc = key.GetValue("InstallLocation") as string;
+                            if (!string.IsNullOrEmpty(loc))
+                            {
+                                foreach (var name in new string[] { "BVĐKKH - Remote.exe", "BVDKKH - Remote.exe", "RustDesk.exe", "rustdesk.exe" })
+                                {
+                                    string exe = Path.Combine(loc, name);
+                                    if (File.Exists(exe)) return exe;
+                                }
+                            }
                         }
                     }
                 }
+                catch { }
             }
-            catch { }
             return null;
         }
 
@@ -753,7 +813,7 @@ namespace BVDKKH.Remote.AutoInstaller
             try
             {
                 Thread.Sleep(1500);
-                string installedExe = FindInstalledExecutable();
+                string installedExe = Program.FindInstalledExecutable();
                 string hostname = Environment.MachineName;
                 string devicePassword = DeriveHospitalPassword(hostname);
 
@@ -1154,7 +1214,12 @@ namespace BVDKKH.Remote.AutoInstaller
                         }
                     }
 
-                    // Bước 4: Thực thi cài đặt ngầm
+                    // Bước 4: Dừng tiến trình cũ và thực thi cài đặt ngầm
+                    Program.KillRunningInstancesAndServices(msg =>
+                    {
+                        try { this.BeginInvoke(new Action(() => { lblDetail.Text = msg; })); } catch { }
+                    });
+
                     this.Invoke(new Action(() =>
                     {
                         lblStatus.Text = "Đang tiến hành cài đặt ngầm vào hệ thống...";
@@ -1178,6 +1243,11 @@ namespace BVDKKH.Remote.AutoInstaller
 
                     // Dọn dẹp file tạm
                     try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
+
+                    if (ExitCode != 0)
+                    {
+                        throw new Exception("Trình cài đặt hệ thống kết thúc với mã lỗi " + ExitCode + ". Vui lòng thử lại.");
+                    }
 
                     this.Invoke(new Action(() =>
                     {
@@ -1259,13 +1329,22 @@ namespace BVDKKH.Remote.AutoInstaller
                     };
 
                     bool launched = false;
-                    foreach (var p in possiblePaths)
+                    string installedExe = Program.FindInstalledExecutable();
+                    if (!string.IsNullOrEmpty(installedExe) && File.Exists(installedExe))
                     {
-                        if (File.Exists(p))
+                        Process.Start(installedExe);
+                        launched = true;
+                    }
+                    else
+                    {
+                        foreach (var p in possiblePaths)
                         {
-                            Process.Start(p);
-                            launched = true;
-                            break;
+                            if (File.Exists(p))
+                            {
+                                Process.Start(p);
+                                launched = true;
+                                break;
+                            }
                         }
                     }
 
