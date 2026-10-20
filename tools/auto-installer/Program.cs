@@ -26,7 +26,13 @@ namespace BVDKKH.Remote.AutoInstaller
     static class Program
     {
         private const string GITHUB_API_URL = "https://api.github.com/repos/ngtrongha/bvdkkh-remote-release/releases/latest";
+        private const string GITHUB_LATEST_WEB_URL = "https://github.com/ngtrongha/bvdkkh-remote-release/releases/latest";
+        private const string GITHUB_EXPANDED_ASSETS_URL = "https://github.com/ngtrongha/bvdkkh-remote-release/releases/expanded_assets/";
         private const string LOG_FILE = "bvdkkh_installer.log";
+
+        [DllImport("kernel32.dll")]
+        private static extern bool AttachConsole(int dwProcessId);
+        private const int ATTACH_PARENT_PROCESS = -1;
 
         [DllImport("kernel32.dll")]
         private static extern void GetNativeSystemInfo(ref SYSTEM_INFO lpSystemInfo);
@@ -101,12 +107,19 @@ namespace BVDKKH.Remote.AutoInstaller
             // 2. Chế độ kiểm tra (CLI / Check only)
             if (isCheckOnly)
             {
+                AttachConsole(ATTACH_PARENT_PROCESS);
+                try
+                {
+                    var stdOut = new StreamWriter(Console.OpenStandardOutput()) { AutoFlush = true };
+                    Console.SetOut(stdOut);
+                }
+                catch { }
+
                 var info = DetectEnvironment();
-                string releaseJson = FetchLatestReleaseJson();
-                string tag = ExtractTagName(releaseJson);
-                var asset = ResolveMatchingAsset(info, releaseJson, tag);
+                var rel = FetchLatestRelease();
+                var asset = ResolveMatchingAsset(info, rel);
                 Console.WriteLine("Thiết bị: " + info.OsName + " (" + info.Arch + ")");
-                Console.WriteLine("Phiên bản: " + tag);
+                Console.WriteLine("Phiên bản: " + rel.TagName);
                 Console.WriteLine("Gói tải: " + asset.Key);
                 Console.WriteLine("Link: " + asset.Value);
                 return 0;
@@ -207,69 +220,150 @@ namespace BVDKKH.Remote.AutoInstaller
             return info;
         }
 
-        public static string FetchLatestReleaseJson()
+        public class ReleaseInfo
         {
+            public string TagName;
+            public List<KeyValuePair<string, string>> Assets = new List<KeyValuePair<string, string>>();
+        }
+
+        public static ReleaseInfo FetchLatestRelease()
+        {
+            var info = new ReleaseInfo();
+
+            // 1. Thử qua GitHub API (lấy JSON đầy đủ danh sách assets)
             try
             {
                 using (var client = new WebClient())
                 {
                     client.Encoding = Encoding.UTF8;
                     client.Headers.Add("User-Agent", "BVDKKH-Remote-Installer/1.0");
-                    return client.DownloadString(GITHUB_API_URL);
-                }
-            }
-            catch
-            {
-                return "";
-            }
-        }
-
-        public static string ExtractTagName(string json)
-        {
-            if (string.IsNullOrEmpty(json)) return "v1.5.17";
-            var match = Regex.Match(json, "\"tag_name\"\\s*:\\s*\"([^\"]+)\"");
-            return match.Success ? match.Groups[1].Value : "v1.5.17";
-        }
-
-        public static KeyValuePair<string, string> ResolveMatchingAsset(DeviceInfo info, string json, string tagName)
-        {
-            if (!string.IsNullOrEmpty(json))
-            {
-                var matches = Regex.Matches(json, "\"name\"\\s*:\\s*\"([^\"]+)\"[^\\}]*?\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"");
-                foreach (Match m in matches)
-                {
-                    if (m.Success && m.Groups.Count >= 3)
+                    string json = client.DownloadString(GITHUB_API_URL);
+                    if (!string.IsNullOrEmpty(json))
                     {
-                        string name = m.Groups[1].Value;
-                        string url = m.Groups[2].Value;
-                        string lower = name.ToLowerInvariant();
+                        var matchTag = Regex.Match(json, "\"tag_name\"\\s*:\\s*\"([^\"]+)\"");
+                        if (matchTag.Success) info.TagName = matchTag.Groups[1].Value.Trim();
 
-                        if (!lower.EndsWith(".exe") || lower.EndsWith(".apk") || lower.Contains("setup"))
-                            continue;
-
-                        if (info.Arch == "ARM64" && lower.Contains("aarch64"))
-                            return new KeyValuePair<string, string>(name, url);
-
-                        if (info.Arch == "x86" && lower.Contains("x86-sciter"))
-                            return new KeyValuePair<string, string>(name, url);
-
-                        if (info.IsWin10OrLater && info.Arch == "x64")
+                        var matches = Regex.Matches(json, "\"name\"\\s*:\\s*\"([^\"]+)\"[^\\}]*?\"browser_download_url\"\\s*:\\s*\"([^\"]+)\"");
+                        foreach (Match m in matches)
                         {
-                            if (lower.Contains("x86_64") && !lower.Contains("win7"))
-                                return new KeyValuePair<string, string>(name, url);
-                        }
-                        else if (!info.IsWin10OrLater)
-                        {
-                            if (info.Arch == "x64" && lower.Contains("win7") && lower.Contains("x86_64"))
-                                return new KeyValuePair<string, string>(name, url);
-                            if (lower.Contains("x86-sciter"))
-                                return new KeyValuePair<string, string>(name, url);
+                            if (m.Success && m.Groups.Count >= 3)
+                            {
+                                info.Assets.Add(new KeyValuePair<string, string>(m.Groups[1].Value, m.Groups[2].Value));
+                            }
                         }
                     }
                 }
             }
+            catch { }
 
-            string tag = !string.IsNullOrEmpty(tagName) ? tagName : "v1.5.17";
+            if (!string.IsNullOrEmpty(info.TagName) && info.Assets.Count > 0)
+                return info;
+
+            // 2. Dự phòng: Truy vấn HTTP 302 Redirect từ GitHub Web (bỏ qua triệt để giới hạn 60 req/h của GitHub API)
+            if (string.IsNullOrEmpty(info.TagName))
+            {
+                try
+                {
+                    var req = (HttpWebRequest)WebRequest.Create(GITHUB_LATEST_WEB_URL);
+                    req.Method = "HEAD";
+                    req.AllowAutoRedirect = false;
+                    req.UserAgent = "Mozilla/5.0";
+                    req.Timeout = 6000;
+                    using (var resp = (HttpWebResponse)req.GetResponse())
+                    {
+                        string loc = resp.GetResponseHeader("Location");
+                        if (!string.IsNullOrEmpty(loc))
+                        {
+                            var m = Regex.Match(loc, @"releases/tag/([^/?#]+)");
+                            if (m.Success) info.TagName = m.Groups[1].Value.Trim();
+                        }
+                    }
+                }
+                catch (WebException wex)
+                {
+                    var resp = wex.Response as HttpWebResponse;
+                    if (resp != null)
+                    {
+                        string loc = resp.GetResponseHeader("Location");
+                        if (!string.IsNullOrEmpty(loc))
+                        {
+                            var m = Regex.Match(loc, @"releases/tag/([^/?#]+)");
+                            if (m.Success) info.TagName = m.Groups[1].Value.Trim();
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // 3. Nếu tìm được tag từ redirect, tải danh sách file thực tế từ expanded_assets/{tag}
+            if (!string.IsNullOrEmpty(info.TagName) && info.Assets.Count == 0)
+            {
+                try
+                {
+                    using (var client = new WebClient())
+                    {
+                        client.Encoding = Encoding.UTF8;
+                        client.Headers.Add("User-Agent", "Mozilla/5.0");
+                        string html = client.DownloadString(GITHUB_EXPANDED_ASSETS_URL + info.TagName);
+                        var matches = Regex.Matches(html, "\"(/ngtrongha/bvdkkh-remote-release/releases/download/[^\"]+/rustdesk-[^\"]+\\.exe)\"");
+                        foreach (Match m in matches)
+                        {
+                            if (m.Success && m.Groups.Count >= 2)
+                            {
+                                string href = m.Groups[1].Value;
+                                string fileName = Path.GetFileName(href);
+                                info.Assets.Add(new KeyValuePair<string, string>(fileName, "https://github.com" + href));
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // Trường hợp offline hoàn toàn hoặc không thể truy cập internet
+            if (string.IsNullOrEmpty(info.TagName))
+            {
+                info.TagName = "v1.5.17";
+            }
+
+            return info;
+        }
+
+        public static KeyValuePair<string, string> ResolveMatchingAsset(DeviceInfo info, ReleaseInfo release)
+        {
+            if (release != null && release.Assets != null && release.Assets.Count > 0)
+            {
+                foreach (var asset in release.Assets)
+                {
+                    string name = asset.Key;
+                    string lower = name.ToLowerInvariant();
+
+                    if (!lower.EndsWith(".exe") || lower.EndsWith(".apk") || lower.Contains("setup"))
+                        continue;
+
+                    if (info.Arch == "ARM64" && lower.Contains("aarch64"))
+                        return asset;
+
+                    if (info.Arch == "x86" && lower.Contains("x86-sciter"))
+                        return asset;
+
+                    if (info.IsWin10OrLater && info.Arch == "x64")
+                    {
+                        if (lower.Contains("x86_64") && !lower.Contains("win7"))
+                            return asset;
+                    }
+                    else if (!info.IsWin10OrLater)
+                    {
+                        if (info.Arch == "x64" && lower.Contains("win7") && lower.Contains("x86_64"))
+                            return asset;
+                        if (lower.Contains("x86-sciter"))
+                            return asset;
+                    }
+                }
+            }
+
+            // Fallback khi không quét được assets
+            string tag = (release != null && !string.IsNullOrEmpty(release.TagName)) ? release.TagName : "v1.5.17";
             string ver = tag.TrimStart('v');
             string fallbackFile = "";
             if (info.Arch == "x86" || !info.IsWin10OrLater)
@@ -284,9 +378,8 @@ namespace BVDKKH.Remote.AutoInstaller
         private static int RunSilentBackgroundInstall()
         {
             var info = DetectEnvironment();
-            string json = FetchLatestReleaseJson();
-            string tag = ExtractTagName(json);
-            var asset = ResolveMatchingAsset(info, json, tag);
+            var rel = FetchLatestRelease();
+            var asset = ResolveMatchingAsset(info, rel);
 
             string tempPath = Path.Combine(Path.GetTempPath(), asset.Key);
             try
@@ -775,9 +868,9 @@ namespace BVDKKH.Remote.AutoInstaller
                         progressBar.Value = 15;
                     }));
 
-                    string json = Program.FetchLatestReleaseJson();
-                    string tag = Program.ExtractTagName(json);
-                    var asset = Program.ResolveMatchingAsset(info, json, tag);
+                    var rel = Program.FetchLatestRelease();
+                    var asset = Program.ResolveMatchingAsset(info, rel);
+                    string tag = rel.TagName;
 
                     this.Invoke(new Action(() =>
                     {
