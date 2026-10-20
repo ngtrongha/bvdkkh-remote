@@ -1745,7 +1745,7 @@ pub fn get_sysinfo() -> serde_json::Value {
     let network_info = json!(interfaces_info).to_string();
 
     // Collect disk info using Disks (skip on mobile to avoid statvfs hangs on Android FUSE/storage mounts)
-    let mut disks_info = Vec::new();
+    let mut disks_info: Vec<Value> = Vec::new();
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         use hbb_common::sysinfo::Disks;
