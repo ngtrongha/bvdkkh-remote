@@ -3017,7 +3017,10 @@ pub async fn get_key(sync: bool) -> String {
         options.remove("key").unwrap_or_default()
     };
     if key.is_empty() {
-        key = config::RS_PUB_KEY.to_owned();
+        let host = Config::get_rendezvous_server();
+        if is_public(&host) {
+            key = config::RS_PUB_KEY.to_owned();
+        }
     }
     key
 }
@@ -3149,11 +3152,14 @@ async fn secure_tcp_impl(conn: &mut Stream, key: &str, log_on_success: bool) -> 
 /// when the server sent something else first, nothing parseable, or closed: `secure_tcp`
 /// tolerates that for servers from before the exchange, `secure_tcp_required` does not.
 async fn key_exchange(conn: &mut Stream, key: &str, log_on_success: bool) -> ResultType<bool> {
+    if key.is_empty() {
+        return Ok(false);
+    }
     let rs_pk = get_rs_pk(key);
     let Some(rs_pk) = rs_pk else {
         bail!("Handshake failed: invalid public key from rendezvous server");
     };
-    match timeout(READ_TIMEOUT, conn.next()).await? {
+    match timeout(std::time::Duration::from_millis(1500), conn.next()).await.unwrap_or(None) {
         Some(Ok(bytes)) => {
             if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
                 match msg_in.union {
@@ -3231,7 +3237,7 @@ async fn secure_tcp_silent(conn: &mut Stream, key: &str) -> ResultType<()> {
 /// `secure_tcp` keeps tolerating such a server, which the paths from before the exchange depend
 /// on. WebSocket is treated as `secure_tcp` treats it, as a transport that is encrypted already.
 pub async fn secure_tcp_required(conn: &mut Stream, key: &str) -> ResultType<()> {
-    if use_ws() {
+    if use_ws() || key.is_empty() {
         return Ok(());
     }
     if key_exchange(conn, key, true).await? {

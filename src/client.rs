@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remoter
+// Author: Nguyễn Trọng Hà
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::clipboard::clipboard_listener::{self, ClipboardEvent};
 use async_trait::async_trait;
@@ -1656,11 +1660,11 @@ impl Client {
         key: &str,
         conn: &mut Stream,
     ) -> ResultType<Option<Vec<u8>>> {
-        let rs_pk = get_rs_pk(if key.is_empty() {
-            config::RS_PUB_KEY
+        let rs_pk = if key.is_empty() {
+            None
         } else {
-            key
-        });
+            get_rs_pk(key)
+        };
         // A WebRTC channel is peer-authenticated only once its DTLS fingerprint is bound to the
         // verified peer identity below. Once a trusted identity IS established, every binding
         // failure fails closed: any peer able to answer WebRTC also signs its fingerprint, so a
