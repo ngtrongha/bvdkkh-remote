@@ -678,6 +678,10 @@ namespace BVDKKH.Remote.AutoInstaller
                 if (logMessage != null) logMessage("Đang kích hoạt dịch vụ chạy ngầm BVĐKKH - Remote...");
                 SetupAndStartWindowsService(targetDir, mainExe);
 
+                // 5.5. Tự động cấu hình toàn diện Windows Firewall (vượt tường lửa, mở cổng TCP/UDP, edge traversal)
+                if (logMessage != null) logMessage("Đang cấu hình Windows Firewall cho phép kết nối từ xa...");
+                ConfigureFirewallRules(targetDir, mainExe);
+
                 // 6. Tạo Shortcut Desktop & Phím tắt
                 CreateShortcuts(mainExe);
 
@@ -822,6 +826,80 @@ namespace BVDKKH.Remote.AutoInstaller
                 }
                 catch { }
             }
+        }
+
+        private static void ConfigureFirewallRules(string targetDir, string mainExe)
+        {
+            try
+            {
+                // 1. Dọn dẹp các rule cũ để tránh xung đột
+                string[] oldRules = new string[]
+                {
+                    "BVĐKKH - Remote",
+                    "BVĐKKH - Remote Service",
+                    "BVDKKH - Remote",
+                    "BVDKKH - Remote Service",
+                    "RustDesk",
+                    "RustDesk Service",
+                    "RustDesk - Wake on LAN (WOL)",
+                    "BVĐKKH - Remote (TCP In)",
+                    "BVĐKKH - Remote (TCP Out)",
+                    "BVĐKKH - Remote (UDP In)",
+                    "BVĐKKH - Remote (UDP Out)",
+                    "BVĐKKH - Remote (WOL In)",
+                    "BVĐKKH - Remote App-In",
+                    "BVĐKKH - Remote App-Out",
+                    "BVĐKKH - Remote Service In",
+                    "BVĐKKH - Remote Service Out"
+                };
+                foreach (var r in oldRules)
+                {
+                    RunCli("netsh.exe", "advfirewall firewall delete rule name=\"" + r + "\"");
+                }
+
+                // 2. Mở theo Chương trình (Program): Cho phép mọi biến thể thực thi trong targetDir (Inbound + Outbound, Mọi Profile)
+                string[] exeNames = new string[] { "BVĐKKH - Remote.exe", "BVDKKH - Remote.exe", "rustdesk.exe" };
+                foreach (var name in exeNames)
+                {
+                    string p = Path.Combine(targetDir, name);
+                    if (File.Exists(p))
+                    {
+                        RunCli("netsh.exe", "advfirewall firewall add rule name=\"BVĐKKH - Remote (" + name + " In)\" dir=in action=allow program=\"" + p + "\" profile=any enable=yes");
+                        RunCli("netsh.exe", "advfirewall firewall add rule name=\"BVĐKKH - Remote (" + name + " Out)\" dir=out action=allow program=\"" + p + "\" profile=any enable=yes");
+                    }
+                }
+
+                // 3. Mở theo Tên Dịch vụ Windows (Windows Service)
+                RunCli("netsh.exe", "advfirewall firewall add rule name=\"BVĐKKH - Remote Service In\" dir=in action=allow service=\"BVĐKKH - Remote\" profile=any enable=yes");
+                RunCli("netsh.exe", "advfirewall firewall add rule name=\"BVĐKKH - Remote Service Out\" dir=out action=allow service=\"BVĐKKH - Remote\" profile=any enable=yes");
+
+                // 4. Mở cổng TCP 21115-21119 (NAT test 21115, Rendezvous 21116, Relay 21117, Web 21118-21119)
+                RunCli("netsh.exe", "advfirewall firewall add rule name=\"BVĐKKH - Remote (TCP In)\" dir=in action=allow protocol=TCP localport=21115-21119 profile=any enable=yes");
+                RunCli("netsh.exe", "advfirewall firewall add rule name=\"BVĐKKH - Remote (TCP Out)\" dir=out action=allow protocol=TCP remoteport=21115-21119 profile=any enable=yes");
+
+                // 5. Mở cổng UDP 21116 (Heartbeat / Keepalive / Rendezvous registration & P2P hole punching)
+                // CỰC KỲ QUAN TRỌNG: edge=yes kích hoạt Edge Traversal (cho phép nhận gói tin đục lỗ NAT từ ngoài vào)
+                RunCli("netsh.exe", "advfirewall firewall add rule name=\"BVĐKKH - Remote (UDP In)\" dir=in action=allow protocol=UDP localport=21116 profile=any edge=yes enable=yes");
+                RunCli("netsh.exe", "advfirewall firewall add rule name=\"BVĐKKH - Remote (UDP In Fallback)\" dir=in action=allow protocol=UDP localport=21116 profile=any enable=yes");
+                RunCli("netsh.exe", "advfirewall firewall add rule name=\"BVĐKKH - Remote (UDP Out)\" dir=out action=allow protocol=UDP remoteport=21116 profile=any enable=yes");
+
+                // 6. Wake on LAN: UDP port 7, 9
+                RunCli("netsh.exe", "advfirewall firewall add rule name=\"BVĐKKH - Remote (WOL In)\" dir=in action=allow protocol=UDP localport=7,9 profile=any enable=yes");
+
+                // 7. PowerShell New-NetFirewallRule (Tương thích WFP cao cấp trên Windows 8/10/11)
+                try
+                {
+                    string psRuleCmd =
+                        "New-NetFirewallRule -DisplayName 'BVĐKKH - Remote App-In' -Direction Inbound -Program '" + mainExe.Replace("'", "''") + "' -Action Allow -Profile Any -Force -ErrorAction SilentlyContinue; " +
+                        "New-NetFirewallRule -DisplayName 'BVĐKKH - Remote App-Out' -Direction Outbound -Program '" + mainExe.Replace("'", "''") + "' -Action Allow -Profile Any -Force -ErrorAction SilentlyContinue; " +
+                        "New-NetFirewallRule -DisplayName 'BVĐKKH - Remote Ports-In' -Direction Inbound -Protocol TCP -LocalPort 21115-21119 -Action Allow -Profile Any -Force -ErrorAction SilentlyContinue; " +
+                        "New-NetFirewallRule -DisplayName 'BVĐKKH - Remote Heartbeat-In' -Direction Inbound -Protocol UDP -LocalPort 21116 -Action Allow -Profile Any -EdgeTraversalPolicy Allow -Force -ErrorAction SilentlyContinue; " +
+                        "New-NetFirewallRule -DisplayName 'BVĐKKH - Remote Heartbeat-Out' -Direction Outbound -Protocol UDP -RemotePort 21116 -Action Allow -Profile Any -Force -ErrorAction SilentlyContinue";
+                    RunCli("powershell.exe", "-NoProfile -NonInteractive -Command \"" + psRuleCmd + "\"");
+                }
+                catch { }
+            }
+            catch { }
         }
 
         private static void CreateShortcuts(string mainExe)
