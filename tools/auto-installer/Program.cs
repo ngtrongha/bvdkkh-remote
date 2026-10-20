@@ -618,10 +618,6 @@ namespace BVDKKH.Remote.AutoInstaller
                 // 1. Thử gọi bộ cài chính trước để unpack
                 if (logMessage != null) logMessage("Đang trích xuất gói cài đặt mới...");
                 RunCli(installerPackagePath, "--version");
-                Thread.Sleep(1500);
-
-                // Dừng lại một lần nữa để tránh file bị khóa sau khi unpack
-                KillRunningInstancesAndServices(null);
 
                 // 2. Xác định thư mục đích trong Program Files
                 string pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
@@ -636,7 +632,7 @@ namespace BVDKKH.Remote.AutoInstaller
                     Directory.CreateDirectory(targetDir);
                 }
 
-                // 3. Tìm thư mục giải nén
+                // 3. Tìm thư mục giải nén và chờ unpacker hoàn tất tối đa 10s
                 string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
                 string userProf = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
                 string unpackDir = Path.Combine(localApp, "rustdesk");
@@ -644,6 +640,15 @@ namespace BVDKKH.Remote.AutoInstaller
                 {
                     unpackDir = Path.Combine(userProf, @"AppData\Local\rustdesk");
                 }
+
+                for (int w = 0; w < 20; w++)
+                {
+                    if (Directory.Exists(unpackDir) && File.Exists(Path.Combine(unpackDir, "rustdesk.exe"))) break;
+                    Thread.Sleep(500);
+                }
+
+                // Dừng lại để tránh file bị khóa sau khi unpack
+                KillRunningInstancesAndServices(null);
 
                 if (Directory.Exists(unpackDir))
                 {
@@ -667,12 +672,27 @@ namespace BVDKKH.Remote.AutoInstaller
                     }
                 }
 
+                // Fallback nếu unpackDir không có file nhưng file tải về chính là binary
+                if (!File.Exists(Path.Combine(targetDir, "BVĐKKH - Remote.exe")) && !File.Exists(Path.Combine(targetDir, "rustdesk.exe")))
+                {
+                    if (File.Exists(installerPackagePath))
+                    {
+                        try { File.Copy(installerPackagePath, Path.Combine(targetDir, "BVĐKKH - Remote.exe"), true); } catch { }
+                        try { File.Copy(installerPackagePath, Path.Combine(targetDir, "BVDKKH - Remote.exe"), true); } catch { }
+                        try { File.Copy(installerPackagePath, Path.Combine(targetDir, "rustdesk.exe"), true); } catch { }
+                    }
+                }
+
                 string mainExe = Path.Combine(targetDir, "BVĐKKH - Remote.exe");
                 if (!File.Exists(mainExe)) mainExe = Path.Combine(targetDir, "BVDKKH - Remote.exe");
                 if (!File.Exists(mainExe)) mainExe = Path.Combine(targetDir, "rustdesk.exe");
 
                 // 4. Đăng ký Registry Uninstall & InstallState
                 RegisterSystemInstallation(targetDir, mainExe);
+
+                // 4.5. Thiết lập file cấu hình kết nối Máy chủ nội bộ 172.16.3.28 trước khi bật service
+                if (logMessage != null) logMessage("Đang cấu hình máy chủ kết nối nội bộ 172.16.3.28...");
+                WriteServerConfig();
 
                 // 5. Khởi tạo và BẮT BUỘC KHỞI ĐỘNG Windows Service
                 if (logMessage != null) logMessage("Đang kích hoạt dịch vụ chạy ngầm BVĐKKH - Remote...");
@@ -909,6 +929,13 @@ namespace BVDKKH.Remote.AutoInstaller
                 string lnkPath = Path.Combine(publicDesktop, "BVĐKKH - Remote.lnk");
                 CreateLnk(mainExe, lnkPath, "BVĐKKH - Remote");
 
+                // Tạo thêm trực tiếp trên Desktop người dùng hiện tại để đảm bảo hiển thị tức thì
+                string userDesktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                if (!string.IsNullOrEmpty(userDesktop) && !userDesktop.Equals(publicDesktop, StringComparison.OrdinalIgnoreCase))
+                {
+                    CreateLnk(mainExe, Path.Combine(userDesktop, "BVĐKKH - Remote.lnk"), "BVĐKKH - Remote");
+                }
+
                 string startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "BVĐKKH - Remote");
                 if (!Directory.Exists(startMenu)) Directory.CreateDirectory(startMenu);
                 CreateLnk(mainExe, Path.Combine(startMenu, "BVĐKKH - Remote.lnk"), "BVĐKKH - Remote");
@@ -931,14 +958,24 @@ namespace BVDKKH.Remote.AutoInstaller
 
                 try
                 {
-                    string userProf = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                    string usersRoot = Path.GetDirectoryName(userProf);
-                    if (!string.IsNullOrEmpty(usersRoot) && Directory.Exists(usersRoot))
+                    string usersRoot = Path.GetPathRoot(Environment.SystemDirectory) + "Users";
+                    if (Directory.Exists(usersRoot))
                     {
-                        foreach (var uDir in Directory.GetDirectories(usersRoot))
+                        string[] uDirs = null;
+                        try { uDirs = Directory.GetDirectories(usersRoot); } catch { }
+                        if (uDirs != null)
                         {
-                            string d = Path.Combine(uDir, "Desktop");
-                            if (Directory.Exists(d) && !desktopDirs.Contains(d)) desktopDirs.Add(d);
+                            foreach (var uDir in uDirs)
+                            {
+                                try
+                                {
+                                    string d = Path.Combine(uDir, "Desktop");
+                                    if (Directory.Exists(d) && !desktopDirs.Contains(d)) desktopDirs.Add(d);
+                                    string od = Path.Combine(uDir, @"OneDrive\Desktop");
+                                    if (Directory.Exists(od) && !desktopDirs.Contains(od)) desktopDirs.Add(od);
+                                }
+                                catch { }
+                            }
                         }
                     }
                 }
@@ -1208,6 +1245,100 @@ namespace BVDKKH.Remote.AutoInstaller
             catch { }
         }
 
+        public static void WriteServerConfig()
+        {
+            try
+            {
+                string configContent =
+                    "rendezvous_server = '172.16.3.28:21116'\r\n" +
+                    "nat_type = 1\r\n" +
+                    "serial = 0\r\n\r\n" +
+                    "[options]\r\n" +
+                    "custom-rendezvous-server = '172.16.3.28'\r\n" +
+                    "relay-server = '172.16.3.28'\r\n" +
+                    "key = ''\r\n" +
+                    "api-server = 'http://172.16.3.28:21114'\r\n" +
+                    "allow-auto-update = 'Y'\r\n" +
+                    "verification-method = 'use-permanent-password'\r\n" +
+                    "approve-mode = 'password'\r\n";
+
+                var configDirs = new System.Collections.Generic.List<string>();
+
+                // 1. ProgramData (SYSTEM Service & Global)
+                string pData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+                if (!string.IsNullOrEmpty(pData))
+                {
+                    configDirs.Add(Path.Combine(pData, @"RustDesk\config"));
+                    configDirs.Add(Path.Combine(pData, @"BVĐKKH - Remote\config"));
+                    configDirs.Add(Path.Combine(pData, @"BVDKKH - Remote\config"));
+                }
+
+                // 2. Windows Service SystemProfile & LocalService
+                string sysRoot = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                if (!string.IsNullOrEmpty(sysRoot))
+                {
+                    configDirs.Add(Path.Combine(sysRoot, @"System32\config\systemprofile\AppData\Roaming\RustDesk\config"));
+                    configDirs.Add(Path.Combine(sysRoot, @"System32\config\systemprofile\AppData\Roaming\BVĐKKH - Remote\config"));
+                    configDirs.Add(Path.Combine(sysRoot, @"System32\config\systemprofile\AppData\Roaming\BVDKKH - Remote\config"));
+                    configDirs.Add(Path.Combine(sysRoot, @"SysWOW64\config\systemprofile\AppData\Roaming\RustDesk\config"));
+                    configDirs.Add(Path.Combine(sysRoot, @"SysWOW64\config\systemprofile\AppData\Roaming\BVĐKKH - Remote\config"));
+                    configDirs.Add(Path.Combine(sysRoot, @"ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config"));
+                    configDirs.Add(Path.Combine(sysRoot, @"ServiceProfiles\LocalService\AppData\Roaming\BVĐKKH - Remote\config"));
+                }
+
+                // 3. User AppData
+                string uApp = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                if (!string.IsNullOrEmpty(uApp))
+                {
+                    configDirs.Add(Path.Combine(uApp, @"RustDesk\config"));
+                    configDirs.Add(Path.Combine(uApp, @"BVĐKKH - Remote\config"));
+                    configDirs.Add(Path.Combine(uApp, @"BVDKKH - Remote\config"));
+                }
+
+                // 4. All User Profiles in C:\Users
+                try
+                {
+                    string usersRoot = Path.GetPathRoot(Environment.SystemDirectory) + "Users";
+                    if (Directory.Exists(usersRoot))
+                    {
+                        string[] uDirs = null;
+                        try { uDirs = Directory.GetDirectories(usersRoot); } catch { }
+                        if (uDirs != null)
+                        {
+                            foreach (var uDir in uDirs)
+                            {
+                                try
+                                {
+                                    configDirs.Add(Path.Combine(uDir, @"AppData\Roaming\RustDesk\config"));
+                                    configDirs.Add(Path.Combine(uDir, @"AppData\Roaming\BVĐKKH - Remote\config"));
+                                    configDirs.Add(Path.Combine(uDir, @"AppData\Roaming\BVDKKH - Remote\config"));
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                string[] fileNames = new string[] { "RustDesk2.toml", "BVĐKKH - Remote2.toml", "BVDKKH - Remote2.toml" };
+
+                foreach (var dir in configDirs)
+                {
+                    try
+                    {
+                        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                        foreach (var fn in fileNames)
+                        {
+                            string filePath = Path.Combine(dir, fn);
+                            File.WriteAllText(filePath, configContent, Encoding.UTF8);
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
         public static void PostInstallConfigureAndSync(Action<string> logMessage)
         {
             try
@@ -1226,6 +1357,11 @@ namespace BVDKKH.Remote.AutoInstaller
                     RunCli(installedExe, "--option verification-method use-permanent-password");
                     RunCli(installedExe, "--option approve-mode password");
                     RunCli(installedExe, "--option disable-change-permanent-password Y");
+                    RunCli(installedExe, "--option custom-rendezvous-server 172.16.3.28");
+                    RunCli(installedExe, "--option relay-server 172.16.3.28");
+                    RunCli(installedExe, "--option key \"\"");
+                    RunCli(installedExe, "--option api-server http://172.16.3.28:21114");
+                    WriteServerConfig();
                 }
 
                 string rdId = GetRustDeskId(installedExe);
