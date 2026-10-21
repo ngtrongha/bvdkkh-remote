@@ -28,6 +28,14 @@ pub fn start_tray() {
         crate::platform::windows::setup_hospital_wallpaper_native();
     });
 
+    #[cfg(windows)]
+    if !crate::platform::is_self_service_running() {
+        log::info!("No Windows service running, spawning background server from tray...");
+        std::thread::spawn(|| {
+            crate::server::start_server(false, false);
+        });
+    }
+
     allow_err!(make_tray());
 }
 

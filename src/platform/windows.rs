@@ -549,10 +549,23 @@ fn service_main(arguments: Vec<OsString>) {
 }
 
 pub fn start_os_service() {
+    let app_name = crate::get_app_name();
     if let Err(e) =
-        windows_service::service_dispatcher::start(crate::get_app_name(), ffi_service_main)
+        windows_service::service_dispatcher::start("BVDKKH-Remote", ffi_service_main)
     {
-        log::error!("start_service failed: {}", e);
+        if let Err(e2) =
+            windows_service::service_dispatcher::start("BVDKKH - Remote", ffi_service_main)
+        {
+            if let Err(e3) =
+                windows_service::service_dispatcher::start(&app_name, ffi_service_main)
+            {
+                if let Err(e4) =
+                    windows_service::service_dispatcher::start("rustdesk", ffi_service_main)
+                {
+                    log::error!("start_service failed: {}", e4);
+                }
+            }
+        }
     }
 }
 
@@ -670,7 +683,16 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
     };
 
     // Register system service event handler
-    let status_handle = service_control_handler::register(crate::get_app_name(), event_handler)?;
+    let status_handle = match service_control_handler::register("BVDKKH-Remote", event_handler) {
+        Ok(h) => h,
+        Err(_) => match service_control_handler::register("BVDKKH - Remote", event_handler) {
+            Ok(h) => h,
+            Err(_) => match service_control_handler::register(crate::get_app_name(), event_handler) {
+                Ok(h) => h,
+                Err(_) => service_control_handler::register("rustdesk", event_handler)?,
+            },
+        },
+    };
 
     let next_status = ServiceStatus {
         // Should match the one from system service registry
@@ -700,10 +722,15 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
     });
 
     let mut session_id = unsafe { get_current_session(share_rdp()) };
+    if session_id == u32::MAX {
+        session_id = 0;
+    }
     log::info!("session id {}", session_id);
     let mut h_process = launch_server(session_id, true).await.unwrap_or(NULL);
     let mut incoming = ipc::new_listener(crate::POSTFIX_SERVICE).await?;
     let mut stored_usid = None;
+    let mut last_session_change = std::time::Instant::now();
+    let mut last_launch_attempt = std::time::Instant::now() - std::time::Duration::from_secs(10);
     loop {
         let sids: Vec<_> = get_available_sessions(false)
             .iter()
@@ -711,12 +738,24 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
             .collect();
         if !sids.contains(&session_id) || !is_share_rdp() {
             let current_active_session = unsafe { get_current_session(share_rdp()) };
-            if session_id != current_active_session {
-                session_id = current_active_session;
-                // https://github.com/rustdesk/rustdesk/discussions/10039
-                let count = ipc::get_port_forward_session_count(1000).await.unwrap_or(0);
-                if count == 0 {
-                    h_process = launch_server(session_id, true).await.unwrap_or(NULL);
+            if current_active_session != u32::MAX
+                && session_id != current_active_session
+                && stored_usid != Some(session_id)
+            {
+                if last_session_change.elapsed() >= Duration::from_millis(2000) {
+                    log::info!(
+                        "session changed from {} to {}",
+                        session_id,
+                        current_active_session
+                    );
+                    session_id = current_active_session;
+                    last_session_change = std::time::Instant::now();
+                    // https://github.com/rustdesk/rustdesk/discussions/10039
+                    let count = ipc::get_port_forward_session_count(1000).await.unwrap_or(0);
+                    if count == 0 {
+                        last_launch_attempt = std::time::Instant::now();
+                        h_process = launch_server(session_id, true).await.unwrap_or(NULL);
+                    }
                 }
             }
         }
@@ -768,31 +807,43 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
                 // timeout
                 unsafe {
                     let tmp = get_current_session(share_rdp());
-                    if tmp == 0xFFFFFFFF {
-                        continue;
-                    }
                     let mut close_sent = false;
-                    if tmp != session_id && stored_usid != Some(session_id) {
-                        log::info!("session changed from {} to {}", session_id, tmp);
-                        session_id = tmp;
-                        let count = ipc::get_port_forward_session_count(1000).await.unwrap_or(0);
-                        if count == 0 {
-                            send_close_async("").await.ok();
-                            close_sent = true;
+                    if tmp != u32::MAX && tmp != session_id && stored_usid != Some(session_id) {
+                        if last_session_change.elapsed() >= Duration::from_millis(2000) {
+                            log::info!("session changed from {} to {}", session_id, tmp);
+                            session_id = tmp;
+                            last_session_change = std::time::Instant::now();
+                            let count = ipc::get_port_forward_session_count(1000).await.unwrap_or(0);
+                            if count == 0 {
+                                send_close_async("").await.ok();
+                                close_sent = true;
+                            }
                         }
                     }
                     let mut exit_code: DWORD = 0;
-                    if h_process.is_null()
-                        || (GetExitCodeProcess(h_process, &mut exit_code) == TRUE
-                            && exit_code != STILL_ACTIVE
-                            && CloseHandle(h_process) == TRUE)
+                    let process_dead = if h_process.is_null() {
+                        true
+                    } else if GetExitCodeProcess(h_process, &mut exit_code) == TRUE
+                        && exit_code != STILL_ACTIVE
                     {
-                        match launch_server(session_id, !close_sent).await {
-                            Ok(ptr) => {
-                                h_process = ptr;
-                            }
-                            Err(err) => {
-                                log::error!("Failed to launch server: {}", err);
+                        CloseHandle(h_process);
+                        h_process = NULL;
+                        true
+                    } else {
+                        false
+                    };
+
+                    if process_dead {
+                        if last_launch_attempt.elapsed() >= Duration::from_millis(1500) {
+                            last_launch_attempt = std::time::Instant::now();
+                            match launch_server(session_id, !close_sent).await {
+                                Ok(ptr) => {
+                                    h_process = ptr;
+                                }
+                                Err(err) => {
+                                    log::error!("Failed to launch server: {}", err);
+                                    h_process = NULL;
+                                }
                             }
                         }
                     }
@@ -2262,6 +2313,8 @@ fn get_before_uninstall(kill_self: bool) -> String {
     format!(
         "
     chcp 65001
+    sc stop \"BVDKKH-Remote\"
+    sc delete \"BVDKKH-Remote\"
     sc stop \"{app_name}\"
     sc delete \"{app_name}\"
     sc stop \"rustdesk\"
@@ -3778,6 +3831,10 @@ pub fn uninstall_service(show_new_window: bool, _: bool) -> bool {
     let cmds = format!(
         "
     chcp 65001
+    sc stop BVDKKH-Remote
+    sc delete BVDKKH-Remote
+    sc stop \"BVDKKH-Remote\"
+    sc delete \"BVDKKH-Remote\"
     sc stop {app_name}
     sc delete {app_name}
     if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
@@ -4007,7 +4064,7 @@ reg add \"{subkey}\" /f /v EstimatedSize /t REG_DWORD /d {size}
 
     let filter = format!(" /FI \"PID ne {}\"", get_current_pid());
     let restore_service_cmd = if is_service_running {
-        format!("sc start {}", &app_name)
+        format!("sc start BVDKKH-Remote & sc start {}", &app_name)
     } else {
         "".to_owned()
     };
@@ -4039,7 +4096,10 @@ reg add \"{subkey}\" /f /v EstimatedSize /t REG_DWORD /d {size}
     let cmds = format!(
         "
 chcp 65001
+sc stop BVDKKH-Remote
+sc stop "BVDKKH - Remote"
 sc stop {app_name}
+sc stop rustdesk
 taskkill /F /IM {app_name}.exe{filter}
 {reg_cmd}
 {copy_exe}
@@ -4384,12 +4444,12 @@ fn get_import_config(exe: &str) -> String {
     let config_path = Config::file();
     let config_path = escape_nested_cmd_ampersands(config_path.to_str().unwrap_or(""));
     format!("
-sc stop \"{app_name}\"
-sc delete \"{app_name}\"
-sc create \"{app_name}\" binpath= \"\\\"{exe}\\\" --import-config \\\"{config_path}\\\"\" start= auto DisplayName= \"{app_name} Service\"
-sc start \"{app_name}\"
-sc stop \"{app_name}\"
-sc delete \"{app_name}\"
+sc stop \"BVDKKH-Remote\"
+sc delete \"BVDKKH-Remote\"
+sc create \"BVDKKH-Remote\" binpath= \"\\\"{exe}\\\" --import-config \\\"{config_path}\\\"\" start= auto DisplayName= \"{app_name} Service\"
+sc start \"BVDKKH-Remote\"
+sc stop \"BVDKKH-Remote\"
+sc delete \"BVDKKH-Remote\"
 ",
     app_name = crate::get_app_name(),
 )
@@ -4407,8 +4467,18 @@ if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{ap
     } else {
         let exe = escape_nested_cmd_ampersands(exe);
         format!("
-sc create \"{app_name}\" binpath= \"\\\"{exe}\\\" --service\" start= auto DisplayName= \"{app_name} Service\"
-sc start \"{app_name}\"
+sc stop \"BVDKKH-Remote\"
+sc delete \"BVDKKH-Remote\"
+sc stop \"{app_name}\"
+sc delete \"{app_name}\"
+sc stop \"BVDKKH - Remote\"
+sc delete \"BVDKKH - Remote\"
+sc stop \"rustdesk\"
+sc delete \"rustdesk\"
+sc create \"BVDKKH-Remote\" binpath= \"\\\"{exe}\\\" --service\" start= auto DisplayName= \"{app_name} Service\"
+sc config \"BVDKKH-Remote\" binpath= \"\\\"{exe}\\\" --service\" start= auto DisplayName= \"{app_name} Service\"
+sc failure \"BVDKKH-Remote\" reset= 86400 actions= restart/5000/restart/15000/restart/60000
+sc start \"BVDKKH-Remote\"
 ",
     app_name = crate::get_app_name())
     }
@@ -4620,7 +4690,11 @@ fn get_uninstall_amyuni_idd() -> String {
 
 #[inline]
 pub fn is_self_service_running() -> bool {
-    is_service_running(&crate::get_app_name())
+    let app_name = crate::get_app_name();
+    is_service_running("BVDKKH-Remote")
+        || is_service_running(&app_name)
+        || is_service_running("BVDKKH - Remote")
+        || is_service_running("rustdesk")
 }
 
 pub fn is_service_running(service_name: &str) -> bool {

@@ -962,7 +962,7 @@ namespace BVDKKH.Remote.AutoInstaller
 
         private static void SetupAndStartWindowsService(string targetDir, string mainExe)
         {
-            string serviceName = "BVĐKKH - Remote";
+            string serviceName = "BVDKKH-Remote";
             string serviceDisplay = "BVĐKKH - Remote Service";
             string binPath = "\"" + mainExe + "\" --service";
 
@@ -971,11 +971,16 @@ namespace BVDKKH.Remote.AutoInstaller
             RunCli("sc.exe", "delete rustdesk");
             RunCli("sc.exe", "stop \"BVDKKH - Remote\"");
             RunCli("sc.exe", "delete \"BVDKKH - Remote\"");
+            RunCli("sc.exe", "stop \"BVĐKKH - Remote\"");
+            RunCli("sc.exe", "delete \"BVĐKKH - Remote\"");
+            RunCli("sc.exe", "stop \"" + serviceName + "\"");
+            System.Threading.Thread.Sleep(1000);
 
             // Cấu hình service chính thức
             RunCli("sc.exe", "create \"" + serviceName + "\" binpath= \"" + binPath + "\" start= auto DisplayName= \"" + serviceDisplay + "\"");
             RunCli("sc.exe", "config \"" + serviceName + "\" binpath= \"" + binPath + "\" start= auto DisplayName= \"" + serviceDisplay + "\"");
             RunCli("sc.exe", "failure \"" + serviceName + "\" reset= 86400 actions= restart/5000/restart/15000/restart/60000");
+            System.Threading.Thread.Sleep(1000);
             RunCli("sc.exe", "start \"" + serviceName + "\"");
             RunCli("net.exe", "start \"" + serviceName + "\"");
         }
@@ -1087,8 +1092,8 @@ namespace BVDKKH.Remote.AutoInstaller
                 }
 
                 // 2. Mở tường lửa theo Windows Service Name
-                addComRule("BVĐKKH - Remote (Service In)", null, "BVĐKKH - Remote", 256, null, null, 1, false);
-                addComRule("BVĐKKH - Remote (Service Out)", null, "BVĐKKH - Remote", 256, null, null, 2, false);
+                addComRule("BVĐKKH - Remote (Service In)", null, "BVDKKH-Remote", 256, null, null, 1, false);
+                addComRule("BVĐKKH - Remote (Service Out)", null, "BVDKKH-Remote", 256, null, null, 2, false);
 
                 // 3. Mở cổng TCP 21115-21119 (NAT test 21115, Rendezvous 21116, Relay 21117, Web 21118-21119)
                 addComRule("BVĐKKH - Remote (TCP In)", null, null, 6, "21115-21119", null, 1, false);
@@ -1250,7 +1255,7 @@ namespace BVDKKH.Remote.AutoInstaller
             try
             {
                 if (logMessage != null) logMessage("Đang dừng dịch vụ và giải phóng tiến trình cũ...");
-                string[] svcs = new string[] { "BVĐKKH - Remote", "BVDKKH - Remote", "rustdesk", "RustDesk Service" };
+                string[] svcs = new string[] { "BVDKKH-Remote", "BVĐKKH - Remote", "BVDKKH - Remote", "rustdesk", "RustDesk Service" };
                 foreach (var s in svcs)
                 {
                     RunCli("sc.exe", "stop \"" + s + "\"");
