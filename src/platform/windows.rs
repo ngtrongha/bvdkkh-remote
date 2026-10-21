@@ -4097,7 +4097,7 @@ reg add \"{subkey}\" /f /v EstimatedSize /t REG_DWORD /d {size}
         "
 chcp 65001
 sc stop BVDKKH-Remote
-sc stop "BVDKKH - Remote"
+sc stop \"BVDKKH - Remote\"
 sc stop {app_name}
 sc stop rustdesk
 taskkill /F /IM {app_name}.exe{filter}
