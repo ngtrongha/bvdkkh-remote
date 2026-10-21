@@ -8,6 +8,7 @@ updated: 2026-07-12
 
 ## Git & Release Workflow
 - Mọi tác vụ code/sửa lỗi phải thực hiện trực tiếp trên nhánh `main`. Nhánh làm việc mặc định là `main`.
+- **Đồng bộ Upstream & Submodule `hbb_common`**: Khi đồng bộ từ RustDesk upstream, bắt buộc kiểm tra và đồng bộ cả fork `ngtrongha/hbb_common` (đảm bảo dependencies trong `hbb_common/Cargo.toml` khớp với root `Cargo.lock` để tránh lỗi build `--locked`), đồng thời bảo toàn cấu hình BVĐKKH (server `172.16.3.28`, keys).
 - **Cổng xác nhận bắt buộc (Confirmation Gate)**: Khi hoàn thành tính năng trên `main`, AI **bắt buộc phải hỏi xác nhận người dùng** trước khi merge.
 - Khi người dùng xác nhận:
   1. Merge sang nhánh Windows 7 (`win7-lts`): Chỉ build Windows 7 (x86 & x64), bảo toàn cấu hình build riêng của Win7.

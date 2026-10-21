@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
-// Project: BVĐKKH - Remoter
+// Project: BVĐKKH - Remote
 // Author: Nguyễn Trọng Hà
 
 import 'dart:async';
@@ -1296,7 +1296,7 @@ void showAbout(OverlayDialogManager dialogManager) async {
           ),
           const SizedBox(height: 4),
           const Text(
-            'Phần mềm điều khiển máy tính từ xa nội bộ (BVĐKKH - Remoter)',
+            'Phần mềm điều khiển máy tính từ xa nội bộ (BVĐKKH - Remote)',
             style: TextStyle(fontSize: 12),
           ),
           const Divider(height: 16),
