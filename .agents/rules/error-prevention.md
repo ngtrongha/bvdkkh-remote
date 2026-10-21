@@ -196,6 +196,85 @@ Mỗi sự cố phải được ghi chép đầy đủ 4 trường thông tin:
 
 ---
 
+### 🔴 LỖI 08: Client báo "Chưa sẵn sàng" / "Máy chủ: Chưa kết nối" do thiếu TOML nội bộ và Icon trắng do lỗi quét User Profile
+
+- **Ngày ghi nhận**: 2026-10-20
+- **Phạm vi ảnh hưởng**: Windows 7 / 10 / 11, Auto Installer (`BVDKKH-Remote-AutoInstall.exe`), Script sửa lỗi nhanh (`Fix-BVDKKH-Remote.bat`).
+- **Triệu chứng (Symptom)**:
+  - Bản Sciter/Portable khi chạy thủ công thì hiện "Ready" (chấm xanh), nhưng bản cài đặt chính thức (Flutter) mở lên luôn báo:
+    - `Máy chủ: Chưa kết nối` (chấm đỏ)
+    - `Dịch vụ: Chưa sẵn sàng` (chấm đỏ)
+    - `Not ready. Please check your connection`
+  - Trên màn hình Desktop xuất hiện shortcut `BVDKKH - Remote` (hoặc `BVĐKKH - Remote`) với biểu tượng tờ giấy trắng (icon gãy).
+- **Nguyên nhân gốc rễ (Root Cause)**:
+  1. **Thiếu file cấu hình server nội bộ (TOML)**: Dịch vụ Windows chạy dưới quyền `LocalSystem` hoặc `LocalService`. Khi không tìm thấy file `RustDesk2.toml` / `BVĐKKH - Remote2.toml` trong `System32\config\systemprofile\AppData\Roaming\...` và `ProgramData`, tiến trình background `--server` không tải được thiết lập `custom-rendezvous-server = '172.16.3.28'` và `key = ''`. Kết quả là trạng thái trực tuyến trả về `<= 0`, client Flutter đọc qua IPC nhận `status_num = -1` (Chưa sẵn sàng).
+  2. **Icon trắng do lỗi quét User Profile**: Khi `CleanOldShortcuts()` duyệt `C:\Users`, lệnh `Directory.GetDirectories(@"C:\Users")` gặp junction/thư mục hạn chế quyền (như `All Users`, `Default User`) văng ngoại lệ `UnauthorizedAccessException`. Do không bọc `try/catch` từng thư mục, toàn bộ vòng lặp bị hủy sớm, khiến shortcut cũ trên Desktop cá nhân của người dùng không bị xóa.
+  3. **Race condition khi unpack**: Bộ cài tự động kill tiến trình sau 1.5s trong khi gói nén 70MB chưa kịp giải nén xong trên các máy ổ cứng HDD/cấu hình yếu.
+- **Giải pháp triệt để (Resolution)**:
+  - Trong `Program.cs`:
+    - Thêm hàm `WriteServerConfig()`: Ghi đồng loạt file cấu hình `RustDesk2.toml`, `BVĐKKH - Remote2.toml`, `BVDKKH - Remote2.toml` chứa `custom-rendezvous-server = '172.16.3.28'`, `relay-server = '172.16.3.28'`, `key = ''`, `api-server = 'http://172.16.3.28:21114'` vào: `ProgramData`, `systemprofile`, `SysWOW64\systemprofile`, `LocalService`, User `APPDATA`, và tất cả user profiles trong `C:\Users`.
+    - Chờ unpack tối đa 10s (`File.Exists`) trước khi dừng tiến trình.
+    - Duyệt an toàn từng thư mục người dùng với `try/catch` độc lập và quét thêm cả `OneDrive\Desktop`.
+    - Tạo song song shortcut tại cả `CommonDesktopDirectory` và `Desktop` cá nhân với `IconLocation = mainExe + ",0"`.
+  - Tạo công cụ sửa chữa tức thì `Fix-BVDKKH-Remote.bat` cho IT chạy 1-click tại máy trạm.
+- **Quy tắc phòng ngừa (Prevention Rule)**:
+  - Khi triển khai môi trường máy chủ nội bộ, **BẮT BUỘC PHẢI GHI FILE CẤU HÌNH SERVER NỘI BỘ (TOML)** vào cả phạm vi System Service (`systemprofile`, `ProgramData`) và User GUI (`APPDATA`) trước khi kích hoạt dịch vụ.
+  - Vòng lặp quét profile người dùng trên Windows bắt buộc phải dùng per-directory `try/catch` để tránh bị dừng sớm bởi các junction link.
+
+---
+
+### 🔴 LỖI 09: Xuất hiện 2 thư mục trùng lặp trong Program Files (BVDKKH và BVĐKKH) và 2 file .exe trong thư mục cài đặt
+
+- **Ngày ghi nhận**: 2026-10-20
+- **Phạm vi ảnh hưởng**: Windows 7 / 10 / 11, Auto Installer (`BVDKKH-Remote-AutoInstall.exe`), Script cài đặt (`cai_dat.bat`, `install_official.ps1`), Script sửa lỗi (`Fix-BVDKKH-Remote.bat`).
+- **Triệu chứng (Symptom)**:
+  - Trong `C:\Program Files` (hoặc `Program Files (x86)`) xuất hiện song song 2 thư mục: `BVDKKH - Remote` (không dấu ASCII) và `BVĐKKH - Remote` (có dấu Unicode).
+  - Bên trong thư mục cài đặt xuất hiện đồng thời cả 2 tệp thực thi trùng lặp: `BVDKKH - Remote.exe` và `BVĐKKH - Remote.exe` (kèm `rustdesk.exe`).
+- **Nguyên nhân gốc rễ (Root Cause)**:
+  1. Mã nguồn RustDesk cốt lõi (`src/common.rs`) định nghĩa `crate::get_app_name()` trả về `"BVĐKKH - Remote"`. Do đó tiến trình background và installer nội bộ của RustDesk trỏ tới `C:\Program Files\BVĐKKH - Remote`.
+  2. Trong Auto Installer `Program.cs` và `cai_dat.bat`, biến `targetDir` trước đây lại được gán là `Path.Combine(pf, "BVDKKH - Remote")` (không dấu ASCII).
+  3. Để "phòng ngừa gãy đường dẫn", các đoạn mã copy tệp đã sao chép `sourceExe` thành cả `BVĐKKH - Remote.exe` và `BVDKKH - Remote.exe`, đồng thời copy chéo sang cả thư mục `BVĐKKH - Remote`.
+  4. Hậu quả là trên máy người dùng tồn tại đồng thời cả 2 thư mục trong `Program Files` và 2 file thực thi trùng lặp.
+- **Giải pháp triệt để (Resolution)**:
+  - Chuẩn hóa duy nhất 1 thư mục cài đặt chính thức: `C:\Program Files\BVĐKKH - Remote` (Unicode khớp với RustDesk core).
+  - Chuẩn hóa duy nhất 1 tệp thực thi thương hiệu chính thức: `BVĐKKH - Remote.exe` (và `rustdesk.exe` cho cơ chế kỹ thuật nội bộ).
+  - Trong `Program.cs`:
+    - Thêm hàm `MigrateAndCleanLegacyDirectories()`: Di chuyển các file cấu hình từ thư mục cũ `BVDKKH - Remote` sang `BVĐKKH - Remote`, sau đó xóa sạch thư mục cũ `BVDKKH - Remote`.
+    - Xóa tệp trùng lặp `BVDKKH - Remote.exe` nếu tồn tại trong `targetDir`.
+    - Dọn dẹp subkey Registry Uninstall cũ `SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BVDKKH - Remote` và Run key cũ.
+  - Đồng bộ cập nhật cơ chế xóa thư mục và tệp trùng lặp này vào `Fix-BVDKKH-Remote.bat`, `cai_dat.bat` và `install_official.ps1`.
+- **Quy tắc phòng ngừa (Prevention Rule)**:
+  - **TUYỆT ĐỐI KHÔNG** sao chép song song 2 file thực thi hay duy trì 2 thư mục mang cùng thương hiệu ở dạng có dấu và không dấu (ASCII và Unicode). Luôn chọn duy nhất một tên chuẩn đồng bộ với `crate::get_app_name()` (`BVĐKKH - Remote`). Mọi bản cũ khác tên phải được tự động chuyển dữ liệu (migrate) và xóa sạch thư mục cũ.
+
+---
+
+
+---
+
+### 🔴 LỖI 10: Auto Installer báo lỗi "The specified executable is not a valid application for this OS platform" do lệch kiến trúc OS 32-bit hoặc tệp tải về bị hỏng/chặn bởi tường lửa
+
+- **Ngày ghi nhận**: 2026-10-21
+- **Phạm vi ảnh hưởng**: Windows 7 / 8 / 10 / 11 (x86 và x64), Auto Installer (`BVDKKH-Remote-AutoInstall.exe`).
+- **Triệu chứng (Symptom)**:
+  - Khi chạy cài đặt tự động, thanh tiến trình dừng lại ở khoảng 85% và báo lỗi đỏ:
+    `✕ Quá trình cài đặt gián đoạn`
+    `Lỗi: The specified executable is not a valid application for this OS platform.`
+- **Nguyên nhân gốc rễ (Root Cause)**:
+  1. **Lệch kiến trúc Hệ điều hành (OS) và Phần cứng (CPU)**: Hàm `GetNativeSystemInfo` nhận diện kiến trúc CPU vật lý (chip Intel/AMD 64-bit trả về `PROCESSOR_ARCHITECTURE_AMD64`). Tuy nhiên, nhiều máy trạm bệnh viện cài đặt bản Windows 10 32-bit (x86) để tương thích máy móc/phần mềm cũ. Trình cài đặt nhận định nhầm hệ điều hành là 64-bit nên tải gói `rustdesk-1.5.17-x86_64.exe`. Khi `Process.Start` gọi file thực thi 64-bit trên Windows 32-bit, Windows trả về lỗi Win32 mã 193 (`ERROR_BAD_EXE_FORMAT` -> .NET dịch thành `The specified executable is not a valid application for this OS platform`).
+  2. **Tập tin tải về bị hỏng hoặc tường lửa mạng chặn tải .exe**: Mạng bệnh viện (Fortinet/Sophos/proxy) hoặc Antivirus chặn tải file `.exe` từ GitHub Releases, khiến file lưu trong `%TEMP%` là trang HTML báo lỗi mạng hoặc file 0 KB. Khi thực thi, Windows cũng trả về lỗi mã 193.
+  3. **Thiếu cơ chế ưu tiên gói cục bộ**: Bản cũ không kiểm tra thư mục hiện hành hoặc thư mục `src\` có sẵn gói offline mà chuyển thẳng ra mạng.
+- **Giải pháp triệt để (Resolution)**:
+  - Trong `tools/auto-installer/Program.cs`:
+    - `DetectEnvironment()`: Bổ sung ràng buộc `if (!Environment.Is64BitOperatingSystem) info.Arch = "x86";`. Dù CPU là gì, nếu Windows là 32-bit thì bắt buộc chỉ định `Arch = "x86"`.
+    - Thêm hàm `IsValidExecutable(filePath, out errorMessage)`: Kiểm tra file tồn tại, dung lượng >= 2MB (loại trừ file rỗng và trang lỗi HTML), và đọc 2 byte đầu tiên phải là chữ ký Windows PE `MZ` (`0x4D`, `0x5A`).
+    - Thêm hàm `ResolveLocalInstallerFile()`: Ưu tiên tìm kiếm các gói cài đặt có sẵn trong thư mục của Auto-Installer và thư mục con `src\` trước khi kết nối mạng LAN hoặc Internet.
+    - Cập nhật `ResolveMatchingAsset()`: Với `info.Arch == "x86"`, chỉ chọn gói `x86-sciter` và fallback về `rustdesk-{ver}-x86-sciter.exe`.
+    - Kiểm tra `IsValidExecutable()` trước khi thực thi tại GUI, Silent và `PerformCompleteInstall()`.
+    - Cập nhật `build.bat` đồng bộ sao chép sang cả `CaiDat\BVDKKH-Remote-AutoInstall.exe`.
+- **Quy tắc phòng ngừa (Prevention Rule)**:
+  - Luôn kiểm tra `Environment.Is64BitOperatingSystem` để xác định chính xác năng lực thực thi nhị phân của OS, không dựa thuần túy vào thông số CPU từ `GetNativeSystemInfo`.
+  - Luôn kiểm tra tính toàn vẹn nhị phân (kích thước tối thiểu và header `MZ`) của mọi file tải về hoặc giải nén trước khi gọi `Process.Start`.
+
 ## 🔄 Quy trình tự động cập nhật khi gặp lỗi mới
 
 Khi gặp bất kỳ lỗi mới nào trong quá trình phát triển:

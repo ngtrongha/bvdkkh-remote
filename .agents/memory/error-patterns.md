@@ -45,3 +45,16 @@ Tài liệu ghi nhớ các dạng lỗi phổ biến, triệu chứng nhận bi�
   - *Nguyên nhân*: Bộ cài gọi tiến trình con `powershell.exe -Command New-NetFirewallRule ...` hoặc `netsh advfirewall` để mở port và bật EdgeTraversal. Defender AMSI và Machine Learning nhận diện việc gọi PowerShell ẩn để sửa tường lửa là hành vi mã độc né tránh phòng thủ.
   - *Giải pháp*: Loại bỏ triệt để việc spawn `powershell.exe`/`netsh.exe`; chuyển 100% sang sử dụng **Windows Firewall COM API (`HNetCfg.FwPolicy2`)** nội bộ trong tiến trình; không sinh tiến trình lạ, không bị AMSI quét lệnh.
   - *Quy tắc*: Chi tiết tại [`.agents/rules/error-prevention.md`](file:///c:/Work/bvdkkh-remote/.agents/rules/error-prevention.md#lỗi-07).
+- **Lỗi 08: Client báo "Chưa sẵn sàng" / "Máy chủ: Chưa kết nối" và Icon trắng**:
+  - *Nguyên nhân*: Thiếu file cấu hình `RustDesk2.toml` trong `systemprofile` và `ProgramData` khiến dịch vụ chạy ngầm không trỏ tới máy chủ nội bộ `172.16.3.28:21116` với `key=""`; vòng lặp quét Desktop văng lỗi quyền khi duyệt `C:\Users`.
+  - *Giải pháp*: Thêm hàm `WriteServerConfig()` ghi đồng loạt TOML nội bộ cho mọi profile hệ thống; quét thư mục `C:\Users` an toàn với per-directory try/catch; tạo bộ công cụ `Fix-BVDKKH-Remote.bat` sửa chữa tức thì.
+  - *Quy tắc*: Chi tiết tại [`.agents/rules/error-prevention.md`](file:///c:/Work/bvdkkh-remote/.agents/rules/error-prevention.md#lỗi-08).
+- **Lỗi 09: Trùng lặp 2 thư mục Program Files (BVDKKH và BVĐKKH) và 2 file .exe trong thư mục**:
+  - *Nguyên nhân*: Thư mục cài đặt bị phân mảnh giữa `BVDKKH - Remote` (ASCII) và `BVĐKKH - Remote` (Unicode `get_app_name()`); script sao chép đồng thời cả `BVDKKH - Remote.exe` và `BVĐKKH - Remote.exe` để phòng hờ gãy link dẫn đến xuất hiện cả 2 thư mục và 2 file thực thi.
+  - *Giải pháp*: Chuẩn hóa duy nhất 1 thư mục `C:\Program Files\BVĐKKH - Remote` và 1 file thương hiệu `BVĐKKH - Remote.exe`; tự động chuyển dữ liệu (migration) và xóa sạch thư mục cũ `BVDKKH - Remote` cũng như xóa file `BVDKKH - Remote.exe` trong `Program.cs`, `Fix-BVDKKH-Remote.bat`, `cai_dat.bat` và `install_official.ps1`.
+  - *Quy tắc*: Chi tiết tại [`.agents/rules/error-prevention.md`](file:///c:/Work/bvdkkh-remote/.agents/rules/error-prevention.md#lỗi-09).
+
+- **Lỗi 10: Auto Installer báo lỗi "The specified executable is not a valid application for this OS platform"**:
+  - *Nguyên nhân*: Nhận diện nhầm Windows 10/11 32-bit (x86) thành 64-bit do CPU là x64; hoặc mạng chặn tải file `.exe` trả về file HTML/0KB; gọi `Process.Start` sinh lỗi Win32 mã 193 `ERROR_BAD_EXE_FORMAT`.
+  - *Giải pháp*: Buộc `info.Arch = "x86"` khi `!Environment.Is64BitOperatingSystem`; thêm hàm `IsValidExecutable()` xác thực dung lượng >= 2MB và header `MZ`; bổ sung `ResolveLocalInstallerFile()` ưu tiên lấy gói cục bộ trong thư mục hoặc `src/`.
+  - *Quy tắc*: Chi tiết tại [`.agents/rules/error-prevention.md`](file:///c:/Work/bvdkkh-remote/.agents/rules/error-prevention.md#lỗi-10).
