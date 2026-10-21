@@ -19,6 +19,7 @@ echo [2/2] Dang bien dich BVDKKH-Remote-AutoInstall.exe (Che do do hoa GUI - Win
 if %ERRORLEVEL% equ 0 (
     copy /y BVDKKH-Remote-AutoInstall.exe ..\..\BVDKKH-Remote-AutoInstall.exe >nul
     copy /y BVDKKH-Remote-AutoInstall.exe ..\..\..\BVDKKH-Remote-AutoInstall.exe >nul
+    copy /y BVDKKH-Remote-AutoInstall.exe ..\..\..\CaiDat\BVDKKH-Remote-AutoInstall.exe >nul
     echo.
     echo =======================================================
     echo   [SUCCESS] Da tao thanh cong file GUI:

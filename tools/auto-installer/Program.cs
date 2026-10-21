@@ -165,26 +165,37 @@ namespace BVDKKH.Remote.AutoInstaller
                 Console.WriteLine("Hệ điều hành: " + info.OsName + " (" + info.Arch + ")");
                 Console.WriteLine("Đường dẫn share LAN mặc định: " + LanSharePath);
 
+                string localFile = ResolveLocalInstallerFile(info);
                 string lanFile = null;
-                if (ConnectLanShare(LanSharePath, LanShareUsername, LanSharePassword))
+
+                if (!string.IsNullOrEmpty(localFile))
+                {
+                    Console.WriteLine("Trạng thái nguồn: TÌM THẤY GÓI CÀI ĐẶT CỤC BỘ / OFFLINE");
+                    Console.WriteLine("Tập tin cài đặt:  " + Path.GetFileName(localFile));
+                    Console.WriteLine("Đường dẫn tập tin:" + localFile);
+                }
+                else if (ConnectLanShare(LanSharePath, LanShareUsername, LanSharePassword))
                 {
                     lanFile = ResolveLanInstallerFile(info, LanSharePath);
                 }
 
-                if (!string.IsNullOrEmpty(lanFile))
+                if (string.IsNullOrEmpty(localFile))
                 {
-                    Console.WriteLine("Trạng thái nguồn: KẾT NỐI MÁY CHỦ NỘI BỘ LAN THÀNH CÔNG");
-                    Console.WriteLine("Tập tin cài đặt:  " + Path.GetFileName(lanFile));
-                    Console.WriteLine("Đường dẫn tập tin:" + lanFile);
-                }
-                else
-                {
-                    Console.WriteLine("Trạng thái nguồn: Không tìm thấy gói LAN, chuyển dự phòng GitHub");
-                    var rel = FetchLatestRelease();
-                    var asset = ResolveMatchingAsset(info, rel);
-                    Console.WriteLine("Phiên bản GitHub: " + rel.TagName);
-                    Console.WriteLine("Gói tải:         " + asset.Key);
-                    Console.WriteLine("Link:            " + asset.Value);
+                    if (!string.IsNullOrEmpty(lanFile))
+                    {
+                        Console.WriteLine("Trạng thái nguồn: KẾT NỐI MÁY CHỦ NỘI BỘ LAN THÀNH CÔNG");
+                        Console.WriteLine("Tập tin cài đặt:  " + Path.GetFileName(lanFile));
+                        Console.WriteLine("Đường dẫn tập tin:" + lanFile);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Trạng thái nguồn: Không tìm thấy gói LAN/cục bộ, chuyển dự phòng GitHub");
+                        var rel = FetchLatestRelease();
+                        var asset = ResolveMatchingAsset(info, rel);
+                        Console.WriteLine("Phiên bản GitHub: " + rel.TagName);
+                        Console.WriteLine("Gói tải:         " + asset.Key);
+                        Console.WriteLine("Link:            " + asset.Value);
+                    }
                 }
                 return 0;
             }
@@ -281,6 +292,13 @@ namespace BVDKKH.Remote.AutoInstaller
                 info.Arch = Environment.Is64BitOperatingSystem ? "x64" : "x86";
             }
 
+            // BẮT BUỘC: Nếu hệ điều hành Windows là 32-bit (x86), không thể chạy nhị phân 64-bit
+            // bất kể vi xử lý CPU phần cứng có hỗ trợ 64-bit hay không.
+            if (!Environment.Is64BitOperatingSystem)
+            {
+                info.Arch = "x86";
+            }
+
             return info;
         }
 
@@ -314,13 +332,57 @@ namespace BVDKKH.Remote.AutoInstaller
             return false;
         }
 
-        public static string ResolveLanInstallerFile(DeviceInfo info, string sharePath)
+        public static bool IsValidExecutable(string filePath, out string errorMessage)
+        {
+            errorMessage = null;
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+            {
+                errorMessage = "Tập tin cài đặt không tồn tại trên hệ thống.";
+                return false;
+            }
+
+            var fi = new FileInfo(filePath);
+            if (fi.Length < 1024 * 1024 * 2) // Nhỏ hơn 2MB
+            {
+                errorMessage = string.Format("Gói cài đặt tải về bị lỗi dung lượng ({0:F1} KB). Rất có thể kết nối mạng bị gián đoạn hoặc tường lửa mạng đã chặn tải file .exe từ máy chủ.", fi.Length / 1024.0);
+                return false;
+            }
+
+            try
+            {
+                using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    if (fs.Length < 64)
+                    {
+                        errorMessage = "Tập tin cài đặt bị rỗng hoặc không đúng cấu trúc nhị phân Windows.";
+                        return false;
+                    }
+
+                    byte[] header = new byte[2];
+                    int read = fs.Read(header, 0, 2);
+                    if (read < 2 || header[0] != 0x4D || header[1] != 0x5A) // 'M' 'Z'
+                    {
+                        errorMessage = "Tập tin tải về không phải là ứng dụng Windows hợp lệ (nội dung có thể là trang HTML lỗi mạng hoặc trang chặn tường lửa).";
+                        return false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                errorMessage = "Không thể kiểm tra tính toàn vẹn của tệp cài đặt: " + ex.Message;
+                return false;
+            }
+
+            return true;
+        }
+
+        public static string ResolveCandidateInstallerFile(DeviceInfo info, string directoryPath)
         {
             try
             {
-                if (!Directory.Exists(sharePath)) return null;
+                if (string.IsNullOrEmpty(directoryPath) || !Directory.Exists(directoryPath)) return null;
 
-                var files = Directory.GetFiles(sharePath, "*.exe", SearchOption.TopDirectoryOnly);
+                var files = Directory.GetFiles(directoryPath, "*.exe", SearchOption.TopDirectoryOnly);
                 var candidates = new List<string>();
 
                 foreach (var file in files)
@@ -329,27 +391,44 @@ namespace BVDKKH.Remote.AutoInstaller
                     if (name.Contains("autoinstall") || name.Contains("setup") || !name.Contains("rustdesk"))
                         continue;
 
-                    if (info.IsWin10OrLater)
+                    if (info.Arch == "x86")
                     {
-                        // Win10/11: Ưu tiên gói win10, hoặc x86_64 không chứa win7
-                        if (name.Contains("win10") || (name.Contains("x86_64") && !name.Contains("win7")))
+                        // Hệ điều hành 32-bit (x86) BẮT BUỘC dùng bản 32-bit (sciter hoặc x86 không chứa x86_64)
+                        if (name.Contains("sciter") || (name.Contains("x86") && !name.Contains("x86_64")))
                         {
                             candidates.Add(file);
                         }
                     }
-                    else
+                    else if (info.Arch == "ARM64")
                     {
-                        // Win7/8: Ưu tiên gói win7 hoặc sciter
-                        if (name.Contains("win7") || name.Contains("sciter") || name.Contains("x86"))
+                        if (name.Contains("aarch64") || name.Contains("arm64"))
                         {
                             candidates.Add(file);
+                        }
+                    }
+                    else // x64
+                    {
+                        if (info.IsWin10OrLater)
+                        {
+                            // Win10/11 x64: Ưu tiên gói x86_64 không chứa win7
+                            if (name.Contains("x86_64") && !name.Contains("win7"))
+                            {
+                                candidates.Add(file);
+                            }
+                        }
+                        else
+                        {
+                            // Win7/8 x64: Ưu tiên gói win7 x86_64 hoặc sciter
+                            if ((name.Contains("win7") && name.Contains("x86_64")) || name.Contains("sciter"))
+                            {
+                                candidates.Add(file);
+                            }
                         }
                     }
                 }
 
                 if (candidates.Count == 0) return null;
 
-                // Sắp xếp tìm bản mới nhất: ưu tiên version cao nhất trong tên file, sau đó đến ngày sửa đổi
                 candidates.Sort((a, b) =>
                 {
                     Version vA = ExtractVersion(Path.GetFileName(a));
@@ -365,6 +444,27 @@ namespace BVDKKH.Remote.AutoInstaller
             {
                 return null;
             }
+        }
+
+        public static string ResolveLocalInstallerFile(DeviceInfo info)
+        {
+            try
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string f = ResolveCandidateInstallerFile(info, baseDir);
+                if (!string.IsNullOrEmpty(f) && File.Exists(f)) return f;
+
+                string srcDir = Path.Combine(baseDir, "src");
+                f = ResolveCandidateInstallerFile(info, srcDir);
+                if (!string.IsNullOrEmpty(f) && File.Exists(f)) return f;
+            }
+            catch { }
+            return null;
+        }
+
+        public static string ResolveLanInstallerFile(DeviceInfo info, string sharePath)
+        {
+            return ResolveCandidateInstallerFile(info, sharePath);
         }
 
         public static Version ExtractVersion(string fileName)
@@ -529,17 +629,21 @@ namespace BVDKKH.Remote.AutoInstaller
                     if (info.Arch == "ARM64" && lower.Contains("aarch64"))
                         return asset;
 
-                    if (info.Arch == "x86" && lower.Contains("x86-sciter"))
-                        return asset;
+                    if (info.Arch == "x86")
+                    {
+                        if (lower.Contains("x86-sciter") || (lower.Contains("x86") && !lower.Contains("x86_64")))
+                            return asset;
+                        continue;
+                    }
 
                     if (info.IsWin10OrLater && info.Arch == "x64")
                     {
                         if (lower.Contains("x86_64") && !lower.Contains("win7"))
                             return asset;
                     }
-                    else if (!info.IsWin10OrLater)
+                    else if (!info.IsWin10OrLater && info.Arch == "x64")
                     {
-                        if (info.Arch == "x64" && lower.Contains("win7") && lower.Contains("x86_64"))
+                        if (lower.Contains("win7") && lower.Contains("x86_64"))
                             return asset;
                         if (lower.Contains("x86-sciter"))
                             return asset;
@@ -553,8 +657,10 @@ namespace BVDKKH.Remote.AutoInstaller
             string fallbackFile = "";
             if (info.Arch == "x86" || !info.IsWin10OrLater)
                 fallbackFile = string.Format("rustdesk-{0}-x86-sciter.exe", ver);
-            else if (info.IsWin10OrLater)
+            else if (info.IsWin10OrLater && info.Arch == "x64")
                 fallbackFile = string.Format("rustdesk-{0}-x86_64.exe", ver);
+            else if (info.Arch == "ARM64")
+                fallbackFile = string.Format("rustdesk-{0}-aarch64.exe", ver);
 
             string fallbackUrl = string.Format("https://github.com/ngtrongha/bvdkkh-remote-release/releases/download/{0}/{1}", tag, fallbackFile);
             return new KeyValuePair<string, string>(fallbackFile, fallbackUrl);
@@ -567,14 +673,22 @@ namespace BVDKKH.Remote.AutoInstaller
 
             try
             {
-                // 1. Thử lấy từ máy chủ chia sẻ nội bộ mạng LAN trước
+                // 1. Thử lấy từ thư mục cục bộ hoặc máy chủ chia sẻ nội bộ mạng LAN trước
+                string localFile = ResolveLocalInstallerFile(info);
                 string lanFile = null;
-                if (ConnectLanShare(LanSharePath, LanShareUsername, LanSharePassword))
+
+                if (string.IsNullOrEmpty(localFile) && ConnectLanShare(LanSharePath, LanShareUsername, LanSharePassword))
                 {
                     lanFile = ResolveLanInstallerFile(info, LanSharePath);
                 }
 
-                if (!string.IsNullOrEmpty(lanFile) && File.Exists(lanFile))
+                if (!string.IsNullOrEmpty(localFile) && File.Exists(localFile))
+                {
+                    string fileName = Path.GetFileName(localFile);
+                    tempPath = Path.Combine(Path.GetTempPath(), fileName);
+                    File.Copy(localFile, tempPath, true);
+                }
+                else if (!string.IsNullOrEmpty(lanFile) && File.Exists(lanFile))
                 {
                     string fileName = Path.GetFileName(lanFile);
                     tempPath = Path.Combine(Path.GetTempPath(), fileName);
@@ -594,7 +708,11 @@ namespace BVDKKH.Remote.AutoInstaller
                     }
                 }
 
-                if (!File.Exists(tempPath)) return 1;
+                string validationError;
+                if (!IsValidExecutable(tempPath, out validationError))
+                {
+                    throw new Exception(validationError);
+                }
 
                 bool ok = PerformCompleteInstall(tempPath, info, null);
                 try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
@@ -612,6 +730,12 @@ namespace BVDKKH.Remote.AutoInstaller
         {
             try
             {
+                string valError;
+                if (!IsValidExecutable(installerPackagePath, out valError))
+                {
+                    throw new Exception(valError);
+                }
+
                 if (logMessage != null) logMessage("Đang dừng dịch vụ và đóng các tiến trình cũ...");
                 KillRunningInstancesAndServices(logMessage);
 
@@ -1717,23 +1841,44 @@ namespace BVDKKH.Remote.AutoInstaller
                         lblBadge.Text = string.Format("🖥 Hệ điều hành: {0} ({1})   •   Trạng thái: Tương thích", info.OsName, info.Arch);
                     }));
 
-                    // Bước 2: Kiểm tra máy chủ chia sẻ mạng LAN trước
+                    // Bước 2: Kiểm tra nguồn gói cài đặt (1. Cục bộ -> 2. Máy chủ LAN -> 3. GitHub)
                     this.Invoke(new Action(() =>
                     {
-                        lblStatus.Text = "Đang kiểm tra gói cài đặt từ máy chủ nội bộ...";
-                        lblDetail.Text = "Đang kết nối " + Program.LanSharePath + "...";
+                        lblStatus.Text = "Đang kiểm tra gói cài đặt tối ưu cho thiết bị...";
+                        lblDetail.Text = "Đang kiểm tra nguồn cài đặt nội bộ...";
                         progressBar.Value = 15;
                     }));
 
+                    string localFile = Program.ResolveLocalInstallerFile(info);
                     string lanFile = null;
-                    if (Program.ConnectLanShare(Program.LanSharePath, Program.LanShareUsername, Program.LanSharePassword))
+
+                    if (string.IsNullOrEmpty(localFile))
                     {
-                        lanFile = Program.ResolveLanInstallerFile(info, Program.LanSharePath);
+                        if (Program.ConnectLanShare(Program.LanSharePath, Program.LanShareUsername, Program.LanSharePassword))
+                        {
+                            lanFile = Program.ResolveLanInstallerFile(info, Program.LanSharePath);
+                        }
                     }
 
                     string tempPath = null;
 
-                    if (!string.IsNullOrEmpty(lanFile) && File.Exists(lanFile))
+                    if (!string.IsNullOrEmpty(localFile) && File.Exists(localFile))
+                    {
+                        string fileName = Path.GetFileName(localFile);
+                        tempPath = Path.Combine(Path.GetTempPath(), fileName);
+                        downloadedFile = tempPath;
+
+                        this.Invoke(new Action(() =>
+                        {
+                            lblBadge.Text = string.Format("🖥 {0} ({1})   •   Nguồn: Gói cài đặt cục bộ", info.OsName, info.Arch);
+                            lblStatus.Text = "Đang sao chép gói cài đặt: " + fileName;
+                            lblDetail.Text = "Chuẩn bị sao chép dữ liệu...";
+                            progressBar.Value = 40;
+                        }));
+
+                        File.Copy(localFile, tempPath, true);
+                    }
+                    else if (!string.IsNullOrEmpty(lanFile) && File.Exists(lanFile))
                     {
                         string fileName = Path.GetFileName(lanFile);
                         tempPath = Path.Combine(Path.GetTempPath(), fileName);
@@ -1810,6 +1955,13 @@ namespace BVDKKH.Remote.AutoInstaller
 
                             webClient.DownloadFile(new Uri(asset.Value), tempPath);
                         }
+                    }
+
+                    // Bước 3: Xác thực tính toàn vẹn của tệp cài đặt (kích thước, định dạng Windows PE)
+                    string validationError;
+                    if (!Program.IsValidExecutable(tempPath, out validationError))
+                    {
+                        throw new Exception(validationError);
                     }
 
                     // Bước 4: Thực thi cài đặt và kích hoạt dịch vụ hoàn chỉnh
