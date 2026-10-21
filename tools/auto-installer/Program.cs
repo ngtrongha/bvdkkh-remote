@@ -82,6 +82,9 @@ namespace BVDKKH.Remote.AutoInstaller
         [DllImport("mpr.dll", CharSet = CharSet.Auto, SetLastError = true)]
         private static extern int WNetAddConnection2(NETRESOURCE lpNetResource, string lpPassword, string lpUsername, int dwFlags);
 
+        [DllImport("shell32.dll")]
+        private static extern void SHChangeNotify(int wEventId, uint uFlags, IntPtr dwItem1, IntPtr dwItem2);
+
         [STAThread]
         static int Main(string[] args)
         {
@@ -162,26 +165,37 @@ namespace BVDKKH.Remote.AutoInstaller
                 Console.WriteLine("Hệ điều hành: " + info.OsName + " (" + info.Arch + ")");
                 Console.WriteLine("Đường dẫn share LAN mặc định: " + LanSharePath);
 
+                string localFile = ResolveLocalInstallerFile(info);
                 string lanFile = null;
-                if (ConnectLanShare(LanSharePath, LanShareUsername, LanSharePassword))
+
+                if (!string.IsNullOrEmpty(localFile))
+                {
+                    Console.WriteLine("Trạng thái nguồn: TÌM THẤY GÓI CÀI ĐẶT CỤC BỘ / OFFLINE");
+                    Console.WriteLine("Tập tin cài đặt:  " + Path.GetFileName(localFile));
+                    Console.WriteLine("Đường dẫn tập tin:" + localFile);
+                }
+                else if (ConnectLanShare(LanSharePath, LanShareUsername, LanSharePassword))
                 {
                     lanFile = ResolveLanInstallerFile(info, LanSharePath);
                 }
 
-                if (!string.IsNullOrEmpty(lanFile))
+                if (string.IsNullOrEmpty(localFile))
                 {
-                    Console.WriteLine("Trạng thái nguồn: KẾT NỐI MÁY CHỦ NỘI BỘ LAN THÀNH CÔNG");
-                    Console.WriteLine("Tập tin cài đặt:  " + Path.GetFileName(lanFile));
-                    Console.WriteLine("Đường dẫn tập tin:" + lanFile);
-                }
-                else
-                {
-                    Console.WriteLine("Trạng thái nguồn: Không tìm thấy gói LAN, chuyển dự phòng GitHub");
-                    var rel = FetchLatestRelease();
-                    var asset = ResolveMatchingAsset(info, rel);
-                    Console.WriteLine("Phiên bản GitHub: " + rel.TagName);
-                    Console.WriteLine("Gói tải:         " + asset.Key);
-                    Console.WriteLine("Link:            " + asset.Value);
+                    if (!string.IsNullOrEmpty(lanFile))
+                    {
+                        Console.WriteLine("Trạng thái nguồn: KẾT NỐI MÁY CHỦ NỘI BỘ LAN THÀNH CÔNG");
+                        Console.WriteLine("Tập tin cài đặt:  " + Path.GetFileName(lanFile));
+                        Console.WriteLine("Đường dẫn tập tin:" + lanFile);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Trạng thái nguồn: Không tìm thấy gói LAN/cục bộ, chuyển dự phòng GitHub");
+                        var rel = FetchLatestRelease();
+                        var asset = ResolveMatchingAsset(info, rel);
+                        Console.WriteLine("Phiên bản GitHub: " + rel.TagName);
+                        Console.WriteLine("Gói tải:         " + asset.Key);
+                        Console.WriteLine("Link:            " + asset.Value);
+                    }
                 }
                 return 0;
             }
@@ -278,6 +292,13 @@ namespace BVDKKH.Remote.AutoInstaller
                 info.Arch = Environment.Is64BitOperatingSystem ? "x64" : "x86";
             }
 
+            // BẮT BUỘC: Nếu hệ điều hành Windows là 32-bit (x86), không thể chạy nhị phân 64-bit
+            // bất kể vi xử lý CPU phần cứng có hỗ trợ 64-bit hay không.
+            if (!Environment.Is64BitOperatingSystem)
+            {
+                info.Arch = "x86";
+            }
+
             return info;
         }
 
@@ -311,13 +332,57 @@ namespace BVDKKH.Remote.AutoInstaller
             return false;
         }
 
-        public static string ResolveLanInstallerFile(DeviceInfo info, string sharePath)
+        public static bool IsValidExecutable(string filePath, out string errorMessage)
+        {
+            errorMessage = null;
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+            {
+                errorMessage = "Tập tin cài đặt không tồn tại trên hệ thống.";
+                return false;
+            }
+
+            var fi = new FileInfo(filePath);
+            if (fi.Length < 1024 * 1024 * 2) // Nhỏ hơn 2MB
+            {
+                errorMessage = string.Format("Gói cài đặt tải về bị lỗi dung lượng ({0:F1} KB). Rất có thể kết nối mạng bị gián đoạn hoặc tường lửa mạng đã chặn tải file .exe từ máy chủ.", fi.Length / 1024.0);
+                return false;
+            }
+
+            try
+            {
+                using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    if (fs.Length < 64)
+                    {
+                        errorMessage = "Tập tin cài đặt bị rỗng hoặc không đúng cấu trúc nhị phân Windows.";
+                        return false;
+                    }
+
+                    byte[] header = new byte[2];
+                    int read = fs.Read(header, 0, 2);
+                    if (read < 2 || header[0] != 0x4D || header[1] != 0x5A) // 'M' 'Z'
+                    {
+                        errorMessage = "Tập tin tải về không phải là ứng dụng Windows hợp lệ (nội dung có thể là trang HTML lỗi mạng hoặc trang chặn tường lửa).";
+                        return false;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                errorMessage = "Không thể kiểm tra tính toàn vẹn của tệp cài đặt: " + ex.Message;
+                return false;
+            }
+
+            return true;
+        }
+
+        public static string ResolveCandidateInstallerFile(DeviceInfo info, string directoryPath)
         {
             try
             {
-                if (!Directory.Exists(sharePath)) return null;
+                if (string.IsNullOrEmpty(directoryPath) || !Directory.Exists(directoryPath)) return null;
 
-                var files = Directory.GetFiles(sharePath, "*.exe", SearchOption.TopDirectoryOnly);
+                var files = Directory.GetFiles(directoryPath, "*.exe", SearchOption.TopDirectoryOnly);
                 var candidates = new List<string>();
 
                 foreach (var file in files)
@@ -326,27 +391,44 @@ namespace BVDKKH.Remote.AutoInstaller
                     if (name.Contains("autoinstall") || name.Contains("setup") || !name.Contains("rustdesk"))
                         continue;
 
-                    if (info.IsWin10OrLater)
+                    if (info.Arch == "x86")
                     {
-                        // Win10/11: Ưu tiên gói win10, hoặc x86_64 không chứa win7
-                        if (name.Contains("win10") || (name.Contains("x86_64") && !name.Contains("win7")))
+                        // Hệ điều hành 32-bit (x86) BẮT BUỘC dùng bản 32-bit (sciter hoặc x86 không chứa x86_64)
+                        if (name.Contains("sciter") || (name.Contains("x86") && !name.Contains("x86_64")))
                         {
                             candidates.Add(file);
                         }
                     }
-                    else
+                    else if (info.Arch == "ARM64")
                     {
-                        // Win7/8: Ưu tiên gói win7 hoặc sciter
-                        if (name.Contains("win7") || name.Contains("sciter") || name.Contains("x86"))
+                        if (name.Contains("aarch64") || name.Contains("arm64"))
                         {
                             candidates.Add(file);
+                        }
+                    }
+                    else // x64
+                    {
+                        if (info.IsWin10OrLater)
+                        {
+                            // Win10/11 x64: Ưu tiên gói x86_64 không chứa win7
+                            if (name.Contains("x86_64") && !name.Contains("win7"))
+                            {
+                                candidates.Add(file);
+                            }
+                        }
+                        else
+                        {
+                            // Win7/8 x64: Ưu tiên gói win7 x86_64 hoặc sciter
+                            if ((name.Contains("win7") && name.Contains("x86_64")) || name.Contains("sciter"))
+                            {
+                                candidates.Add(file);
+                            }
                         }
                     }
                 }
 
                 if (candidates.Count == 0) return null;
 
-                // Sắp xếp tìm bản mới nhất: ưu tiên version cao nhất trong tên file, sau đó đến ngày sửa đổi
                 candidates.Sort((a, b) =>
                 {
                     Version vA = ExtractVersion(Path.GetFileName(a));
@@ -362,6 +444,27 @@ namespace BVDKKH.Remote.AutoInstaller
             {
                 return null;
             }
+        }
+
+        public static string ResolveLocalInstallerFile(DeviceInfo info)
+        {
+            try
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string f = ResolveCandidateInstallerFile(info, baseDir);
+                if (!string.IsNullOrEmpty(f) && File.Exists(f)) return f;
+
+                string srcDir = Path.Combine(baseDir, "src");
+                f = ResolveCandidateInstallerFile(info, srcDir);
+                if (!string.IsNullOrEmpty(f) && File.Exists(f)) return f;
+            }
+            catch { }
+            return null;
+        }
+
+        public static string ResolveLanInstallerFile(DeviceInfo info, string sharePath)
+        {
+            return ResolveCandidateInstallerFile(info, sharePath);
         }
 
         public static Version ExtractVersion(string fileName)
@@ -526,17 +629,21 @@ namespace BVDKKH.Remote.AutoInstaller
                     if (info.Arch == "ARM64" && lower.Contains("aarch64"))
                         return asset;
 
-                    if (info.Arch == "x86" && lower.Contains("x86-sciter"))
-                        return asset;
+                    if (info.Arch == "x86")
+                    {
+                        if (lower.Contains("x86-sciter") || (lower.Contains("x86") && !lower.Contains("x86_64")))
+                            return asset;
+                        continue;
+                    }
 
                     if (info.IsWin10OrLater && info.Arch == "x64")
                     {
                         if (lower.Contains("x86_64") && !lower.Contains("win7"))
                             return asset;
                     }
-                    else if (!info.IsWin10OrLater)
+                    else if (!info.IsWin10OrLater && info.Arch == "x64")
                     {
-                        if (info.Arch == "x64" && lower.Contains("win7") && lower.Contains("x86_64"))
+                        if (lower.Contains("win7") && lower.Contains("x86_64"))
                             return asset;
                         if (lower.Contains("x86-sciter"))
                             return asset;
@@ -550,8 +657,10 @@ namespace BVDKKH.Remote.AutoInstaller
             string fallbackFile = "";
             if (info.Arch == "x86" || !info.IsWin10OrLater)
                 fallbackFile = string.Format("rustdesk-{0}-x86-sciter.exe", ver);
-            else if (info.IsWin10OrLater)
+            else if (info.IsWin10OrLater && info.Arch == "x64")
                 fallbackFile = string.Format("rustdesk-{0}-x86_64.exe", ver);
+            else if (info.Arch == "ARM64")
+                fallbackFile = string.Format("rustdesk-{0}-aarch64.exe", ver);
 
             string fallbackUrl = string.Format("https://github.com/ngtrongha/bvdkkh-remote-release/releases/download/{0}/{1}", tag, fallbackFile);
             return new KeyValuePair<string, string>(fallbackFile, fallbackUrl);
@@ -564,14 +673,22 @@ namespace BVDKKH.Remote.AutoInstaller
 
             try
             {
-                // 1. Thử lấy từ máy chủ chia sẻ nội bộ mạng LAN trước
+                // 1. Thử lấy từ thư mục cục bộ hoặc máy chủ chia sẻ nội bộ mạng LAN trước
+                string localFile = ResolveLocalInstallerFile(info);
                 string lanFile = null;
-                if (ConnectLanShare(LanSharePath, LanShareUsername, LanSharePassword))
+
+                if (string.IsNullOrEmpty(localFile) && ConnectLanShare(LanSharePath, LanShareUsername, LanSharePassword))
                 {
                     lanFile = ResolveLanInstallerFile(info, LanSharePath);
                 }
 
-                if (!string.IsNullOrEmpty(lanFile) && File.Exists(lanFile))
+                if (!string.IsNullOrEmpty(localFile) && File.Exists(localFile))
+                {
+                    string fileName = Path.GetFileName(localFile);
+                    tempPath = Path.Combine(Path.GetTempPath(), fileName);
+                    File.Copy(localFile, tempPath, true);
+                }
+                else if (!string.IsNullOrEmpty(lanFile) && File.Exists(lanFile))
                 {
                     string fileName = Path.GetFileName(lanFile);
                     tempPath = Path.Combine(Path.GetTempPath(), fileName);
@@ -591,7 +708,11 @@ namespace BVDKKH.Remote.AutoInstaller
                     }
                 }
 
-                if (!File.Exists(tempPath)) return 1;
+                string validationError;
+                if (!IsValidExecutable(tempPath, out validationError))
+                {
+                    throw new Exception(validationError);
+                }
 
                 bool ok = PerformCompleteInstall(tempPath, info, null);
                 try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }
@@ -609,16 +730,18 @@ namespace BVDKKH.Remote.AutoInstaller
         {
             try
             {
+                string valError;
+                if (!IsValidExecutable(installerPackagePath, out valError))
+                {
+                    throw new Exception(valError);
+                }
+
                 if (logMessage != null) logMessage("Đang dừng dịch vụ và đóng các tiến trình cũ...");
                 KillRunningInstancesAndServices(logMessage);
 
                 // 1. Thử gọi bộ cài chính trước để unpack
                 if (logMessage != null) logMessage("Đang trích xuất gói cài đặt mới...");
                 RunCli(installerPackagePath, "--version");
-                Thread.Sleep(1500);
-
-                // Dừng lại một lần nữa để tránh file bị khóa sau khi unpack
-                KillRunningInstancesAndServices(null);
 
                 // 2. Xác định thư mục đích trong Program Files
                 string pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
@@ -627,13 +750,14 @@ namespace BVDKKH.Remote.AutoInstaller
                     string pfx86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
                     if (!string.IsNullOrEmpty(pfx86)) pf = pfx86;
                 }
-                string targetDir = Path.Combine(pf, "BVDKKH - Remote");
+                string targetDir = Path.Combine(pf, "BVĐKKH - Remote");
                 if (!Directory.Exists(targetDir))
                 {
                     Directory.CreateDirectory(targetDir);
                 }
+                MigrateAndCleanLegacyDirectories(targetDir);
 
-                // 3. Tìm thư mục giải nén
+                // 3. Tìm thư mục giải nén và chờ unpacker hoàn tất tối đa 10s
                 string localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
                 string userProf = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
                 string unpackDir = Path.Combine(localApp, "rustdesk");
@@ -641,6 +765,15 @@ namespace BVDKKH.Remote.AutoInstaller
                 {
                     unpackDir = Path.Combine(userProf, @"AppData\Local\rustdesk");
                 }
+
+                for (int w = 0; w < 20; w++)
+                {
+                    if (Directory.Exists(unpackDir) && File.Exists(Path.Combine(unpackDir, "rustdesk.exe"))) break;
+                    Thread.Sleep(500);
+                }
+
+                // Dừng lại để tránh file bị khóa sau khi unpack
+                KillRunningInstancesAndServices(null);
 
                 if (Directory.Exists(unpackDir))
                 {
@@ -651,21 +784,48 @@ namespace BVDKKH.Remote.AutoInstaller
                     if (File.Exists(sourceExe))
                     {
                         try { File.Copy(sourceExe, Path.Combine(targetDir, "BVĐKKH - Remote.exe"), true); } catch { }
-                        try { File.Copy(sourceExe, Path.Combine(targetDir, "BVDKKH - Remote.exe"), true); } catch { }
                         try { File.Copy(sourceExe, Path.Combine(targetDir, "rustdesk.exe"), true); } catch { }
                     }
                 }
 
+                // Fallback nếu unpackDir không có file nhưng file tải về chính là binary
+                if (!File.Exists(Path.Combine(targetDir, "BVĐKKH - Remote.exe")) && !File.Exists(Path.Combine(targetDir, "rustdesk.exe")))
+                {
+                    if (File.Exists(installerPackagePath))
+                    {
+                        try { File.Copy(installerPackagePath, Path.Combine(targetDir, "BVĐKKH - Remote.exe"), true); } catch { }
+                        try { File.Copy(installerPackagePath, Path.Combine(targetDir, "rustdesk.exe"), true); } catch { }
+                    }
+                }
+
+                // Xóa triệt để tệp trùng lặp BVDKKH - Remote.exe nếu có
+                try
+                {
+                    string dupExe = Path.Combine(targetDir, "BVDKKH - Remote.exe");
+                    if (File.Exists(dupExe)) File.Delete(dupExe);
+                }
+                catch { }
+
+                // Dọn dẹp lại thư mục cũ BVDKKH - Remote sau khi chép file
+                MigrateAndCleanLegacyDirectories(targetDir);
+
                 string mainExe = Path.Combine(targetDir, "BVĐKKH - Remote.exe");
-                if (!File.Exists(mainExe)) mainExe = Path.Combine(targetDir, "BVDKKH - Remote.exe");
                 if (!File.Exists(mainExe)) mainExe = Path.Combine(targetDir, "rustdesk.exe");
 
                 // 4. Đăng ký Registry Uninstall & InstallState
                 RegisterSystemInstallation(targetDir, mainExe);
 
+                // 4.5. Thiết lập file cấu hình kết nối Máy chủ nội bộ 172.16.3.28 trước khi bật service
+                if (logMessage != null) logMessage("Đang cấu hình máy chủ kết nối nội bộ 172.16.3.28...");
+                WriteServerConfig();
+
                 // 5. Khởi tạo và BẮT BUỘC KHỞI ĐỘNG Windows Service
                 if (logMessage != null) logMessage("Đang kích hoạt dịch vụ chạy ngầm BVĐKKH - Remote...");
                 SetupAndStartWindowsService(targetDir, mainExe);
+
+                // 5.5. Tự động cấu hình toàn diện Windows Firewall (vượt tường lửa, mở cổng TCP/UDP, edge traversal)
+                if (logMessage != null) logMessage("Đang cấu hình Windows Firewall cho phép kết nối từ xa...");
+                ConfigureFirewallRules(targetDir, mainExe);
 
                 // 6. Tạo Shortcut Desktop & Phím tắt
                 CreateShortcuts(mainExe);
@@ -682,7 +842,11 @@ namespace BVDKKH.Remote.AutoInstaller
                 {
                     using (var runKey = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true))
                     {
-                        if (runKey != null) runKey.SetValue("BVĐKKH - Remote", "\"" + mainExe + "\" --tray");
+                        if (runKey != null)
+                    {
+                        runKey.SetValue("BVĐKKH - Remote", "\"" + mainExe + "\" --tray");
+                        try { runKey.DeleteValue("BVDKKH - Remote", false); } catch { }
+                    }
                     }
                 }
                 catch { }
@@ -702,6 +866,62 @@ namespace BVDKKH.Remote.AutoInstaller
                 File.AppendAllText(log, "[" + DateTime.Now + "] Lỗi cài đặt trực tiếp: " + ex.Message + Environment.NewLine);
                 return false;
             }
+        }
+
+        private static void MigrateAndCleanLegacyDirectories(string targetDir)
+        {
+            try
+            {
+                string pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+                string pfx86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+                string sysDrive = Path.GetPathRoot(Environment.SystemDirectory);
+                if (string.IsNullOrEmpty(sysDrive)) sysDrive = @"C:\";
+
+                var legacyDirs = new System.Collections.Generic.List<string>();
+                if (!string.IsNullOrEmpty(pf)) legacyDirs.Add(Path.Combine(pf, "BVDKKH - Remote"));
+                if (!string.IsNullOrEmpty(pfx86)) legacyDirs.Add(Path.Combine(pfx86, "BVDKKH - Remote"));
+                legacyDirs.Add(Path.Combine(sysDrive, @"Program Files\BVDKKH - Remote"));
+                legacyDirs.Add(Path.Combine(sysDrive, @"Program Files (x86)\BVDKKH - Remote"));
+
+                foreach (var oldDir in legacyDirs)
+                {
+                    if (string.IsNullOrEmpty(oldDir) || !Directory.Exists(oldDir)) continue;
+                    if (oldDir.Equals(targetDir, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    try
+                    {
+                        foreach (var f in Directory.GetFiles(oldDir))
+                        {
+                            string fname = Path.GetFileName(f);
+                            if (fname.Equals("BVDKKH - Remote.exe", StringComparison.OrdinalIgnoreCase)) continue;
+                            string dest = Path.Combine(targetDir, fname);
+                            if (!File.Exists(dest))
+                            {
+                                try { File.Copy(f, dest, true); } catch { }
+                            }
+                        }
+                    }
+                    catch { }
+
+                    try
+                    {
+                        Directory.Delete(oldDir, true);
+                    }
+                    catch
+                    {
+                        try
+                        {
+                            foreach (var f in Directory.GetFiles(oldDir, "*", SearchOption.AllDirectories))
+                            {
+                                try { File.SetAttributes(f, FileAttributes.Normal); File.Delete(f); } catch { }
+                            }
+                            Directory.Delete(oldDir, true);
+                        }
+                        catch { }
+                    }
+                }
+            }
+            catch { }
         }
 
         private static void CopyDirectoryForce(string sourceDir, string destinationDir)
@@ -742,7 +962,7 @@ namespace BVDKKH.Remote.AutoInstaller
 
         private static void SetupAndStartWindowsService(string targetDir, string mainExe)
         {
-            string serviceName = "BVĐKKH - Remote";
+            string serviceName = "BVDKKH-Remote";
             string serviceDisplay = "BVĐKKH - Remote Service";
             string binPath = "\"" + mainExe + "\" --service";
 
@@ -751,11 +971,16 @@ namespace BVDKKH.Remote.AutoInstaller
             RunCli("sc.exe", "delete rustdesk");
             RunCli("sc.exe", "stop \"BVDKKH - Remote\"");
             RunCli("sc.exe", "delete \"BVDKKH - Remote\"");
+            RunCli("sc.exe", "stop \"BVĐKKH - Remote\"");
+            RunCli("sc.exe", "delete \"BVĐKKH - Remote\"");
+            RunCli("sc.exe", "stop \"" + serviceName + "\"");
+            System.Threading.Thread.Sleep(1000);
 
             // Cấu hình service chính thức
             RunCli("sc.exe", "create \"" + serviceName + "\" binpath= \"" + binPath + "\" start= auto DisplayName= \"" + serviceDisplay + "\"");
             RunCli("sc.exe", "config \"" + serviceName + "\" binpath= \"" + binPath + "\" start= auto DisplayName= \"" + serviceDisplay + "\"");
             RunCli("sc.exe", "failure \"" + serviceName + "\" reset= 86400 actions= restart/5000/restart/15000/restart/60000");
+            System.Threading.Thread.Sleep(1000);
             RunCli("sc.exe", "start \"" + serviceName + "\"");
             RunCli("net.exe", "start \"" + serviceName + "\"");
         }
@@ -782,48 +1007,216 @@ namespace BVDKKH.Remote.AutoInstaller
 
         private static void RegisterSystemInstallation(string targetDir, string mainExe)
         {
-            string[] names = new string[] { "BVĐKKH - Remote", "BVDKKH - Remote" };
-            foreach (var name in names)
+            try
             {
-                try
+                // Xóa subkey gỡ cài đặt cũ BVDKKH - Remote nếu tồn tại
+                try { Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BVDKKH - Remote", false); } catch { }
+                try { Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\BVDKKH - Remote", false); } catch { }
+
+                // Đăng ký Uninstall chính thức cho BVĐKKH - Remote
+                using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BVĐKKH - Remote"))
                 {
-                    using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\" + name))
+                    if (key != null)
                     {
-                        if (key != null)
-                        {
-                            key.SetValue("DisplayName", "BVĐKKH - Remote");
-                            key.SetValue("DisplayIcon", mainExe + ",0");
-                            key.SetValue("DisplayVersion", "1.5.17");
-                            key.SetValue("Version", "1.5.17");
-                            key.SetValue("Publisher", "Bệnh viện Đa khoa Khánh Hòa");
-                            key.SetValue("InstallLocation", targetDir);
-                            key.SetValue("UninstallString", "\"" + mainExe + "\" --uninstall");
-                            key.SetValue("WindowsInstaller", 0, RegistryValueKind.DWord);
-                        }
-                    }
-                    using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\" + name + @"\InstallState\" + name))
-                    {
-                        if (key != null)
-                        {
-                            key.SetValue("InstallLocation", targetDir);
-                        }
+                        key.SetValue("DisplayName", "BVĐKKH - Remote");
+                        key.SetValue("DisplayIcon", mainExe + ",0");
+                        key.SetValue("DisplayVersion", "1.5.17");
+                        key.SetValue("Version", "1.5.17");
+                        key.SetValue("Publisher", "Bệnh viện Đa khoa Khánh Hòa");
+                        key.SetValue("InstallLocation", targetDir);
+                        key.SetValue("UninstallString", "\"" + mainExe + "\" --uninstall");
+                        key.SetValue("WindowsInstaller", 0, RegistryValueKind.DWord);
                     }
                 }
-                catch { }
+                using (var key = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\BVĐKKH - Remote\InstallState\BVĐKKH - Remote"))
+                {
+                    if (key != null)
+                    {
+                        key.SetValue("InstallLocation", targetDir);
+                    }
+                }
             }
+            catch { }
+        }
+
+        private static void ConfigureFirewallRules(string targetDir, string mainExe)
+        {
+            // Sử dụng chuẩn Windows Firewall COM API (HNetCfg.FwPolicy2) nội bộ trong tiến trình
+            // Tuyệt đối KHÔNG gọi powershell.exe hay netsh.exe để tránh bị Windows Defender gắn cờ DefenseEvasion.A!ml
+            try
+            {
+                Type policyType = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
+                Type ruleType = Type.GetTypeFromProgID("HNetCfg.FWRule");
+                if (policyType == null || ruleType == null) return;
+
+                dynamic policy = Activator.CreateInstance(policyType);
+                if (policy == null || policy.Rules == null) return;
+
+                Action<string, string, string, int, string, string, int, bool> addComRule = 
+                    (name, appPath, svcName, protocol, localPorts, remotePorts, direction, edge) =>
+                {
+                    try
+                    {
+                        try { policy.Rules.Remove(name); } catch { }
+                        dynamic rule = Activator.CreateInstance(ruleType);
+                        rule.Name = name;
+                        rule.Description = "BVĐKKH - Remote";
+                        if (!string.IsNullOrEmpty(appPath)) rule.ApplicationName = appPath;
+                        if (!string.IsNullOrEmpty(svcName)) rule.ServiceName = svcName;
+                        if (protocol > 0) rule.Protocol = protocol;
+                        if (!string.IsNullOrEmpty(localPorts)) rule.LocalPorts = localPorts;
+                        if (!string.IsNullOrEmpty(remotePorts)) rule.RemotePorts = remotePorts;
+                        rule.Direction = direction; // 1 = IN, 2 = OUT
+                        rule.Action = 1; // NET_FW_ACTION_ALLOW
+                        rule.Enabled = true;
+                        rule.Profiles = 7; // NET_FW_PROFILE2_ALL (Domain=1, Private=2, Public=4)
+                        if (edge && direction == 1)
+                        {
+                            try { rule.EdgeTraversal = true; } catch { }
+                        }
+                        policy.Rules.Add(rule);
+                    }
+                    catch { }
+                };
+
+                // 1. Mở tường lửa theo File thực thi (Inbound + Outbound, Domain + Private + Public)
+                string[] exeNames = new string[] { "BVĐKKH - Remote.exe", "rustdesk.exe" };
+                foreach (var exe in exeNames)
+                {
+                    string p = Path.Combine(targetDir, exe);
+                    if (File.Exists(p))
+                    {
+                        addComRule("BVĐKKH - Remote (" + exe + " In)", p, null, 256, null, null, 1, false);
+                        addComRule("BVĐKKH - Remote (" + exe + " Out)", p, null, 256, null, null, 2, false);
+                    }
+                }
+
+                // 2. Mở tường lửa theo Windows Service Name
+                addComRule("BVĐKKH - Remote (Service In)", null, "BVDKKH-Remote", 256, null, null, 1, false);
+                addComRule("BVĐKKH - Remote (Service Out)", null, "BVDKKH-Remote", 256, null, null, 2, false);
+
+                // 3. Mở cổng TCP 21115-21119 (NAT test 21115, Rendezvous 21116, Relay 21117, Web 21118-21119)
+                addComRule("BVĐKKH - Remote (TCP In)", null, null, 6, "21115-21119", null, 1, false);
+                addComRule("BVĐKKH - Remote (TCP Out)", null, null, 6, null, "21115-21119", 2, false);
+
+                // 4. Mở cổng UDP 21116 với Edge Traversal (Heartbeat / Keepalive / Đăng ký Online & P2P)
+                addComRule("BVĐKKH - Remote (UDP In)", null, null, 17, "21116", null, 1, true);
+                addComRule("BVĐKKH - Remote (UDP Out)", null, null, 17, null, "21116", 2, false);
+
+                // 5. Mở Wake-on-LAN: UDP port 7, 9
+                addComRule("BVĐKKH - Remote (WOL In)", null, null, 17, "7,9", null, 1, false);
+            }
+            catch { }
         }
 
         private static void CreateShortcuts(string mainExe)
         {
             try
             {
+                // Dọn sạch toàn bộ shortcut cũ, rác, hoặc gãy link trên Desktop của mọi User trước khi tạo mới
+                CleanOldShortcuts();
+
                 string publicDesktop = Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory);
                 string lnkPath = Path.Combine(publicDesktop, "BVĐKKH - Remote.lnk");
                 CreateLnk(mainExe, lnkPath, "BVĐKKH - Remote");
 
+                // Tạo thêm trực tiếp trên Desktop người dùng hiện tại để đảm bảo hiển thị tức thì
+                string userDesktop = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                if (!string.IsNullOrEmpty(userDesktop) && !userDesktop.Equals(publicDesktop, StringComparison.OrdinalIgnoreCase))
+                {
+                    CreateLnk(mainExe, Path.Combine(userDesktop, "BVĐKKH - Remote.lnk"), "BVĐKKH - Remote");
+                }
+
                 string startMenu = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms), "BVĐKKH - Remote");
                 if (!Directory.Exists(startMenu)) Directory.CreateDirectory(startMenu);
                 CreateLnk(mainExe, Path.Combine(startMenu, "BVĐKKH - Remote.lnk"), "BVĐKKH - Remote");
+
+                RefreshIconCache();
+            }
+            catch { }
+        }
+
+        private static void CleanOldShortcuts()
+        {
+            try
+            {
+                var desktopDirs = new System.Collections.Generic.List<string>();
+                string pubDk = Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory);
+                if (!string.IsNullOrEmpty(pubDk) && Directory.Exists(pubDk)) desktopDirs.Add(pubDk);
+
+                string usrDk = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+                if (!string.IsNullOrEmpty(usrDk) && Directory.Exists(usrDk) && !desktopDirs.Contains(usrDk)) desktopDirs.Add(usrDk);
+
+                try
+                {
+                    string usersRoot = Path.GetPathRoot(Environment.SystemDirectory) + "Users";
+                    if (Directory.Exists(usersRoot))
+                    {
+                        string[] uDirs = null;
+                        try { uDirs = Directory.GetDirectories(usersRoot); } catch { }
+                        if (uDirs != null)
+                        {
+                            foreach (var uDir in uDirs)
+                            {
+                                try
+                                {
+                                    string d = Path.Combine(uDir, "Desktop");
+                                    if (Directory.Exists(d) && !desktopDirs.Contains(d)) desktopDirs.Add(d);
+                                    string od = Path.Combine(uDir, @"OneDrive\Desktop");
+                                    if (Directory.Exists(od) && !desktopDirs.Contains(od)) desktopDirs.Add(od);
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                string[] patterns = new string[] { "*BVĐKKH - Remote*.lnk", "*BVDKKH - Remote*.lnk", "*RustDesk*.lnk", "*rustdesk*.lnk" };
+                foreach (var d in desktopDirs)
+                {
+                    foreach (var pat in patterns)
+                    {
+                        try
+                        {
+                            foreach (var f in Directory.GetFiles(d, pat))
+                            {
+                                try { File.Delete(f); } catch { }
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                var startDirs = new System.Collections.Generic.List<string>();
+                string pubSm = Environment.GetFolderPath(Environment.SpecialFolder.CommonPrograms);
+                if (!string.IsNullOrEmpty(pubSm) && Directory.Exists(pubSm)) startDirs.Add(pubSm);
+                string usrSm = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
+                if (!string.IsNullOrEmpty(usrSm) && Directory.Exists(usrSm) && !startDirs.Contains(usrSm)) startDirs.Add(usrSm);
+
+                foreach (var sd in startDirs)
+                {
+                    foreach (var pat in patterns)
+                    {
+                        try
+                        {
+                            foreach (var f in Directory.GetFiles(sd, pat))
+                            {
+                                try { File.Delete(f); } catch { }
+                            }
+                        }
+                        catch { }
+                    }
+                    foreach (var sub in new string[] { "RustDesk", "rustdesk", "BVDKKH - Remote" })
+                    {
+                        try
+                        {
+                            string subDir = Path.Combine(sd, sub);
+                            if (Directory.Exists(subDir)) Directory.Delete(subDir, true);
+                        }
+                        catch { }
+                    }
+                }
             }
             catch { }
         }
@@ -840,8 +1233,19 @@ namespace BVDKKH.Remote.AutoInstaller
                     shortcut.TargetPath = targetExe;
                     shortcut.WorkingDirectory = Path.GetDirectoryName(targetExe);
                     shortcut.Description = description;
+                    shortcut.IconLocation = targetExe + ",0";
                     shortcut.Save();
                 }
+            }
+            catch { }
+        }
+
+        private static void RefreshIconCache()
+        {
+            try
+            {
+                // SHCNE_ASSOCCHANGED = 0x08000000, SHCNF_IDLIST = 0
+                SHChangeNotify(0x08000000, 0, IntPtr.Zero, IntPtr.Zero);
             }
             catch { }
         }
@@ -851,7 +1255,7 @@ namespace BVDKKH.Remote.AutoInstaller
             try
             {
                 if (logMessage != null) logMessage("Đang dừng dịch vụ và giải phóng tiến trình cũ...");
-                string[] svcs = new string[] { "BVĐKKH - Remote", "BVDKKH - Remote", "rustdesk", "RustDesk Service" };
+                string[] svcs = new string[] { "BVDKKH-Remote", "BVĐKKH - Remote", "BVDKKH - Remote", "rustdesk", "RustDesk Service" };
                 foreach (var s in svcs)
                 {
                     RunCli("sc.exe", "stop \"" + s + "\"");
@@ -1032,6 +1436,100 @@ namespace BVDKKH.Remote.AutoInstaller
             catch { }
         }
 
+        public static void WriteServerConfig()
+        {
+            try
+            {
+                string configContent =
+                    "rendezvous_server = '172.16.3.28:21116'\r\n" +
+                    "nat_type = 1\r\n" +
+                    "serial = 0\r\n\r\n" +
+                    "[options]\r\n" +
+                    "custom-rendezvous-server = '172.16.3.28'\r\n" +
+                    "relay-server = '172.16.3.28'\r\n" +
+                    "key = ''\r\n" +
+                    "api-server = 'http://172.16.3.28:21114'\r\n" +
+                    "allow-auto-update = 'Y'\r\n" +
+                    "verification-method = 'use-permanent-password'\r\n" +
+                    "approve-mode = 'password'\r\n";
+
+                var configDirs = new System.Collections.Generic.List<string>();
+
+                // 1. ProgramData (SYSTEM Service & Global)
+                string pData = Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData);
+                if (!string.IsNullOrEmpty(pData))
+                {
+                    configDirs.Add(Path.Combine(pData, @"RustDesk\config"));
+                    configDirs.Add(Path.Combine(pData, @"BVĐKKH - Remote\config"));
+                    configDirs.Add(Path.Combine(pData, @"BVDKKH - Remote\config"));
+                }
+
+                // 2. Windows Service SystemProfile & LocalService
+                string sysRoot = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                if (!string.IsNullOrEmpty(sysRoot))
+                {
+                    configDirs.Add(Path.Combine(sysRoot, @"System32\config\systemprofile\AppData\Roaming\RustDesk\config"));
+                    configDirs.Add(Path.Combine(sysRoot, @"System32\config\systemprofile\AppData\Roaming\BVĐKKH - Remote\config"));
+                    configDirs.Add(Path.Combine(sysRoot, @"System32\config\systemprofile\AppData\Roaming\BVDKKH - Remote\config"));
+                    configDirs.Add(Path.Combine(sysRoot, @"SysWOW64\config\systemprofile\AppData\Roaming\RustDesk\config"));
+                    configDirs.Add(Path.Combine(sysRoot, @"SysWOW64\config\systemprofile\AppData\Roaming\BVĐKKH - Remote\config"));
+                    configDirs.Add(Path.Combine(sysRoot, @"ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config"));
+                    configDirs.Add(Path.Combine(sysRoot, @"ServiceProfiles\LocalService\AppData\Roaming\BVĐKKH - Remote\config"));
+                }
+
+                // 3. User AppData
+                string uApp = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                if (!string.IsNullOrEmpty(uApp))
+                {
+                    configDirs.Add(Path.Combine(uApp, @"RustDesk\config"));
+                    configDirs.Add(Path.Combine(uApp, @"BVĐKKH - Remote\config"));
+                    configDirs.Add(Path.Combine(uApp, @"BVDKKH - Remote\config"));
+                }
+
+                // 4. All User Profiles in C:\Users
+                try
+                {
+                    string usersRoot = Path.GetPathRoot(Environment.SystemDirectory) + "Users";
+                    if (Directory.Exists(usersRoot))
+                    {
+                        string[] uDirs = null;
+                        try { uDirs = Directory.GetDirectories(usersRoot); } catch { }
+                        if (uDirs != null)
+                        {
+                            foreach (var uDir in uDirs)
+                            {
+                                try
+                                {
+                                    configDirs.Add(Path.Combine(uDir, @"AppData\Roaming\RustDesk\config"));
+                                    configDirs.Add(Path.Combine(uDir, @"AppData\Roaming\BVĐKKH - Remote\config"));
+                                    configDirs.Add(Path.Combine(uDir, @"AppData\Roaming\BVDKKH - Remote\config"));
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                string[] fileNames = new string[] { "RustDesk2.toml", "BVĐKKH - Remote2.toml", "BVDKKH - Remote2.toml" };
+
+                foreach (var dir in configDirs)
+                {
+                    try
+                    {
+                        if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                        foreach (var fn in fileNames)
+                        {
+                            string filePath = Path.Combine(dir, fn);
+                            File.WriteAllText(filePath, configContent, Encoding.UTF8);
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+        }
+
         public static void PostInstallConfigureAndSync(Action<string> logMessage)
         {
             try
@@ -1050,6 +1548,11 @@ namespace BVDKKH.Remote.AutoInstaller
                     RunCli(installedExe, "--option verification-method use-permanent-password");
                     RunCli(installedExe, "--option approve-mode password");
                     RunCli(installedExe, "--option disable-change-permanent-password Y");
+                    RunCli(installedExe, "--option custom-rendezvous-server 172.16.3.28");
+                    RunCli(installedExe, "--option relay-server 172.16.3.28");
+                    RunCli(installedExe, "--option key \"\"");
+                    RunCli(installedExe, "--option api-server http://172.16.3.28:21114");
+                    WriteServerConfig();
                 }
 
                 string rdId = GetRustDeskId(installedExe);
@@ -1343,23 +1846,44 @@ namespace BVDKKH.Remote.AutoInstaller
                         lblBadge.Text = string.Format("🖥 Hệ điều hành: {0} ({1})   •   Trạng thái: Tương thích", info.OsName, info.Arch);
                     }));
 
-                    // Bước 2: Kiểm tra máy chủ chia sẻ mạng LAN trước
+                    // Bước 2: Kiểm tra nguồn gói cài đặt (1. Cục bộ -> 2. Máy chủ LAN -> 3. GitHub)
                     this.Invoke(new Action(() =>
                     {
-                        lblStatus.Text = "Đang kiểm tra gói cài đặt từ máy chủ nội bộ...";
-                        lblDetail.Text = "Đang kết nối " + Program.LanSharePath + "...";
+                        lblStatus.Text = "Đang kiểm tra gói cài đặt tối ưu cho thiết bị...";
+                        lblDetail.Text = "Đang kiểm tra nguồn cài đặt nội bộ...";
                         progressBar.Value = 15;
                     }));
 
+                    string localFile = Program.ResolveLocalInstallerFile(info);
                     string lanFile = null;
-                    if (Program.ConnectLanShare(Program.LanSharePath, Program.LanShareUsername, Program.LanSharePassword))
+
+                    if (string.IsNullOrEmpty(localFile))
                     {
-                        lanFile = Program.ResolveLanInstallerFile(info, Program.LanSharePath);
+                        if (Program.ConnectLanShare(Program.LanSharePath, Program.LanShareUsername, Program.LanSharePassword))
+                        {
+                            lanFile = Program.ResolveLanInstallerFile(info, Program.LanSharePath);
+                        }
                     }
 
                     string tempPath = null;
 
-                    if (!string.IsNullOrEmpty(lanFile) && File.Exists(lanFile))
+                    if (!string.IsNullOrEmpty(localFile) && File.Exists(localFile))
+                    {
+                        string fileName = Path.GetFileName(localFile);
+                        tempPath = Path.Combine(Path.GetTempPath(), fileName);
+                        downloadedFile = tempPath;
+
+                        this.Invoke(new Action(() =>
+                        {
+                            lblBadge.Text = string.Format("🖥 {0} ({1})   •   Nguồn: Gói cài đặt cục bộ", info.OsName, info.Arch);
+                            lblStatus.Text = "Đang sao chép gói cài đặt: " + fileName;
+                            lblDetail.Text = "Chuẩn bị sao chép dữ liệu...";
+                            progressBar.Value = 40;
+                        }));
+
+                        File.Copy(localFile, tempPath, true);
+                    }
+                    else if (!string.IsNullOrEmpty(lanFile) && File.Exists(lanFile))
                     {
                         string fileName = Path.GetFileName(lanFile);
                         tempPath = Path.Combine(Path.GetTempPath(), fileName);
@@ -1436,6 +1960,13 @@ namespace BVDKKH.Remote.AutoInstaller
 
                             webClient.DownloadFile(new Uri(asset.Value), tempPath);
                         }
+                    }
+
+                    // Bước 3: Xác thực tính toàn vẹn của tệp cài đặt (kích thước, định dạng Windows PE)
+                    string validationError;
+                    if (!Program.IsValidExecutable(tempPath, out validationError))
+                    {
+                        throw new Exception(validationError);
                     }
 
                     // Bước 4: Thực thi cài đặt và kích hoạt dịch vụ hoàn chỉnh
