@@ -608,7 +608,7 @@ namespace BVDKKH.Remote.AutoInstaller
             // Trường hợp offline hoàn toàn hoặc không thể truy cập internet
             if (string.IsNullOrEmpty(info.TagName))
             {
-                info.TagName = "v1.5.17";
+                info.TagName = "v1.5.18";
             }
 
             return info;
@@ -652,7 +652,7 @@ namespace BVDKKH.Remote.AutoInstaller
             }
 
             // Fallback khi không quét được assets
-            string tag = (release != null && !string.IsNullOrEmpty(release.TagName)) ? release.TagName : "v1.5.17";
+            string tag = (release != null && !string.IsNullOrEmpty(release.TagName)) ? release.TagName : "v1.5.18";
             string ver = tag.TrimStart('v');
             string fallbackFile = "";
             if (info.Arch == "x86" || !info.IsWin10OrLater)
@@ -1045,8 +1045,8 @@ namespace BVDKKH.Remote.AutoInstaller
                     {
                         key.SetValue("DisplayName", "BVDKKH-Remote");
                         key.SetValue("DisplayIcon", mainExe + ",0");
-                        key.SetValue("DisplayVersion", "1.5.17");
-                        key.SetValue("Version", "1.5.17");
+                        key.SetValue("DisplayVersion", "1.5.18");
+                        key.SetValue("Version", "1.5.18");
                         key.SetValue("Publisher", "Bệnh viện Đa khoa Khánh Hòa");
                         key.SetValue("InstallLocation", targetDir);
                         key.SetValue("UninstallString", "\"" + mainExe + "\" --uninstall");

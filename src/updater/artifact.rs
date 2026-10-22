@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
+
 use crate::{
     common::{display_version_from_release_id, release_id_from_update_url},
     hbbs_http::create_http_client_with_url_strict,
@@ -34,14 +38,7 @@ pub(crate) fn current_update_platform() -> &'static str {
 }
 
 pub(crate) fn current_update_arch() -> &'static str {
-    #[cfg(all(target_os = "windows", not(feature = "flutter")))]
-    {
-        "x86"
-    }
-    #[cfg(not(all(target_os = "windows", not(feature = "flutter"))))]
-    {
-        std::env::consts::ARCH
-    }
+    std::env::consts::ARCH
 }
 
 pub(crate) fn current_update_format(update_msi: bool) -> &'static str {
@@ -106,7 +103,7 @@ pub(super) fn verified_update_artifact_from_release_page_url(
 ) -> ResultType<VerifiedUpdateArtifact> {
     let release_id = release_id_from_update_url(update_url)?;
     let display_version = display_version_from_release_id(&release_id)?;
-    if update_url.contains("bvdkkh-remote-release") {
+    if update_url.starts_with("https://github.com/ngtrongha/bvdkkh-remote-release/") {
         return bvdkkh_update_artifact_from_release(&release_id, &display_version, query);
     }
     let expected_artifact_url_prefix =
@@ -129,76 +126,54 @@ fn bvdkkh_update_artifact_from_release(
     display_version: &str,
     query: &UpdateArtifactQuery<'_>,
 ) -> ResultType<VerifiedUpdateArtifact> {
-    let filename = match (query.platform, query.arch, query.format) {
-        #[cfg(all(target_os = "windows", not(feature = "flutter")))]
-        ("windows", _, _) => format!("rustdesk-{display_version}-x86-sciter.exe"),
-        #[cfg(target_os = "windows")]
-        ("windows", arch, format) => format!("rustdesk-{display_version}-{arch}.{format}"),
-        #[cfg(target_os = "macos")]
-        ("macos", "x86_64", "dmg") => format!("rustdesk-{display_version}-x86_64.dmg"),
-        #[cfg(target_os = "macos")]
-        ("macos", "aarch64", "dmg") => format!("rustdesk-{display_version}-aarch64.dmg"),
-        _ => format!("rustdesk-{display_version}-{}.{}", query.arch, query.format),
-    };
+    let filename = super::release::artifact_filename(
+        display_version,
+        query,
+        legacy_windows_update(),
+        cfg!(all(target_os = "windows", not(feature = "flutter"))),
+    );
     let download_url = format!(
         "https://github.com/ngtrongha/bvdkkh-remote-release/releases/download/{release_id}/{filename}"
     );
-
     let api_url = format!(
         "https://api.github.com/repos/ngtrongha/bvdkkh-remote-release/releases/tags/{release_id}"
     );
-    let mut size = 0u64;
-    let mut sha256 = String::new();
-
-    if let Ok(client) = create_http_client_with_url_strict(&api_url) {
-        if let Ok(resp) = client
-            .get(&api_url)
-            .header(reqwest::header::USER_AGENT, "RustDesk")
-            .timeout(UPDATE_SIDECAR_HTTP_REQUEST_TIMEOUT)
-            .send()
-        {
-            if resp.status().is_success() {
-                if let Ok(json) = resp.json::<serde_json::Value>() {
-                    if let Some(assets) = json.get("assets").and_then(|a| a.as_array()) {
-                        for asset in assets {
-                            if asset.get("name").and_then(|n| n.as_str()) == Some(&filename) {
-                                if let Some(s) = asset.get("size").and_then(|s| s.as_u64()) {
-                                    size = s;
-                                }
-                                if let Some(digest) = asset.get("digest").and_then(|d| d.as_str()) {
-                                    if let Some(hash) = digest.strip_prefix("sha256:") {
-                                        sha256 = hash.to_lowercase();
-                                    }
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    let client = create_http_client_with_url_strict(&api_url)?;
+    let response = client
+        .get(&api_url)
+        .header(reqwest::header::USER_AGENT, "BVDKKH-Remote")
+        .timeout(UPDATE_SIDECAR_HTTP_REQUEST_TIMEOUT)
+        .send()?
+        .error_for_status()?;
+    let release: serde_json::Value = response.json()?;
+    if release.get("tag_name").and_then(serde_json::Value::as_str) != Some(release_id)
+        || release.get("draft").and_then(serde_json::Value::as_bool) != Some(false)
+        || release.get("prerelease").and_then(serde_json::Value::as_bool) != Some(false)
+    {
+        bail!("Update is not a published stable release: {release_id}");
     }
-
-    if size == 0 {
-        if let Ok(dl_client) = create_http_client_with_url_strict(&download_url) {
-            if let Ok(head_resp) = dl_client.head(&download_url).send() {
-                if let Some(cl) = head_resp.headers().get(reqwest::header::CONTENT_LENGTH) {
-                    if let Ok(cl_str) = cl.to_str() {
-                        size = cl_str.parse::<u64>().unwrap_or_default();
-                    }
-                }
-            }
-        }
-    }
-
+    let (size, sha256) = super::release::asset_details(&release, &filename).ok_or_else(|| {
+        hbb_common::anyhow::anyhow!("Release has no ready artifact with SHA256: {filename}")
+    })?;
     Ok(VerifiedUpdateArtifact {
         version: display_version.to_owned(),
         url: download_url,
         #[cfg(target_os = "macos")]
         file_name: filename,
         size,
-        sha256,
+        sha256: sha256.to_ascii_lowercase(),
     })
+}
+
+pub(super) fn legacy_windows_update() -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        !base::platform::windows::is_windows_version_or_greater(10, 0, 0, 0, 0)
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        false
+    }
 }
 
 fn fetch_update_sidecar_bytes(url: &str) -> ResultType<Vec<u8>> {
@@ -258,7 +233,7 @@ pub fn get_update_download_file_from_url(url: &str) -> Option<PathBuf> {
     let filename = segments.next()?;
 
     let is_trusted_repo = (owner == "rustdesk" && repo == "rustdesk")
-        || repo == "bvdkkh-remote-release";
+        || (owner == "ngtrongha" && repo == "bvdkkh-remote-release");
     if !is_trusted_repo
         || releases != "releases"
         || download != "download"

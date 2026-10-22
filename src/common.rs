@@ -1399,18 +1399,33 @@ $ramModules = @(Get-WmiCompat 'Win32_PhysicalMemory' | ForEach-Object {
 })
 
 # 7. Physical Disks (SSD / HDD)
+$physicalMedia = @(Get-WmiCompat 'Win32_PhysicalMedia')
+$storageMedia = @(Get-WmiCompat 'MSFT_PhysicalDisk' 'root\Microsoft\Windows\Storage')
 $physDisks = @(Get-WmiCompat 'Win32_DiskDrive' | ForEach-Object {
     $size = 0
     if ($_.Size) { $size = [math]::Round([double]$_.Size / 1GB, 2) }
     $mType = [string]$_.MediaType
     $model = [string]$_.Model
     $bus = [string]$_.InterfaceType
+    $serial = ([string]$_.SerialNumber).Trim()
+    if (-not $serial) {
+        $diskId = [string]$_.DeviceID
+        $media = @($physicalMedia | Where-Object { $_.Tag -eq $diskId })
+        if ($media.Count -eq 1) { $serial = ([string]$media[0].SerialNumber).Trim() }
+    }
+    $storageMatch = @($storageMedia | Where-Object {
+        $serial -and ([string]$_.SerialNumber).Trim() -eq $serial
+    })
+    if ($storageMatch.Count -eq 1) {
+        if ($storageMatch[0].MediaType -eq 3) { $mType = 'HDD' }
+        if ($storageMatch[0].MediaType -eq 4) { $mType = 'SSD' }
+    }
     if ($model -match '(?i)(nvme|ssd|solid state)') {
         $mType = 'SSD'
     }
     [pscustomobject]@{
         Model = $model
-        SerialNumber = ([string]$_.SerialNumber).Trim()
+        SerialNumber = $serial
         SizeGB = $size
         InterfaceType = $bus
         MediaType = $mType
@@ -1455,8 +1470,48 @@ $monitors = @(
     }
 )
 
-# 9. GPUs
-$gpus = @(Get-WmiCompat 'Win32_VideoController' | ForEach-Object {
+# 9. GPUs: vendor serials and UUIDs are separate identifiers.
+$nvidiaInfo = @()
+$nvidiaSmi = Join-Path $env:SystemRoot 'System32\nvidia-smi.exe'
+if (-not (Test-Path -LiteralPath $nvidiaSmi)) {
+    $nvidiaSmi = Join-Path $env:ProgramFiles 'NVIDIA Corporation\NVSMI\nvidia-smi.exe'
+}
+if (Test-Path -LiteralPath $nvidiaSmi) {
+    $nvProcess = New-Object System.Diagnostics.Process
+    try {
+        $nvProcess.StartInfo.FileName = $nvidiaSmi
+        $nvProcess.StartInfo.Arguments = '--query-gpu=name,serial,uuid --format=csv,noheader,nounits'
+        $nvProcess.StartInfo.UseShellExecute = $false
+        $nvProcess.StartInfo.CreateNoWindow = $true
+        $nvProcess.StartInfo.RedirectStandardOutput = $true
+        if ($nvProcess.Start()) {
+            if ($nvProcess.WaitForExit(5000)) {
+                $nvOutput = $nvProcess.StandardOutput.ReadToEnd()
+                if ($nvProcess.ExitCode -eq 0) {
+                    $nvidiaInfo = @($nvOutput -split "`r?`n" | Where-Object { $_.Trim() } |
+                        ConvertFrom-Csv -Header Name,SerialNumber,UUID)
+                }
+            } else { $nvProcess.Kill() }
+        }
+    } catch {} finally { $nvProcess.Dispose() }
+}
+$gpuControllers = @(Get-WmiCompat 'Win32_VideoController')
+$gpus = @($gpuControllers | ForEach-Object {
+    $gpuName = [string]$_.Name
+    $serial = ''
+    $gpuUuid = ''
+    $vendorMatch = @($nvidiaInfo | Where-Object { $_.Name.Trim() -eq $gpuName.Trim() })
+    $controllerMatch = @($gpuControllers | Where-Object { $_.Name -eq $gpuName })
+    # Identical model names cannot safely associate vendor rows with WMI devices.
+    if ($vendorMatch.Count -eq 1 -and $controllerMatch.Count -eq 1) {
+        $vendorSerial = ([string]$vendorMatch[0].SerialNumber).Trim()
+        if ($vendorSerial -and $vendorSerial -notmatch '(?i)^(n/a|unknown|not supported|\[.*\]|0+)$') {
+            $serial = $vendorSerial
+        }
+        $vendorUuid = ([string]$vendorMatch[0].UUID).Trim()
+        if ($vendorUuid -match '^GPU-') { $gpuUuid = $vendorUuid }
+    }
+
     $res = ''
     if ($_.CurrentHorizontalResolution) {
         $res = ('{0}x{1}@{2}Hz' -f $_.CurrentHorizontalResolution, $_.CurrentVerticalResolution, $_.CurrentRefreshRate)
@@ -1465,6 +1520,9 @@ $gpus = @(Get-WmiCompat 'Win32_VideoController' | ForEach-Object {
     if ($_.AdapterRAM) { $vram = [math]::Round([double]$_.AdapterRAM / 1MB, 0) }
     [pscustomobject]@{
         Name = [string]$_.Name
+        SerialNumber = $serial
+        UUID = $gpuUuid
+        PNPDeviceID = [string]$_.PNPDeviceID
         DriverVersion = [string]$_.DriverVersion
         AdapterRAM_MB = $vram
         Resolution = $res
@@ -1950,8 +2008,8 @@ pub(crate) fn release_id_from_update_url(update_url: &str) -> ResultType<String>
     let release_id = match segments.as_slice() {
         ["rustdesk", "rustdesk", "releases", "tag", release_id] => *release_id,
         ["rustdesk", "rustdesk", "releases", "tag", release_id, ""] => *release_id,
-        [_, "bvdkkh-remote-release", "releases", "tag", release_id] => *release_id,
-        [_, "bvdkkh-remote-release", "releases", "tag", release_id, ""] => *release_id,
+        ["ngtrongha", "bvdkkh-remote-release", "releases", "tag", release_id] => *release_id,
+        ["ngtrongha", "bvdkkh-remote-release", "releases", "tag", release_id, ""] => *release_id,
         _ => bail!(
             "Update URL is not a valid release tag URL: {}",
             update_url
@@ -2037,10 +2095,15 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
             }
         }
     };
-    let bytes = latest_release_response.bytes().await?;
+    let bytes = latest_release_response.error_for_status()?.bytes().await?;
     let releases: Vec<serde_json::Value> = serde_json::from_slice(&bytes)?;
     
-    if let Some(latest_release) = releases.get(0) {
+    clear_software_update_url();
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    let latest_release = crate::updater::latest_bvdkkh_release(&releases)?;
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let latest_release = releases.first();
+    if let Some(latest_release) = latest_release {
         if let Some(tag_name) = latest_release.get("tag_name").and_then(|v| v.as_str()) {
             if let Some(html_url) = latest_release.get("html_url").and_then(|v| v.as_str()) {
                 let latest_release_version = tag_name.trim_start_matches(|c| c == 'v' || c == 'V').to_string();
