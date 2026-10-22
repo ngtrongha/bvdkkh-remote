@@ -17,7 +17,7 @@ description: Apply when writing, building, refactoring, or fixing code — proje
 | Project Type                           | Primary Agent         | Skills                        |
 | -------------------------------------- | --------------------- | ----------------------------- |
 | **MOBILE** (iOS, Android, RN, Flutter) | `mobile-developer`    | mobile-design                 |
-| **WEB** (Next.js, React web)           | `frontend-specialist` | frontend-design               |
+| **WEB ADMIN** (Flutter Web) | `frontend-specialist` | mobile-design, design-spec |
 | **BACKEND** (API, server, DB)          | `backend-specialist`  | api-patterns, database-design |
 
 > 🔴 **Mobile + frontend-specialist = WRONG.** Mobile = mobile-developer ONLY.
@@ -65,14 +65,14 @@ description: Apply when writing, building, refactoring, or fixing code — proje
 
 **Priority Execution Order:**
 
-1. **Security** → 2. **Lint** → 3. **Schema** → 4. **Tests** → 5. **UX** → 6. **Seo** → 7. **Lighthouse/E2E**
+1. **Security** → 2. **Lint** → 3. **Schema** → 4. **Tests** → 5. **Mobile/UI and localization** → 6. **Lighthouse/E2E**
 
 **Rules:**
 
 - **Completion:** A task is NOT finished until `checklist.py` returns success.
 - **Reporting:** If it fails, fix the **Critical** blockers first (Security/Lint).
 
-**Available Scripts (10 total):**
+**Available Scripts (8 total):**
 
 | Script                     | Skill                 | When to Use         |
 | -------------------------- | --------------------- | ------------------- |
@@ -80,9 +80,7 @@ description: Apply when writing, building, refactoring, or fixing code — proje
 | `lint_runner.py`           | lint-and-validate     | Every code change   |
 | `test_runner.py`           | testing-patterns      | After logic change  |
 | `schema_validator.py`      | database-design       | After DB change     |
-| `ux_audit.py`              | frontend-design       | After UI change     |
-| `accessibility_checker.py` | frontend-design       | After UI change     |
-| `seo_checker.py`           | seo-fundamentals      | After page change   |
+| `i18n_checker.py`           | i18n-localization    | After UI text change |
 | `mobile_audit.py`          | mobile-design         | After mobile change |
 | `lighthouse_audit.py`      | performance-profiling | Before deploy       |
 | `playwright_runner.py`     | webapp-testing        | Before deploy       |

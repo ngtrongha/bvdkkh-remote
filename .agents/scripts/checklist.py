@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+# Project: BVĐKKH - Remote
+# Author: Nguyễn Trọng Hà
 """Run the fast AG Kit validation checklist."""
 from __future__ import annotations
 
@@ -27,9 +30,6 @@ CORE_CHECKS = (
     CheckSpec("Type Coverage", "skills/lint-and-validate/scripts/type_coverage.py", "P1 Code Quality"),
     CheckSpec("Schema Validation", "skills/database-design/scripts/schema_validator.py", "P2 Data Layer"),
     CheckSpec("Test Runner", "skills/testing-patterns/scripts/test_runner.py", "P3 Testing"),
-    CheckSpec("UX Audit", "skills/frontend-design/scripts/ux_audit.py", "P4 UX & Accessibility"),
-    CheckSpec("Accessibility Check", "skills/frontend-design/scripts/accessibility_checker.py", "P4 UX & Accessibility"),
-    CheckSpec("SEO Check", "skills/seo-fundamentals/scripts/seo_checker.py", "P5 SEO"),
 )
 
 URL_CHECKS = (

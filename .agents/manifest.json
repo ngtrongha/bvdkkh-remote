@@ -11,8 +11,6 @@
           "clean-code": "^2.0.0",
           "database-design": "^1.0.0",
           "lint-and-validate": "^1.0.0",
-          "mcp-builder": "^1.0.0",
-          "nodejs-best-practices": "^1.0.0",
           "powershell-windows": "^1.0.0",
           "python-patterns": "^1.0.0",
           "rust-pro": "^1.0.0"
@@ -154,12 +152,14 @@
         "skills": {
           "clean-code": "^2.0.0",
           "design-spec": "^1.0.0",
-          "frontend-architecture": "^1.0.0",
-          "frontend-design": "^1.0.0",
+          "flutter-add-widget-test": "",
+          "flutter-apply-architecture-best-practices": "",
+          "flutter-build-responsive-layout": "",
+          "flutter-fix-layout-issues": "",
+          "flutter-setup-declarative-routing": "",
+          "i18n-localization": "^1.0.0",
           "lint-and-validate": "^1.0.0",
-          "nextjs-react-expert": "^1.0.0",
-          "tailwind-patterns": "^1.0.0",
-          "web-design-guidelines": "^1.0.0"
+          "mobile-design": "^1.0.0"
         }
       },
       "tools": [
@@ -169,25 +169,6 @@
         "Bash",
         "Edit",
         "Write"
-      ],
-      "version": "1.0.0"
-    },
-    "game-developer": {
-      "model": "inherit",
-      "path": "agent/game-developer.md",
-      "requires": {
-        "skills": {
-          "clean-code": "^2.0.0",
-          "game-development": "^1.0.0"
-        }
-      },
-      "tools": [
-        "Read",
-        "Write",
-        "Edit",
-        "Bash",
-        "Grep",
-        "Glob"
       ],
       "version": "1.0.0"
     },
@@ -323,7 +304,6 @@
       "path": "agent/project-planner.md",
       "requires": {
         "skills": {
-          "app-builder": "^1.1.0",
           "brainstorming": "^1.0.0",
           "clean-code": "^2.0.0",
           "plan-writing": "^1.0.0"
@@ -345,7 +325,6 @@
           "clean-code": "^2.0.0",
           "lint-and-validate": "^1.0.0",
           "testing-patterns": "^1.0.0",
-          "web-design-guidelines": "^1.0.0",
           "webapp-testing": "^1.0.0"
         }
       },
@@ -376,25 +355,6 @@
         "Glob",
         "Bash",
         "Edit",
-        "Write"
-      ],
-      "version": "1.0.0"
-    },
-    "seo-specialist": {
-      "model": "inherit",
-      "path": "agent/seo-specialist.md",
-      "requires": {
-        "skills": {
-          "clean-code": "^2.0.0",
-          "geo-fundamentals": "^1.0.0",
-          "seo-fundamentals": "^1.0.0"
-        }
-      },
-      "tools": [
-        "Read",
-        "Grep",
-        "Glob",
-        "Bash",
         "Write"
       ],
       "version": "1.0.0"
@@ -450,11 +410,23 @@
       "trigger": "glob",
       "version": "1.0.0"
     },
+    "error-prevention": {
+      "path": "rules/error-prevention.md",
+      "priority": "P0",
+      "trigger": "always_on",
+      "version": "1.0.0"
+    },
     "quick-reference": {
       "path": "rules/quick-reference.md",
       "priority": "P2",
       "trigger": "model_decision",
       "version": "1.0.0"
+    },
+    "release-workflow": {
+      "path": "rules/release-workflow.md",
+      "priority": "P0",
+      "trigger": "model_decision",
+      "version": "2.0.0"
     },
     "request-routing": {
       "path": "rules/request-routing.md",
@@ -537,20 +509,6 @@
         "skills/api-patterns/scripts/api_validator.py"
       ],
       "version": "1.0.0"
-    },
-    "app-builder": {
-      "allowedTools": [
-        "Read",
-        "Write",
-        "Edit",
-        "Glob",
-        "Grep",
-        "Bash",
-        "Agent"
-      ],
-      "path": "skills/app-builder/SKILL.md",
-      "scripts": [],
-      "version": "1.1.0"
     },
     "architecture": {
       "allowedTools": [
@@ -663,6 +621,66 @@
       "scripts": [],
       "version": "1.0.0"
     },
+    "dart-add-unit-test": {
+      "allowedTools": [],
+      "path": "skills/dart-add-unit-test/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "dart-collect-coverage": {
+      "allowedTools": [],
+      "path": "skills/dart-collect-coverage/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "dart-fix-runtime-errors": {
+      "allowedTools": [],
+      "path": "skills/dart-fix-runtime-errors/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "dart-generate-test-mocks": {
+      "allowedTools": [],
+      "path": "skills/dart-generate-test-mocks/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "dart-resolve-package-conflicts": {
+      "allowedTools": [],
+      "path": "skills/dart-resolve-package-conflicts/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "dart-run-static-analysis": {
+      "allowedTools": [],
+      "path": "skills/dart-run-static-analysis/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "dart-use-doc-examples": {
+      "allowedTools": [],
+      "path": "skills/dart-use-doc-examples/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "dart-use-path-package": {
+      "allowedTools": [],
+      "path": "skills/dart-use-path-package/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "dart-use-pattern-matching": {
+      "allowedTools": [],
+      "path": "skills/dart-use-pattern-matching/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "dart-write-documentation": {
+      "allowedTools": [],
+      "path": "skills/dart-write-documentation/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
     "database-design": {
       "allowedTools": [
         "Read",
@@ -710,58 +728,59 @@
       "scripts": [],
       "version": "1.0.0"
     },
-    "frontend-architecture": {
-      "allowedTools": [
-        "Read",
-        "Write",
-        "Edit",
-        "Glob",
-        "Grep"
-      ],
-      "path": "skills/frontend-architecture/SKILL.md",
+    "flutter-add-integration-test": {
+      "allowedTools": [],
+      "path": "skills/flutter-add-integration-test/SKILL.md",
       "scripts": [],
-      "version": "1.0.0"
+      "version": ""
     },
-    "frontend-design": {
-      "allowedTools": [
-        "Read",
-        "Write",
-        "Edit",
-        "Glob",
-        "Grep",
-        "Bash"
-      ],
-      "path": "skills/frontend-design/SKILL.md",
-      "scripts": [
-        "skills/frontend-design/scripts/accessibility_checker.py",
-        "skills/frontend-design/scripts/ux_audit.py"
-      ],
-      "version": "1.0.0"
-    },
-    "game-development": {
-      "allowedTools": [
-        "Read",
-        "Write",
-        "Edit",
-        "Glob",
-        "Grep",
-        "Bash"
-      ],
-      "path": "skills/game-development/SKILL.md",
+    "flutter-add-widget-test": {
+      "allowedTools": [],
+      "path": "skills/flutter-add-widget-test/SKILL.md",
       "scripts": [],
-      "version": "1.0.0"
+      "version": ""
     },
-    "geo-fundamentals": {
-      "allowedTools": [
-        "Read",
-        "Glob",
-        "Grep"
-      ],
-      "path": "skills/geo-fundamentals/SKILL.md",
-      "scripts": [
-        "skills/geo-fundamentals/scripts/geo_checker.py"
-      ],
-      "version": "1.0.0"
+    "flutter-apply-architecture-best-practices": {
+      "allowedTools": [],
+      "path": "skills/flutter-apply-architecture-best-practices/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "flutter-build-responsive-layout": {
+      "allowedTools": [],
+      "path": "skills/flutter-build-responsive-layout/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "flutter-fix-layout-issues": {
+      "allowedTools": [],
+      "path": "skills/flutter-fix-layout-issues/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "flutter-implement-json-serialization": {
+      "allowedTools": [],
+      "path": "skills/flutter-implement-json-serialization/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "flutter-setup-declarative-routing": {
+      "allowedTools": [],
+      "path": "skills/flutter-setup-declarative-routing/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "flutter-setup-localization": {
+      "allowedTools": [],
+      "path": "skills/flutter-setup-localization/SKILL.md",
+      "scripts": [],
+      "version": ""
+    },
+    "flutter-use-http-package": {
+      "allowedTools": [],
+      "path": "skills/flutter-use-http-package/SKILL.md",
+      "scripts": [],
+      "version": ""
     },
     "i18n-localization": {
       "allowedTools": [
@@ -799,18 +818,6 @@
       ],
       "version": "1.0.0"
     },
-    "mcp-builder": {
-      "allowedTools": [
-        "Read",
-        "Write",
-        "Edit",
-        "Glob",
-        "Grep"
-      ],
-      "path": "skills/mcp-builder/SKILL.md",
-      "scripts": [],
-      "version": "1.0.0"
-    },
     "memory-system": {
       "allowedTools": [
         "Read",
@@ -833,34 +840,6 @@
       "scripts": [
         "skills/mobile-design/scripts/mobile_audit.py"
       ],
-      "version": "1.0.0"
-    },
-    "nextjs-react-expert": {
-      "allowedTools": [
-        "Read",
-        "Write",
-        "Edit",
-        "Glob",
-        "Grep",
-        "Bash"
-      ],
-      "path": "skills/nextjs-react-expert/SKILL.md",
-      "scripts": [
-        "skills/nextjs-react-expert/scripts/convert_rules.py",
-        "skills/nextjs-react-expert/scripts/react_performance_checker.py"
-      ],
-      "version": "1.0.0"
-    },
-    "nodejs-best-practices": {
-      "allowedTools": [
-        "Read",
-        "Write",
-        "Edit",
-        "Glob",
-        "Grep"
-      ],
-      "path": "skills/nodejs-best-practices/SKILL.md",
-      "scripts": [],
       "version": "1.0.0"
     },
     "parallel-agents": {
@@ -945,18 +924,6 @@
       "scripts": [],
       "version": "1.0.0"
     },
-    "seo-fundamentals": {
-      "allowedTools": [
-        "Read",
-        "Glob",
-        "Grep"
-      ],
-      "path": "skills/seo-fundamentals/SKILL.md",
-      "scripts": [
-        "skills/seo-fundamentals/scripts/seo_checker.py"
-      ],
-      "version": "1.0.0"
-    },
     "server-management": {
       "allowedTools": [
         "Read",
@@ -982,17 +949,6 @@
       "scripts": [],
       "version": "1.0.0"
     },
-    "skillify": {
-      "allowedTools": [
-        "Read",
-        "Write",
-        "Glob",
-        "Grep"
-      ],
-      "path": "skills/skillify/SKILL.md",
-      "scripts": [],
-      "version": "1.0.0"
-    },
     "systematic-debugging": {
       "allowedTools": [
         "Read",
@@ -1000,18 +956,6 @@
         "Grep"
       ],
       "path": "skills/systematic-debugging/SKILL.md",
-      "scripts": [],
-      "version": "1.0.0"
-    },
-    "tailwind-patterns": {
-      "allowedTools": [
-        "Read",
-        "Write",
-        "Edit",
-        "Glob",
-        "Grep"
-      ],
-      "path": "skills/tailwind-patterns/SKILL.md",
       "scripts": [],
       "version": "1.0.0"
     },
@@ -1066,17 +1010,6 @@
         "skills/vulnerability-scanner/scripts/dependency_analyzer.py",
         "skills/vulnerability-scanner/scripts/security_scan.py"
       ],
-      "version": "1.0.0"
-    },
-    "web-design-guidelines": {
-      "allowedTools": [
-        "Read",
-        "Grep",
-        "Glob",
-        "WebFetch"
-      ],
-      "path": "skills/web-design-guidelines/SKILL.md",
-      "scripts": [],
       "version": "1.0.0"
     },
     "webapp-testing": {
@@ -1149,11 +1082,12 @@
       "path": "workflows/create.md",
       "requires": {
         "agents": [
-          "orchestrator",
-          "project-planner"
+          "project-planner",
+          "orchestrator"
         ],
         "skills": [
-          "app-builder",
+          "plan-writing",
+          "architecture",
           "design-spec",
           "verify-changes"
         ]

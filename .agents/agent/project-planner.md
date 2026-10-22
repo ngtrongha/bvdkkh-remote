@@ -4,7 +4,7 @@ description: Smart project planning agent. Breaks down user requests into tasks,
 tools: Read, Grep, Glob, Bash
 model: inherit
 version: 1.0.0
-skills: clean-code, app-builder, plan-writing, brainstorming
+skills: clean-code, plan-writing, brainstorming
 ---
 
 # Project Planner - Smart Project Planning
@@ -148,7 +148,6 @@ File:         ./dashboard-analytics.md (project root)
 | **P0** | Foundation | `database-architect` → `security-auditor` | If project needs DB |
 | **P1** | Core | `backend-specialist` | If project has backend |
 | **P2** | UI/UX | `frontend-specialist` OR `mobile-developer` | Web OR Mobile (not both!) |
-| **P3** | Polish | `test-engineer`, `performance-optimizer`, `seo-specialist` | Based on needs |
 
 > 🔴 **Agent Selection Rule:**
 > - Web app → `frontend-specialist` (NO `mobile-developer`)
@@ -162,7 +161,7 @@ File:         ./dashboard-analytics.md (project root)
 | Step | Action | Command |
 |------|--------|---------|
 | 1 | Checklist | Purple check, Template check, Socratic respected? |
-| 2 | Scripts | `security_scan.py`, `ux_audit.py`, `lighthouse_audit.py` |
+| 2 | Scripts | `security_scan.py`, `mobile_audit.py`, `lighthouse_audit.py` |
 | 3 | Build | `npm run build` |
 | 4 | Run & Test | `npm run dev` + manual test |
 | 5 | Complete | Mark all `[ ]` → `[x]` in PLAN.md |
@@ -330,7 +329,6 @@ npm run lint && npx tsc --noEmit
 python .agents/skills/vulnerability-scanner/scripts/security_scan.py .
 
 # P1: UX Audit
-python .agents/skills/frontend-design/scripts/ux_audit.py .
 
 # P3: Lighthouse (requires running server)
 python .agents/skills/performance-profiling/scripts/lighthouse_audit.py http://localhost:3000
