@@ -1,3 +1,6 @@
+# Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+# Project: BVĐKKH - Remote
+# Author: Nguyễn Trọng Hà
 from __future__ import annotations
 
 import importlib.util
@@ -28,11 +31,6 @@ security_scan = load_module("agkit_security_scan", TOOLKIT / "skills/vulnerabili
 dependency_analyzer = load_module("agkit_dependency_analyzer", TOOLKIT / "skills/vulnerability-scanner/scripts/dependency_analyzer.py")
 bundle_analyzer = load_module("agkit_bundle_analyzer", TOOLKIT / "skills/performance-profiling/scripts/bundle_analyzer.py")
 validation_runner = load_module("agkit_validation_runner", SCRIPTS / "validation_runner.py")
-geo_checker = load_module("agkit_geo_checker", TOOLKIT / "skills/geo-fundamentals/scripts/geo_checker.py")
-react_performance = load_module(
-    "agkit_react_performance",
-    TOOLKIT / "skills/nextjs-react-expert/scripts/react_performance_checker.py",
-)
 
 
 class ToolkitRegressionTests(unittest.TestCase):
@@ -106,64 +104,7 @@ eval(user_input)
             self.assertTrue(report["findings"])
             self.assertEqual("high", report["findings"][0]["severity"])
 
-    def test_geo_checker_follows_localized_mdx_and_skips_layouts(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            route = root / "web" / "src" / "app" / "docs" / "demo"
-            route.mkdir(parents=True)
-            (route / "page.tsx").write_text(
-                'import En from "./content.en.mdx";\n'
-                'import Vi from "./content.vi.mdx";\n'
-                'export default function Page(){ return <En />; }\n',
-                "utf-8",
-            )
-            (route / "content.en.mdx").write_text(
-                "# Demo\n\n## Overview\nText.\n\n## Usage\nText.\n",
-                "utf-8",
-            )
-            (route / "content.vi.mdx").write_text(
-                "# Trình diễn\n\n## Tổng quan\nNội dung.\n\n## Sử dụng\nNội dung.\n",
-                "utf-8",
-            )
-            (route.parent / "layout.tsx").write_text(
-                "export default function Layout({children}){return <div>{children}</div>}\n",
-                "utf-8",
-            )
 
-            pages = geo_checker.find_web_pages(root)
-            self.assertEqual([route / "page.tsx"], pages)
-            result = geo_checker.check_page(route / "page.tsx", root)
-            self.assertGreaterEqual(result["score"], 60)
-            self.assertFalse(any("Multiple H1" in issue for issue in result["issues"]))
-
-    def test_react_checker_ignores_generated_next_output(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            web = root / "web"
-            source = web / "src" / "app"
-            generated = web / ".next" / "types"
-            source.mkdir(parents=True)
-            generated.mkdir(parents=True)
-            (web / "package.json").write_text(
-                '{"dependencies":{"next":"16.2.10","react":"19.2.3"}}',
-                "utf-8",
-            )
-            (source / "page.tsx").write_text(
-                "export default function Page(){return <main><h1>Safe</h1></main>}\n",
-                "utf-8",
-            )
-            (generated / "page.ts").write_text(
-                "async function generated(){await one();\nawait two();}\n",
-                "utf-8",
-            )
-
-            checker = react_performance.PerformanceChecker(str(root))
-            # Resolve paths: macOS temp dirs use /var -> /private/var symlinks.
-            scanned = {path.resolve() for path in checker._iter_files(["ts", "tsx"])}
-            self.assertIn((source / "page.tsx").resolve(), scanned)
-            self.assertNotIn((generated / "page.ts").resolve(), scanned)
-            self.assertTrue(checker.run())
-            self.assertEqual([], checker.issues)
 
     def test_runner_finds_embedded_toolkit_for_external_project(self):
         with tempfile.TemporaryDirectory() as tmp:

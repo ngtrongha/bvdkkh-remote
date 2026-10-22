@@ -30,8 +30,8 @@ Agent activated → Check frontmatter "skills:" → Read SKILL.md (INDEX) → Re
 📚 **Using skill: `@[skill-name]`...**
 ```
 
-- List multiple skills together: `📚 Using skills: @frontend-design + @design-spec...`
-- Announce on-demand skills too (e.g. a companion skill pulled from a hub, or `app-builder` for a new app), not just frontmatter ones.
+- List multiple skills together: `📚 Using skills: @mobile-design + @design-spec...`
+- Announce on-demand skills too (e.g. a Flutter skill needed for a specific UI change), not just frontmatter ones.
 - ❌ Applying a skill without announcing it = **USER CANNOT VERIFY THE SKILL WAS USED**.
 
 ### 2. Enforcement Protocol
