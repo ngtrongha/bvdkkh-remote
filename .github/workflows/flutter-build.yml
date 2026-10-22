@@ -429,13 +429,19 @@ jobs:
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           pushd ./res/msi
-          python preprocess.py --arp -d ../../rustdesk
+          $appName = if (Test-Path ../../rustdesk/BVDKKH-Remote.exe) { 'BVDKKH-Remote' } else { 'RustDesk' }
+          python preprocess.py --arp -d ../../rustdesk --app-name $appName
           nuget restore msi.sln
           $msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }
           msbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10
           $msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1
+          if ($null -eq $msi) {
+            Write-Error "Could not find built Package.msi!"
+            exit 1
+          }
           mv $msi.FullName ../../SignOutput/rustdesk-${{ env.VERSION }}-win7-${{ matrix.job.arch }}.msi
           sha256sum ../../SignOutput/rustdesk-*.msi
+          popd
 
       - name: Build pre-built MSI template
         # Two things this works around: preprocess.py rewrites res/msi in place, so the
@@ -597,7 +603,13 @@ jobs:
           cargo update -p sciter-rs --precise 674e07d3066ca9a92ced3816203ab6b652629d1e
           cargo build --locked --features inline,vram,hwcodec --release --bins
           mkdir -p ./Release
-          mv ./target/release/rustdesk.exe ./Release/rustdesk.exe
+          if [ -f ./target/release/BVDKKH-Remote.exe ]; then
+            cp ./target/release/BVDKKH-Remote.exe ./Release/BVDKKH-Remote.exe
+            cp ./target/release/BVDKKH-Remote.exe ./Release/rustdesk.exe
+          elif [ -f ./target/release/rustdesk.exe ]; then
+            cp ./target/release/rustdesk.exe ./Release/BVDKKH-Remote.exe
+            cp ./target/release/rustdesk.exe ./Release/rustdesk.exe
+          fi
           curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
           echo "output_folder=./Release" >> $GITHUB_OUTPUT
           curl -LJ -o ./usbmmidd_v2.zip https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip
@@ -644,7 +656,11 @@ jobs:
           sed -i '/dpiAware/d' res/manifest.xml
           pushd ./libs/portable
           pip3 install -r requirements.txt
-          python3 ./generate.py -f ../../Release/ -o . -e ../../Release/rustdesk.exe
+          EXE_NAME="BVDKKH-Remote.exe"
+          if [ ! -f ../../Release/BVDKKH-Remote.exe ]; then
+            EXE_NAME="rustdesk.exe"
+          fi
+          python3 ./generate.py -f ../../Release/ -o . -e ../../Release/$EXE_NAME
           popd
           mkdir -p ./SignOutput
           mv ./target/release/rustdesk-portable-packer.exe ./SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}-sciter.exe
