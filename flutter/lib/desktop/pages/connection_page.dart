@@ -463,8 +463,10 @@ class _ConnectionPageState extends State<ConnectionPage>
           FocusNode fieldFocusNode,
           VoidCallback onFieldSubmitted,
         ) {
-          updateTextAndPreserveSelection(
-              fieldTextEditingController, _idController.text);
+          if (fieldTextEditingController.text != _idController.text) {
+            updateTextAndPreserveSelection(
+                fieldTextEditingController, _idController.text);
+          }
           return Row(
             children: [
               const Padding(
