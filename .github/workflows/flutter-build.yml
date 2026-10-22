@@ -315,6 +315,9 @@ jobs:
           # --hwcodec is shared by all Windows targets; per-target extras (e.g. --vram) come from the matrix
           python3 .\build.py --portable --flutter --skip-portable-pack --hwcodec ${{ matrix.job.build-args }}
           mv ./flutter/build/windows/${{ matrix.job.flutter-arch }}/runner/Release ./rustdesk
+          if (Test-Path ./rustdesk/BVDKKH-Remote.exe) {
+            Copy-Item -Path ./rustdesk/BVDKKH-Remote.exe -Destination ./rustdesk/rustdesk.exe -Force
+          }
 
           # Download usbmmidd_v2.zip and extract it to ./rustdesk
           Invoke-WebRequest -Uri https://github.com/rustdesk-org/rdev/releases/download/usbmmidd_v2/usbmmidd_v2.zip -OutFile usbmmidd_v2.zip
@@ -415,13 +418,19 @@ jobs:
         if: env.UPLOAD_ARTIFACT == 'true'
         run: |
           pushd ./res/msi
-          python preprocess.py --arp -d ../../rustdesk
+          $appName = if (Test-Path ../../rustdesk/BVDKKH-Remote.exe) { 'BVDKKH-Remote' } else { 'RustDesk' }
+          python preprocess.py --arp -d ../../rustdesk --app-name $appName
           nuget restore msi.sln
           $msiPlatform = if ('${{ matrix.job.arch }}' -eq 'aarch64') { 'ARM64' } else { 'x64' }
           msbuild msi.sln -p:Configuration=Release -p:Platform=$msiPlatform /p:TargetVersion=Windows10
           $msi = Get-ChildItem ./Package/bin/*/Release/en-us/Package.msi | Select-Object -First 1
+          if ($null -eq $msi) {
+            Write-Error "Could not find built Package.msi!"
+            exit 1
+          }
           mv $msi.FullName ../../SignOutput/rustdesk-${{ env.VERSION }}-${{ matrix.job.arch }}.msi
           sha256sum ../../SignOutput/rustdesk-*.msi
+          popd
 
       - name: Build pre-built MSI template
         # Two things this works around: preprocess.py rewrites res/msi in place, so the
@@ -588,9 +597,11 @@ jobs:
           cargo build --locked --features inline,vram,hwcodec --release --bins
           mkdir -p ./Release
           if [ -f ./target/release/BVDKKH-Remote.exe ]; then
-            mv ./target/release/BVDKKH-Remote.exe ./Release/BVDKKH-Remote.exe
-          else
-            mv ./target/release/rustdesk.exe ./Release/BVDKKH-Remote.exe
+            cp ./target/release/BVDKKH-Remote.exe ./Release/BVDKKH-Remote.exe
+            cp ./target/release/BVDKKH-Remote.exe ./Release/rustdesk.exe
+          elif [ -f ./target/release/rustdesk.exe ]; then
+            cp ./target/release/rustdesk.exe ./Release/BVDKKH-Remote.exe
+            cp ./target/release/rustdesk.exe ./Release/rustdesk.exe
           fi
           curl -LJ -o ./Release/sciter.dll https://github.com/c-smile/sciter-sdk/raw/master/bin.win/x32/sciter.dll
           echo "output_folder=./Release" >> $GITHUB_OUTPUT
