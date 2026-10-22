@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
-// Project: BVĐKKH - Remote
+// Project: BVDKKH-Remote
 // Author: Nguyễn Trọng Hà
 
 use std::{
@@ -721,7 +721,7 @@ impl UI {
                     }
                 }
             }
-            let default_exe = std::path::Path::new(r"C:\Program Files\BVĐKKH - Remote\BaoSuCoIT.exe");
+            let default_exe = std::path::Path::new(r"C:\Program Files\BVDKKH-Remote\BaoSuCoIT.exe");
             if default_exe.exists() {
                 let _ = std::process::Command::new(default_exe).spawn();
             }

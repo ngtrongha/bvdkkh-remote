@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
-// Project: BVĐKKH - Remote
+// Project: BVDKKH-Remote
 // Author: Nguyễn Trọng Hà
 
 use std::{
@@ -192,7 +192,7 @@ pub fn global_init() -> bool {
         builtin_settings.insert("hide-stop-service".to_string(), "Y".to_string());
         builtin_settings.insert("disable-change-id".to_string(), "Y".to_string());
         builtin_settings.insert("disable-change-permanent-password".to_string(), "Y".to_string());
-        builtin_settings.insert("app-name".to_string(), "BVĐKKH - Remote".to_string());
+        builtin_settings.insert("app-name".to_string(), "BVDKKH-Remote".to_string());
         builtin_settings.insert("allow-remote-config-modification".to_string(), "N".to_string());
     }
     
@@ -2068,7 +2068,7 @@ pub async fn do_check_software_update() -> hbb_common::ResultType<()> {
 
 #[inline]
 pub fn get_app_name() -> String {
-    "BVĐKKH - Remote".to_string()
+    "BVDKKH-Remote".to_string()
 }
 
 #[inline]

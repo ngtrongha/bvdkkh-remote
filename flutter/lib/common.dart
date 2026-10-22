@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
-// Project: BVĐKKH - Remote
+// Project: BVDKKH-Remote
 // Author: Nguyễn Trọng Hà
 
 import 'dart:async';
@@ -3162,7 +3162,7 @@ int versionCmp(String v1, String v2) {
 String getWindowName({WindowType? overrideType}) {
   var name = bind.mainGetAppNameSync();
   if (name == "RustDesk") {
-    name = "BVĐKKH - Remote";
+    name = "BVDKKH-Remote";
   }
   switch (overrideType ?? kWindowType) {
     case WindowType.Main:
