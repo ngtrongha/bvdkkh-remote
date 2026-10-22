@@ -1,5 +1,5 @@
 param(
-    [string]$TagName = "v1.5.17"
+    [string]$TagName = "v1.5.18"
 )
 
 $rootDir = $PSScriptRoot

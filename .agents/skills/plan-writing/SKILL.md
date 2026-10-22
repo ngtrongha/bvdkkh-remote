@@ -89,7 +89,7 @@ This skill provides a framework for breaking down work into clear, actionable ta
 
 | Project Type | Relevant Scripts |
 |--------------|------------------|
-| Frontend/React | `ux_audit.py`, `accessibility_checker.py` |
+| Frontend/React | `mobile_audit.py`, `accessibility_checker.py` |
 | Backend/API | `api_validator.py`, `security_scan.py` |
 | Mobile | `mobile_audit.py` |
 | Database | `schema_validator.py` |

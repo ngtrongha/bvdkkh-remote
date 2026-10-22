@@ -1,5 +1,10 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
+
 mod artifact;
 mod download;
+mod release;
 
 use crate::common::do_check_software_update;
 use artifact::verified_update_artifact_from_release_page_url;
@@ -91,8 +96,25 @@ pub const DUR_ONE_DAY: Duration = Duration::from_secs(60 * 60 * 24);
 /// Minimum interval between consecutive update checks (10 minutes).
 pub const MIN_INTERVAL: Duration = Duration::from_secs(60 * 10);
 
-/// Retry interval when an update check fails or a session is active (30 minutes).
+/// Retry interval when an update check fails (30 minutes).
 pub const RETRY_INTERVAL: Duration = Duration::from_secs(60 * 30);
+const SESSION_RETRY_INTERVAL: Duration = Duration::from_secs(60);
+
+pub(crate) fn latest_bvdkkh_release(
+    releases: &[serde_json::Value],
+) -> ResultType<Option<&serde_json::Value>> {
+    #[cfg(target_os = "windows")]
+    let update_msi = crate::platform::is_msi_installed()? && !crate::is_custom_client();
+    #[cfg(not(target_os = "windows"))]
+    let update_msi = false;
+    Ok(release::latest_release(
+        releases,
+        crate::VERSION,
+        &current_update_artifact_query(update_msi),
+        artifact::legacy_windows_update(),
+        cfg!(all(target_os = "windows", not(feature = "flutter"))),
+    ))
+}
 
 pub fn update_controlling_session_count(count: usize) {
     CONTROLLING_SESSION_COUNT.store(count, Ordering::SeqCst);
@@ -100,6 +122,10 @@ pub fn update_controlling_session_count(count: usize) {
 
 #[allow(dead_code)]
 pub fn start_auto_update() {
+    #[cfg(target_os = "windows")]
+    if config::Config::get_option(keys::OPTION_ALLOW_AUTO_UPDATE).is_empty() {
+        config::Config::set_option(keys::OPTION_ALLOW_AUTO_UPDATE.to_owned(), "Y".to_owned());
+    }
     let _sender = TX_MSG.lock().unwrap();
 }
 
@@ -155,31 +181,42 @@ fn start_auto_update_check() -> Sender<UpdateMsg> {
 
 fn start_auto_update_check_(rx_msg: Receiver<UpdateMsg>) {
     std::thread::sleep(INITIAL_CHECK_DELAY);
-    if let Err(e) = check_update(false) {
-        log::error!("Error checking for updates: {}", e);
-    }
-
     let mut last_check_time = Instant::now();
-    let mut check_interval = DUR_ONE_DAY;
+    let mut pending_artifact = None;
+    let mut check_interval = match check_update(false, &mut pending_artifact) {
+        Ok(true) => SESSION_RETRY_INTERVAL,
+        Ok(false) => DUR_ONE_DAY,
+        Err(e) => {
+            log::error!("Error checking for updates: {}", e);
+            RETRY_INTERVAL
+        }
+    };
     loop {
         let recv_res = rx_msg.recv_timeout(check_interval);
         match &recv_res {
             Ok(UpdateMsg::CheckUpdate) | Err(_) => {
-                if last_check_time.elapsed() < MIN_INTERVAL {
+                if matches!(recv_res, Ok(UpdateMsg::CheckUpdate))
+                    && last_check_time.elapsed() < MIN_INTERVAL
+                {
                     // log::debug!("Update check skipped due to minimum interval.");
                     continue;
                 }
-                // Don't check update if there are alive connections.
-                if !has_no_active_conns() {
-                    check_interval = RETRY_INTERVAL;
-                    continue;
-                }
-                if let Err(e) = check_update(matches!(recv_res, Ok(UpdateMsg::CheckUpdate))) {
-                    log::error!("Error checking for updates: {}", e);
-                    check_interval = RETRY_INTERVAL;
-                } else {
-                    last_check_time = Instant::now();
-                    check_interval = DUR_ONE_DAY;
+                match check_update(
+                    matches!(recv_res, Ok(UpdateMsg::CheckUpdate)),
+                    &mut pending_artifact,
+                ) {
+                    Err(e) => {
+                        log::error!("Error checking for updates: {}", e);
+                        check_interval = RETRY_INTERVAL;
+                    }
+                    Ok(pending) => {
+                        last_check_time = Instant::now();
+                        check_interval = if pending {
+                            SESSION_RETRY_INTERVAL
+                        } else {
+                            DUR_ONE_DAY
+                        };
+                    }
                 }
             }
             Ok(UpdateMsg::Exit) => break,
@@ -187,37 +224,48 @@ fn start_auto_update_check_(rx_msg: Receiver<UpdateMsg>) {
     }
 }
 
-fn check_update(manually: bool) -> ResultType<()> {
+fn check_update(
+    manually: bool,
+    pending_artifact: &mut Option<crate::update_metadata::VerifiedUpdateArtifact>,
+) -> ResultType<bool> {
     // On macOS, auto-update is handled by check_update_as_root() in the service process.
     // The shared check_update() path is only used for manual update checks from the GUI.
     #[cfg(target_os = "macos")]
     if !manually {
-        return Ok(());
+        return Ok(false);
     }
     #[cfg(target_os = "windows")]
     let update_msi = crate::platform::is_msi_installed()? && !crate::is_custom_client();
     #[cfg(not(target_os = "windows"))]
     let update_msi = false;
     if !(manually || config::Config::get_bool_option(keys::OPTION_ALLOW_AUTO_UPDATE)) {
-        return Ok(());
+        *pending_artifact = None;
+        return Ok(false);
     }
-    do_check_software_update()?;
-
-    let update_url = crate::common::SOFTWARE_UPDATE_URL.lock().unwrap().clone();
-    if update_url.is_empty() {
-        log::debug!("No update available.");
+    if pending_artifact.is_some() && !has_no_active_conns() {
+        return Ok(true);
+    }
+    let artifact = if let Some(artifact) = pending_artifact.take() {
+        artifact
     } else {
+        do_check_software_update()?;
+        let update_url = crate::common::SOFTWARE_UPDATE_URL.lock().unwrap().clone();
+        if update_url.is_empty() {
+            return Ok(false);
+        }
         let update_format = current_update_format(update_msi);
         if update_format == "unknown" {
             log::debug!("Automatic update is not supported on this platform.");
-            return Ok(());
+            return Ok(false);
         }
         let query = crate::update_metadata::UpdateArtifactQuery {
             platform: current_update_platform(),
             arch: current_update_arch(),
             format: update_format,
         };
-        let artifact = verified_update_artifact_from_release_page_url(&update_url, &query)?;
+        verified_update_artifact_from_release_page_url(&update_url, &query)?
+    };
+    {
         let download_url = artifact.url.as_str();
         #[cfg(target_os = "windows")]
         let version = artifact.version.as_str();
@@ -227,9 +275,7 @@ fn check_update(manually: bool) -> ResultType<()> {
             bail!("Failed to get the file path from the URL: {}", download_url);
         };
         ensure_verified_update_artifact(download_url, &file_path, artifact.size, &artifact.sha256)?;
-        // We have checked if the `conns` is empty before, but we need to check again.
-        // No need to care about the downloaded file here, because it's rare case that the `conns` are empty
-        // before the download, but not empty after the download.
+        // Retain the verified download and retry after the remote session ends.
         if has_no_active_conns() {
             #[cfg(target_os = "windows")]
             update_new_version(update_msi, version, &file_path, &artifact.sha256);
@@ -244,9 +290,12 @@ fn check_update(manually: bool) -> ResultType<()> {
                     Some(artifact.size),
                 )?;
             }
+        } else {
+            *pending_artifact = Some(artifact);
+            return Ok(true);
         }
     }
-    Ok(())
+    Ok(false)
 }
 
 #[cfg(target_os = "windows")]

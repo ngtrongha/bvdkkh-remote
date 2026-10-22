@@ -33,7 +33,7 @@ $ARGUMENTS
 |-----------|---------------------------|
 | **Web App** | frontend-specialist, backend-specialist, test-engineer |
 | **API** | backend-specialist, security-auditor, test-engineer |
-| **UI/Design** | frontend-specialist, seo-specialist, performance-optimizer |
+| **UI/Design** | frontend-specialist, performance-optimizer |
 | **Database** | database-architect, backend-specialist, security-auditor |
 | **Full Stack** | project-planner, frontend-specialist, backend-specialist, devops-engineer |
 | **Debug** | debugger, explorer-agent, test-engineer |
@@ -93,7 +93,7 @@ Do you approve? (Y/N)
 |-------|--------|----------|
 | `project-planner` | Planning | Task breakdown, {task-slug}.md |
 | `explorer-agent` | Discovery | Codebase mapping |
-| `frontend-specialist` | UI/UX | React, Vue, CSS, HTML |
+| `frontend-specialist` | Administration UI | Flutter Web, Dart |
 | `backend-specialist` | Server | API, Node.js, Python |
 | `database-architect` | Data | SQL, NoSQL, Schema |
 | `security-auditor` | Security | Vulnerabilities, Auth |
@@ -103,10 +103,8 @@ Do you approve? (Y/N)
 | `devops-engineer` | Ops | CI/CD, Docker, Deploy |
 | `mobile-developer` | Mobile | React Native, Flutter |
 | `performance-optimizer` | Speed | Lighthouse, Profiling |
-| `seo-specialist` | SEO | Meta, Schema, Rankings |
 | `documentation-writer` | Docs | README, API docs |
 | `debugger` | Debug | Error analysis |
-| `game-developer` | Games | Unity, Godot |
 | `code-archaeologist` | Legacy | Refactoring, legacy code |
 | `product-manager` | Product | Requirements, user stories |
 | `product-owner` | Product | Backlog, MVP, strategy |
@@ -127,7 +125,6 @@ Identify ALL domains this task touches:
 □ DevOps       → devops-engineer
 □ Mobile       → mobile-developer
 □ Performance  → performance-optimizer
-□ SEO          → seo-specialist
 □ Planning     → project-planner
 ```
 

@@ -38,7 +38,7 @@ version: 1.0.0
 
 | Need | Skill |
 |------|-------|
-| API implementation | `@[skills/nodejs-best-practices]` |
+| API implementation | `@[skills/api-patterns]` with the existing Go/Iris conventions |
 | Data structure | `@[skills/database-design]` |
 | Security details | `@[skills/vulnerability-scanner]` |
 
