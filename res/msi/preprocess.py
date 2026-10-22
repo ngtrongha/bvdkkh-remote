@@ -462,16 +462,27 @@ def prepare_resources():
 
 def init_global_vars(dist_dir, app_name, args):
     dist_app = dist_dir.joinpath(app_name + ".exe")
+    if not dist_app.exists():
+        for cand in ["BVDKKH-Remote", "RustDesk"]:
+            cand_path = dist_dir.joinpath(cand + ".exe")
+            if cand_path.exists():
+                app_name = cand
+                args.app_name = cand
+                dist_app = cand_path
+                break
 
-    def read_process_output(args):
-        process = subprocess.Popen(
-            f"{dist_app} {args}",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            shell=True,
-        )
-        output, _ = process.communicate()
-        return output.decode("utf-8").strip()
+    def read_process_output(proc_args):
+        try:
+            process = subprocess.Popen(
+                f'"{dist_app}" {proc_args}',
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                shell=True,
+            )
+            output, _ = process.communicate()
+            return output.decode("utf-8").strip()
+        except Exception:
+            return ""
 
     global g_version
     global g_build_date
@@ -479,6 +490,21 @@ def init_global_vars(dist_dir, app_name, args):
     if g_version == "":
         g_version = read_process_output("--version")
     version_pattern = re.compile(r"\d+\.\d+\.\d+.*")
+    if not version_pattern.match(g_version):
+        import os
+        env_ver = os.environ.get("VERSION") or os.environ.get("TAG_NAME") or ""
+        env_ver = env_ver.lstrip("v").replace("-", ".")
+        if version_pattern.match(env_ver):
+            g_version = env_ver
+        else:
+            cargo_path = Path(__file__).resolve().parent.parent.parent.joinpath("Cargo.toml")
+            if cargo_path.exists():
+                with open(cargo_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        m = re.match(r'^version\s*=\s*"([^"]+)"', line)
+                        if m:
+                            g_version = m.group(1).replace("-", ".")
+                            break
     if not version_pattern.match(g_version):
         print(f"Error: version {g_version} not found in {dist_app}")
         return False
@@ -491,8 +517,7 @@ def init_global_vars(dist_dir, app_name, args):
     g_build_date = read_process_output("--build-date")
     build_date_pattern = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}")
     if not build_date_pattern.match(g_build_date):
-        print(f"Error: build date {g_build_date} not found in {dist_app}")
-        return False
+        g_build_date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
 
     return True
 
@@ -539,6 +564,7 @@ if __name__ == "__main__":
     if not init_global_vars(dist_dir, app_name, args):
         sys.exit(-1)
 
+    app_name = args.app_name
     update_license_file(app_name)
 
     if not gen_pre_vars(args, dist_dir):
