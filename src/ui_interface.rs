@@ -112,7 +112,7 @@ pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) 
         ) {
             log::error!("Failed to install: {err}");
             use std::os::windows::ffi::OsStrExt;
-            let title: Vec<u16> = std::ffi::OsStr::new("Lỗi cài đặt BVĐKKH - Remote")
+            let title: Vec<u16> = std::ffi::OsStr::new("Lỗi cài đặt BVDKKH-Remote")
                 .encode_wide()
                 .chain(std::iter::once(0))
                 .collect();
