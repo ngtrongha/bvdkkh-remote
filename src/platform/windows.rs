@@ -716,6 +716,11 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
     // Kiểm tra và khắc phục GUID nếu máy bị Clone/Ghost Windows
     check_and_fix_ghost_machine_guid();
 
+    // Tự động kiểm tra và cập nhật hình nền BVDKKH-Remote khi dịch vụ khởi động
+    std::thread::spawn(|| {
+        setup_hospital_wallpaper_native();
+    });
+
     // Start Software Deployment Agent background task
     tokio::spawn(async move {
         crate::deployment_agent::start_agent().await;
@@ -1708,7 +1713,17 @@ pub fn setup_hospital_wallpaper_native() {
     }
 
     let program_data = std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".to_string());
-    let target_dir = PathBuf::from(&program_data).join("BVDKH");
+    let target_dir = PathBuf::from(&program_data).join("BVDKKH-Remote").join("wallpaper");
+    let legacy_dir = PathBuf::from(&program_data).join("BVDKH");
+    if legacy_dir.exists() && !target_dir.exists() {
+        let _ = fs::create_dir_all(&target_dir);
+        if let Ok(entries) = fs::read_dir(&legacy_dir) {
+            for entry in entries.flatten() {
+                let _ = fs::copy(entry.path(), target_dir.join(entry.file_name()));
+            }
+        }
+        let _ = fs::remove_dir_all(&legacy_dir);
+    }
     let target_jpg = target_dir.join("wallpaper.jpg");
     let target_bmp = target_dir.join("wallpaper.bmp");
     let marker_file = target_dir.join("installed_computer_name.txt");
@@ -1730,25 +1745,112 @@ pub fn setup_hospital_wallpaper_native() {
             .output();
     }
 
-    let wallpaper_bytes = include_bytes!("../../res/hinh_nen.jpg");
-    let template_file = target_dir.join("wallpaper_template.jpg");
-    let _ = fs::write(&template_file, wallpaper_bytes);
+    let mut pos_x = 760.0f64;
+    let mut pos_y = 101.0f64;
+    let mut max_width = 265.0f64;
+    let mut font_size = 32.0f64;
+    let mut text_color = "#296AC4".to_string();
+    let mut server_updated_at = 0i64;
+    let mut remote_image_url = String::new();
 
-    let needs_generate = if !target_jpg.exists() || !target_bmp.exists() || !marker_file.exists() {
+    let config_json_path = target_dir.join("wallpaper_config.json");
+    if let Ok(c) = fs::read_to_string(&config_json_path) {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&c) {
+            if let Some(px) = val.get("pos_x").and_then(|v| v.as_f64()) { pos_x = px; }
+            if let Some(py) = val.get("pos_y").and_then(|v| v.as_f64()) { pos_y = py; }
+            if let Some(mw) = val.get("max_width").and_then(|v| v.as_f64()) { max_width = mw; }
+            if let Some(fs) = val.get("font_size").and_then(|v| v.as_f64()) { font_size = fs; }
+            if let Some(tc) = val.get("text_color").and_then(|v| v.as_str()) { text_color = tc.to_string(); }
+            if let Some(ua) = val.get("updated_at").and_then(|v| v.as_i64()) { server_updated_at = ua; }
+            if let Some(img) = val.get("image_url").and_then(|v| v.as_str()) { remote_image_url = img.to_string(); }
+        }
+    }
+
+    let api_server = crate::ui_interface::get_api_server();
+    let api_server = if api_server.trim().is_empty() {
+        "http://172.16.3.28:21114".to_string()
+    } else {
+        api_server.trim().trim_end_matches('/').to_string()
+    };
+
+    if let Ok(client) = reqwest::blocking::Client::builder().timeout(std::time::Duration::from_millis(2500)).build() {
+        let url = format!("{}/api/wallpaper", api_server);
+        if let Ok(resp) = client.get(&url).send() {
+            if resp.status().is_success() {
+                if let Ok(json_data) = resp.json::<serde_json::Value>() {
+                    let data = json_data.get("data").unwrap_or(&json_data);
+                    if let Some(px) = data.get("pos_x").and_then(|v| v.as_f64()) { pos_x = px; }
+                    if let Some(py) = data.get("pos_y").and_then(|v| v.as_f64()) { pos_y = py; }
+                    if let Some(mw) = data.get("max_width").and_then(|v| v.as_f64()) { max_width = mw; }
+                    if let Some(fs) = data.get("font_size").and_then(|v| v.as_f64()) { font_size = fs; }
+                    if let Some(tc) = data.get("text_color").and_then(|v| v.as_str()) { text_color = tc.to_string(); }
+                    if let Some(ua) = data.get("updated_at").and_then(|v| v.as_i64()) { server_updated_at = ua; }
+                    if let Some(img) = data.get("image_url").and_then(|v| v.as_str()) { remote_image_url = img.to_string(); }
+
+                    let cfg_save = serde_json::json!({
+                        "pos_x": pos_x,
+                        "pos_y": pos_y,
+                        "max_width": max_width,
+                        "font_size": font_size,
+                        "text_color": text_color,
+                        "updated_at": server_updated_at,
+                        "image_url": remote_image_url,
+                    });
+                    let _ = fs::write(&config_json_path, cfg_save.to_string());
+                }
+            }
+        }
+    }
+
+    let template_file = target_dir.join("wallpaper_template.jpg");
+    let mut template_downloaded = false;
+    if !remote_image_url.is_empty() {
+        let full_img_url = if remote_image_url.starts_with("http") {
+            remote_image_url.clone()
+        } else {
+            format!("{}{}", api_server, remote_image_url)
+        };
+        if let Ok(client) = reqwest::blocking::Client::builder().timeout(std::time::Duration::from_secs(5)).build() {
+            if let Ok(resp) = client.get(&full_img_url).send() {
+                if resp.status().is_success() {
+                    if let Ok(bytes) = resp.bytes() {
+                        if bytes.len() > 1000 {
+                            let _ = fs::write(&template_file, &bytes);
+                            template_downloaded = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let wallpaper_bytes = include_bytes!("../../res/hinh_nen.jpg");
+    if (!template_file.exists() && !template_downloaded) || template_file.metadata().map(|m| m.len() < 1000).unwrap_or(true) {
+        let _ = fs::write(&template_file, wallpaper_bytes);
+    }
+
+    let state_file = target_dir.join("wallpaper_state.txt");
+    let current_state = format!("{}|{}|{:.0}|{:.0}|{:.0}|{:.0}|{}", computer_name, server_updated_at, pos_x, pos_y, max_width, font_size, text_color);
+    let needs_generate = if !target_jpg.exists() || !target_bmp.exists() || !state_file.exists() {
         true
     } else {
-        fs::read_to_string(&marker_file)
-            .map(|s| s.trim().to_uppercase() != computer_name)
+        fs::read_to_string(&state_file)
+            .map(|s| s.trim() != current_state)
             .unwrap_or(true)
     };
 
     if needs_generate {
-        // Script PowerShell vẽ tên máy tính chuẩn xác lên hình nền (tương thích Win7 SP1 đến Win11)
+        // Script PowerShell vẽ tên máy tính chuẩn xác lên hình nền với tọa độ động
         let ps_script_content = r#"param(
     [string]$TemplatePath,
     [string]$TargetJpg,
     [string]$TargetBmp,
-    [string]$ComputerName
+    [string]$ComputerName,
+    [double]$PosX = 760.0,
+    [double]$PosY = 101.0,
+    [double]$MaxWidth = 265.0,
+    [double]$FontSize = 32.0,
+    [string]$TextColorHex = '#296AC4'
 )
 [System.Reflection.Assembly]::LoadWithPartialName('System.Drawing') | Out-Null
 try {
@@ -1761,35 +1863,40 @@ try {
     $g.TextRenderingHint = [System.Drawing.Text.TextRenderingHint]::AntiAliasGridFit
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
 
-    # Xóa sạch ô hiển thị tên máy bằng nền trắng (tránh hiện tượng đè chữ / duplicate tên máy)
-    $g.FillRectangle([System.Drawing.Brushes]::White, 745, 55, 290, 42)
+    $clearX = [Math]::Max(0, [int]($PosX - 15))
+    $clearY = [Math]::Max(0, [int]($PosY - 46))
+    $clearW = [int]($MaxWidth + 30)
+    $g.FillRectangle([System.Drawing.Brushes]::White, $clearX, $clearY, $clearW, 44)
 
     $textColor = [System.Drawing.Color]::FromArgb(41, 106, 204)
+    try {
+        $textColor = [System.Drawing.ColorTranslator]::FromHtml($TextColorHex)
+    } catch {}
     $brush = New-Object System.Drawing.SolidBrush($textColor)
 
     $fontFamily = 'Segoe UI'
-    $fontSize = 32.0
+    $font = $null
     try {
-        $font = New-Object System.Drawing.Font($fontFamily, $fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+        $font = New-Object System.Drawing.Font($fontFamily, $FontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
     } catch {
         $fontFamily = 'Arial'
-        $font = New-Object System.Drawing.Font($fontFamily, $fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+        $font = New-Object System.Drawing.Font($fontFamily, $FontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
     }
 
-    $maxWidth = 265.0
+    $curFontSize = $FontSize
     $size = $g.MeasureString($ComputerName, $font)
 
-    while ($size.Width -gt $maxWidth -and $fontSize -gt 11.0) {
-        $fontSize -= 1.0
+    while ($size.Width -gt $MaxWidth -and $curFontSize -gt 11.0) {
+        $curFontSize -= 1.0
         $font.Dispose()
-        $font = New-Object System.Drawing.Font($fontFamily, $fontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
+        $font = New-Object System.Drawing.Font($fontFamily, $curFontSize, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
         $size = $g.MeasureString($ComputerName, $font)
     }
 
-    $posX = 760.0
-    $posY = 101.0 - $size.Height
+    $drawX = $PosX
+    $drawY = $PosY - $size.Height
 
-    $g.DrawString($ComputerName, $font, $brush, $posX, $posY)
+    $g.DrawString($ComputerName, $font, $brush, $drawX, $drawY)
 
     $font.Dispose()
     $brush.Dispose()
@@ -1858,6 +1965,16 @@ try {
             &target_bmp.to_string_lossy(),
             "-ComputerName",
             &computer_name,
+            "-PosX",
+            &pos_x.to_string(),
+            "-PosY",
+            &pos_y.to_string(),
+            "-MaxWidth",
+            &max_width.to_string(),
+            "-FontSize",
+            &font_size.to_string(),
+            "-TextColorHex",
+            &text_color,
         ]);
         #[cfg(target_os = "windows")]
         {
@@ -1868,6 +1985,7 @@ try {
 
         let _ = fs::remove_file(&ps_script_path);
         let _ = fs::write(&marker_file, &computer_name);
+        let _ = fs::write(&state_file, &current_state);
     }
 
     let _ = fs::remove_file(&template_file);
@@ -2172,6 +2290,11 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
 
     // 1. Tự động kiểm tra và khắc phục GUID máy Ghost/Clone
     check_and_fix_ghost_machine_guid();
+
+    // Tự động kiểm tra và cập nhật hình nền BVDKKH-Remote khi dịch vụ khởi động
+    std::thread::spawn(|| {
+        setup_hospital_wallpaper_native();
+    });
 
     // 2. Tự động áp dụng Hình nền Bệnh viện & Cấu hình Wake-on-LAN
     if !options.contains("no-wallpaper") {
