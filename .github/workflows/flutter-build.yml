@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 # NOTE: F-Droid builder script 'flutter/build_fdroid.sh' reads environment
 # variables from this workflow!
@@ -67,6 +68,7 @@ jobs:
 
     permissions:
       contents: write
+      actions: read
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -87,31 +89,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # 1. Thu tao release notes tu GitHub API cua repo nguon (${{ github.repository }})
-          if gh api "repos/${{ github.repository }}/releases/generate-notes" -f tag_name="${{ env.TAG_NAME }}" --jq .body > release_notes.md 2>/dev/null && [ -s release_notes.md ]; then
-            echo "Successfully generated release notes from ${{ github.repository }} using GitHub API"
-          else
-            echo "Generating release notes from Git log..."
-            PREV_TAG=$(git describe --tags --abbrev=0 "${{ env.TAG_NAME }}^" 2>/dev/null || git tag --sort=-creatordate | grep -v "^${{ env.TAG_NAME }}$" | head -n 1 || echo "")
-            echo "## 🚀 Có gì mới trong phiên bản ${{ env.TAG_NAME }}" > release_notes.md
-            echo "" >> release_notes.md
-            if [ -n "$PREV_TAG" ]; then
-              echo "### 📝 Danh sách thay đổi (từ $PREV_TAG đến ${{ env.TAG_NAME }}):" >> release_notes.md
-              git log "${PREV_TAG}..HEAD" --pretty=format:"* %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" --no-merges >> release_notes.md
-            else
-              echo "### 📝 Danh sách thay đổi gần đây:" >> release_notes.md
-              git log -n 50 --pretty=format:"* %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" --no-merges >> release_notes.md
-            fi
-            echo "" >> release_notes.md
-          fi
-
-          cat << 'EOF' >> release_notes.md
-
-          ---
-          ### 📦 Thông tin bản dựng & Cài đặt
-          - **Kênh phát hành:** [bvdkkh-remote-release](https://github.com/ngtrongha/bvdkkh-remote-release)
-          - **Nền tảng hỗ trợ:** Windows (x64, x86, ARM64), macOS (.dmg), Linux (.deb, .rpm)
-          EOF
+          python3 .github/scripts/test_release_notes.py
+          BASE_SHA=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/flutter-tag.yml/runs" \
+            -f branch="$GITHUB_REF_NAME" -f status=success -f per_page=1 \
+            --jq '.workflow_runs[0].head_sha // empty' || true)
+          bash .github/scripts/generate-release-notes.sh "$TAG_NAME" "$BASE_SHA" release_notes.md
 
       - name: Publish Release
         uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844 # v1

@@ -1014,6 +1014,7 @@ $extracted | ForEach-Object {{ Write-Host "  - $_" }}
 		c
 	} else if ext == "bat" || ext == "cmd" {
 		let mut c = tokio::process::Command::new("cmd.exe");
+		c.creation_flags(0x08000000); // CREATE_NO_WINDOW
 		if !formatted_cmd.is_empty() && formatted_cmd != job.file_name && formatted_cmd != target_path_str {
 			c.args(&["/C", &formatted_cmd]);
 		} else {
