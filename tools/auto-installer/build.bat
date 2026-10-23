@@ -14,7 +14,7 @@ if not exist "%CSC%" (
 )
 
 echo [2/2] Dang bien dich BVDKKH-Remote-AutoInstall.exe (Che do do hoa GUI - WinExe)...
-"%CSC%" /nologo /target:winexe /platform:anycpu /optimize+ /win32icon:..\..\res\icon.ico /r:System.Windows.Forms.dll /r:System.Drawing.dll /win32manifest:app.manifest /out:BVDKKH-Remote-AutoInstall.exe Program.cs
+"%CSC%" /nologo /target:winexe /platform:anycpu /optimize+ /win32icon:..\..\res\icon.ico /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.ServiceProcess.dll /win32manifest:app.manifest /out:BVDKKH-Remote-AutoInstall.exe Program.cs
 
 if %ERRORLEVEL% equ 0 (
     copy /y BVDKKH-Remote-AutoInstall.exe ..\..\BVDKKH-Remote-AutoInstall.exe >nul
