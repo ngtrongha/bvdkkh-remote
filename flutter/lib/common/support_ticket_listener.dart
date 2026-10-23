@@ -13,6 +13,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../common.dart';
+import 'support_ticket_feed_cursor.dart';
 import '../models/platform_model.dart';
 import '../utils/http_service.dart' as http;
 
@@ -95,12 +96,16 @@ class SupportTicketListener {
       SupportTicketListener._internal();
   SupportTicketListener._internal();
 
+  final ValueNotifier<int?> adminOpenCount = ValueNotifier(null);
+  final ValueNotifier<String?> adminNotificationError = ValueNotifier(null);
+  int _adminGeneration = 0;
+  String _adminToken = '';
+
   // Admin polling fields
   Timer? _adminPollingTimer;
   bool _isAdminRunning = false;
   bool _isAdminChecking = false;
-  bool _adminInitialized = false;
-  int _lastSeenAdminTicketId = 0;
+  SupportTicketFeedCursor _adminFeed = SupportTicketFeedCursor();
 
   // Client watcher fields (runs for user on their workstation)
   Timer? _clientPollingTimer;
@@ -117,10 +122,13 @@ class SupportTicketListener {
   // ADMIN MODE: Lắng nghe toàn bộ sự cố mới từ nhân viên / phòng khám
   // ---------------------------------------------------------------------------
   void start() {
-    if (_isAdminRunning) return;
+    final token = bind.mainGetLocalOption(key: 'access_token');
+    if (token.isEmpty) { stop(); return; }
+    if (_isAdminRunning && _adminToken == token) return;
+    stop();
+    _adminToken = token;
     _isAdminRunning = true;
-    _adminInitialized = false;
-    _lastSeenAdminTicketId = 0;
+    _adminFeed = SupportTicketFeedCursor();
     debugPrint('[SupportTicketListener] Started for Admin user');
 
     // Run first check immediately
@@ -134,86 +142,63 @@ class SupportTicketListener {
   }
 
   void stop() {
+    _adminGeneration++;
+    _isAdminChecking = false;
+    _adminToken = '';
+    adminNotificationError.value = null;
+    adminOpenCount.value = null;
     _adminPollingTimer?.cancel();
     _adminPollingTimer = null;
     _isAdminRunning = false;
-    _adminInitialized = false;
+    _adminFeed = SupportTicketFeedCursor();
     debugPrint('[SupportTicketListener] Stopped Admin listener');
   }
 
   Future<void> _checkNewTickets() async {
     if (!_isAdminRunning || _isAdminChecking) return;
+    final generation = _adminGeneration;
     _isAdminChecking = true;
-
     try {
       var apiServer = await bind.mainGetApiServer();
-      if (apiServer.isEmpty) {
-        return;
-      }
-      if (!apiServer.startsWith('http://') &&
-          !apiServer.startsWith('https://')) {
+      if (apiServer.isEmpty) throw StateError('API server is empty');
+      if (!apiServer.startsWith('http://') && !apiServer.startsWith('https://')) {
         apiServer = 'http://$apiServer';
       }
-
-      final queryParam =
-          _lastSeenAdminTicketId > 0 ? '?since_id=$_lastSeenAdminTicketId' : '';
-      final url = Uri.parse('$apiServer/api/support/ticket/feed$queryParam');
-
-      final token = bind.mainGetLocalOption(key: 'access_token');
-      final headers = <String, String>{
-        'Accept': 'application/json',
-      };
-      if (token.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $token';
-      }
-
-      final response = await http
-          .get(url, headers: headers)
-          .timeout(const Duration(seconds: 4));
-      if (response.statusCode != 200) {
-        return;
-      }
-
-      final body = json.decode(utf8.decode(response.bodyBytes));
-      if (body['code'] != 200 || body['data'] == null) {
-        return;
-      }
-
-      final List list = body['data'] as List;
-      final tickets = list
-          .map((e) => SupportTicket.fromJson(e as Map<String, dynamic>))
-          .toList();
-
-      if (!_adminInitialized) {
-        _adminInitialized = true;
-        if (tickets.isNotEmpty) {
-          int maxId = 0;
-          for (final t in tickets) {
-            if (t.id > maxId) maxId = t.id;
-          }
-          _lastSeenAdminTicketId = maxId;
+      if (generation != _adminGeneration) return;
+      for (var page = 0; page < 10; page++) {
+        final cursor = _adminFeed.sinceId;
+        final query = cursor == null ? '' : '?since_id=$cursor';
+        final response = await http.get(
+          Uri.parse('$apiServer/api/support/ticket/feed$query'),
+          headers: {'Accept': 'application/json', 'Authorization': 'Bearer $_adminToken'},
+        ).timeout(const Duration(seconds: 4));
+        if (generation != _adminGeneration) return;
+        if ([401, 403, 406].contains(response.statusCode)) {
+          adminNotificationError.value = 'Phiên hoặc quyền admin không còn hợp lệ. Vui lòng đăng nhập lại.';
+          return;
         }
-        return;
-      }
-
-      final newTickets =
-          tickets.where((t) => t.id > _lastSeenAdminTicketId).toList();
-      if (newTickets.isNotEmpty) {
-        newTickets.sort((a, b) => a.id.compareTo(b.id));
-
-        for (final ticket in newTickets) {
-          if (ticket.id > _lastSeenAdminTicketId) {
-            _lastSeenAdminTicketId = ticket.id;
-          }
+        if (response.statusCode != 200) throw StateError('Feed HTTP ${response.statusCode}');
+        final body = json.decode(utf8.decode(response.bodyBytes));
+        final tickets = _adminFeed.consume(body as Map<String, dynamic>)
+            .map(SupportTicket.fromJson).toList();
+        adminOpenCount.value = body['open_count'] as int;
+        adminNotificationError.value = null;
+        for (final ticket in tickets) {
           _onNewTicketReceived(ticket);
         }
+        if (body['has_more'] != true) break;
       }
     } catch (e) {
-      debugPrint('[SupportTicketListener] Error fetching admin tickets: $e');
+      if (generation == _adminGeneration) {
+        adminNotificationError.value = 'Mất kết nối nhận thông báo. Đang tự động thử lại…';
+        debugPrint('[SupportTicketListener] Admin feed failed: $e');
+      }
     } finally {
-      _isAdminChecking = false;
+      if (generation == _adminGeneration) _isAdminChecking = false;
     }
   }
+
+  void checkNow() { _checkNewTickets(); }
 
   void _onNewTicketReceived(SupportTicket ticket) {
     debugPrint(
@@ -402,9 +387,9 @@ class SupportTicketListener {
   // ---------------------------------------------------------------------------
   // NOTIFICATION UTILITIES: Âm thanh & Native Windows Toast
   // ---------------------------------------------------------------------------
-  void _playChime() {
+  Future<void> _playChime() async {
     try {
-      SystemSound.play(SystemSoundType.alert);
+      await SystemSound.play(SystemSoundType.alert);
       if (Platform.isWindows) {
         final user32 = DynamicLibrary.open('user32.dll');
         final messageBeep =
@@ -417,21 +402,20 @@ class SupportTicketListener {
     }
   }
 
-  void _showWindowsToast({
+  Future<void> _showWindowsToast({
     required String title,
     required String body,
     String sound = 'Reminder',
-  }) {
+  }) async {
     if (!Platform.isWindows) return;
     try {
       final psScript = '''
 \$ErrorActionPreference = 'Stop'
-\$title = @'
-$title
-'@
-\$body = @'
-$body
-'@
+\$payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(\$env:BVDKKH_TOAST_DATA)) | ConvertFrom-Json
+\$title = [string]\$payload.title
+\$body = [string]\$payload.body
+\$xmlTitle = [Security.SecurityElement]::Escape(\$title)
+\$xmlBody = [Security.SecurityElement]::Escape(\$body)
 try {
     [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > \$null
     [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] > \$null
@@ -442,8 +426,8 @@ try {
 <toast duration="long">
   <visual>
     <binding template="ToastGeneric">
-      <text><![CDATA[\$title]]></text>
-      <text><![CDATA[\$body]]></text>
+      <text>\$xmlTitle</text>
+      <text>\$xmlBody</text>
     </binding>
   </visual>
   <audio src="ms-winsoundevent:Notification.$sound"/>
@@ -470,7 +454,7 @@ try {
         }
         \$notify.Visible = \$false
         \$notify.Dispose()
-    } catch {}
+    } catch { exit 1 }
 }
 ''';
 
@@ -481,13 +465,16 @@ try {
       }
       final encoded = base64.encode(utf16leBytes);
 
-      Process.start('powershell.exe', [
+      final result = await Process.run('powershell.exe', [
         '-NoProfile',
         '-WindowStyle',
         'Hidden',
         '-EncodedCommand',
         encoded,
-      ]);
+      ], environment: {
+        'BVDKKH_TOAST_DATA': base64.encode(utf8.encode(json.encode({'title': title, 'body': body}))),
+      });
+      if (result.exitCode != 0) throw StateError('Windows notification failed');
     } catch (e) {
       debugPrint('[SupportTicketListener] Failed to show Windows toast: $e');
     }

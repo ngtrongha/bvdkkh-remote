@@ -92,6 +92,23 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           child: Column(
             children: [
               _buildStitchHeader(context),
+              ValueListenableBuilder<int?>(
+                valueListenable: SupportTicketListener.instance.adminOpenCount,
+                builder: (context, count, _) => ValueListenableBuilder<String?>(
+                  valueListenable: SupportTicketListener.instance.adminNotificationError,
+                  builder: (context, error, _) => count == null && error == null
+                      ? const SizedBox.shrink()
+                      : Container(
+                          width: double.infinity,
+                          color: Theme.of(context).colorScheme.surface,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          child: Text(error ?? 'Thông báo hỗ trợ đang bật • ${count ?? 0} yêu cầu đang chờ',
+                              style: TextStyle(color: error == null
+                                  ? Theme.of(context).colorScheme.onSurface
+                                  : Theme.of(context).colorScheme.error)),
+                        ),
+                ),
+              ),
               Expanded(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2214,6 +2231,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     super.didChangeAppLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       shouldBeBlocked(_block, canBeBlocked);
+      SupportTicketListener.instance.checkNow();
     }
   }
 }

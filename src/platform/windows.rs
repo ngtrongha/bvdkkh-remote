@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
 use super::{validate_install_app_name, CursorData, ResultType};
 use crate::{
     common::PORTABLE_APPNAME_RUNTIME_ENV_KEY,
@@ -2133,6 +2136,8 @@ fn get_after_install(
     {desktop_shortcuts}
     {start_menu_shortcuts}
     {reg_printer}
+    reg add HKEY_CLASSES_ROOT\\bvdkkh /f /v \"URL Protocol\" /t REG_SZ /d \"\"
+    reg add HKEY_CLASSES_ROOT\\bvdkkh\\shell\\open\\command /f /ve /t REG_SZ /d \"\\\"{nested_exe}\\\" \\\"%%1\\\"\"
     reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f
     reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f /ve /t REG_SZ  /d \"\\\"{nested_exe}\\\",0\"
     reg add HKEY_CLASSES_ROOT\\.{ext}\\shell /f
@@ -2460,6 +2465,7 @@ fn get_before_uninstall(kill_self: bool) -> String {
 {cur_exe_kill}\
     reg delete HKEY_CLASSES_ROOT\\.{ext} /f
     reg delete HKEY_CLASSES_ROOT\\{ext} /f
+    reg delete HKEY_CLASSES_ROOT\\bvdkkh /f
     reg delete \"HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\" /v \"RustDesk\" /f
     reg delete \"HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\" /v \"BVDKKH - Remote\" /f
     reg delete \"HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\" /v \"BVĐKKH - Remote\" /f

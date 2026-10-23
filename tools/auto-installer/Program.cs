@@ -981,27 +981,43 @@ namespace BVDKKH.Remote.AutoInstaller
 
         private static void SetupAndStartWindowsService(string targetDir, string mainExe)
         {
-            string serviceName = "BVDKKH-Remote";
-            string serviceDisplay = "BVDKKH-Remote Service";
-            string binPath = "\"" + mainExe + "\" --service";
+            if (!File.Exists(mainExe))
+                throw new FileNotFoundException("Khong tim thay chuong trinh de cai dich vu.", mainExe);
 
-            // Dừng và dọn các service cũ
-            RunCli("sc.exe", "stop rustdesk");
-            RunCli("sc.exe", "delete rustdesk");
-            RunCli("sc.exe", "stop \"BVDKKH - Remote\"");
-            RunCli("sc.exe", "delete \"BVDKKH - Remote\"");
-            RunCli("sc.exe", "stop \"BVĐKKH - Remote\"");
-            RunCli("sc.exe", "delete \"BVĐKKH - Remote\"");
-            RunCli("sc.exe", "stop \"" + serviceName + "\"");
-            System.Threading.Thread.Sleep(1000);
+            // Use the application's service installer so its migration and path quoting stay consistent.
+            var psi = new ProcessStartInfo
+            {
+                FileName = mainExe,
+                Arguments = "--install-service",
+                WorkingDirectory = targetDir,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using (var proc = Process.Start(psi))
+            {
+                if (proc == null || !proc.WaitForExit(60000))
+                    throw new InvalidOperationException("Cai dich vu BVDKKH-Remote qua thoi gian cho.");
+                if (proc.ExitCode != 0)
+                    throw new InvalidOperationException("Cai dich vu BVDKKH-Remote that bai, ma loi: " + proc.ExitCode);
+            }
 
-            // Cấu hình service chính thức
-            RunCli("sc.exe", "create \"" + serviceName + "\" binpath= \"" + binPath + "\" start= auto DisplayName= \"" + serviceDisplay + "\"");
-            RunCli("sc.exe", "config \"" + serviceName + "\" binpath= \"" + binPath + "\" start= auto DisplayName= \"" + serviceDisplay + "\"");
-            RunCli("sc.exe", "failure \"" + serviceName + "\" reset= 86400 actions= restart/5000/restart/15000/restart/60000");
-            System.Threading.Thread.Sleep(1000);
-            RunCli("sc.exe", "start \"" + serviceName + "\"");
-            RunCli("net.exe", "start \"" + serviceName + "\"");
+            // The installer can exit before SCM finishes creating and starting the service.
+            var timer = Stopwatch.StartNew();
+            using (var service = new System.ServiceProcess.ServiceController("BVDKKH-Remote"))
+            {
+                while (timer.Elapsed < TimeSpan.FromSeconds(30))
+                {
+                    try
+                    {
+                        service.Refresh();
+                        if (service.Status == System.ServiceProcess.ServiceControllerStatus.Running)
+                            return;
+                    }
+                    catch (InvalidOperationException) { }
+                    Thread.Sleep(500);
+                }
+            }
+            throw new InvalidOperationException("Dich vu BVDKKH-Remote chua chay sau khi cai dat. Kiem tra Windows Services va nhat ky cai dat.");
         }
 
         private static void StartTrayProcess(string mainExe)
@@ -1032,6 +1048,15 @@ namespace BVDKKH.Remote.AutoInstaller
         {
             try
             {
+                using (var protocol = Registry.LocalMachine.CreateSubKey(@"SOFTWARE\Classes\bvdkkh"))
+                {
+                    protocol.SetValue("", "URL:BVDKKH Remote Protocol");
+                    protocol.SetValue("URL Protocol", "");
+                    using (var command = protocol.CreateSubKey(@"shell\open\command"))
+                    {
+                        command.SetValue("", "\"" + mainExe + "\" \"%1\"");
+                    }
+                }
                 // Xóa subkey gỡ cài đặt cũ nếu tồn tại
                 try { Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BVĐKKH - Remote", false); } catch { }
                 try { Registry.LocalMachine.DeleteSubKeyTree(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\BVDKKH - Remote", false); } catch { }

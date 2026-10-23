@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -57,8 +61,7 @@ class UserModel {
         SupportTicketListener.instance.stop();
       }
     });
-    if (isAdmin.value ||
-        bind.mainGetLocalOption(key: 'support_notifications') == 'Y') {
+    if (isAdmin.value) {
       SupportTicketListener.instance.start();
     }
   }
@@ -172,6 +175,11 @@ class UserModel {
     displayName.value = user.displayName;
     avatar.value = user.avatar;
     isAdmin.value = user.isAdmin;
+    if (user.isAdmin) {
+      SupportTicketListener.instance.start();
+    } else {
+      SupportTicketListener.instance.stop();
+    }
     bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(user));
     if (isWeb) {
       // ugly here, tmp solution
