@@ -240,7 +240,7 @@ pub async fn start_agent() {
 async fn start_ws_client_loop() {
 	let mut retry_secs = 2u64;
 	loop {
-		let server_url = get_clean_server_url();
+		let server_url = get_clean_server_url().await;
 		if server_url.is_empty() {
 			sleep(Duration::from_secs(10)).await;
 			continue;
@@ -377,7 +377,7 @@ fn build_ws_url(server_url: &str) -> Result<String, url::ParseError> {
 	Ok(parsed.to_string())
 }
 
-fn get_clean_server_url() -> String {
+async fn get_clean_server_url() -> String {
 	let mut server_url = crate::ui_interface::get_api_server();
 	if server_url.is_empty() {
 		return "".to_owned();
@@ -386,11 +386,11 @@ fn get_clean_server_url() -> String {
 		server_url = format!("http://{}", server_url);
 	}
 	// Trim trailing slashes
-	server_url.trim_end_matches('/').to_owned()
+	crate::api_endpoint::resolve_url(server_url.trim_end_matches('/').to_owned()).await
 }
 
 async fn send_heartbeat() -> hbb_common::ResultType<()> {
-	let server_url = get_clean_server_url();
+	let server_url = get_clean_server_url().await;
 	if server_url.is_empty() {
 		return Ok(());
 	}
@@ -448,7 +448,7 @@ async fn post_wol_result(server_url: String, id: i64, sent: usize, error: String
 }
 
 async fn poll_jobs() -> hbb_common::ResultType<()> {
-	let server_url = get_clean_server_url();
+	let server_url = get_clean_server_url().await;
 	if server_url.is_empty() {
 		return Ok(());
 	}

@@ -13,6 +13,7 @@ import 'package:http/http.dart' as http;
 
 import '../../common.dart' hide Dialog;
 import '../../models/platform_model.dart';
+import '../../utils/api_endpoint_selector.dart';
 import '../support_ticket_listener.dart';
 import 'animated_dropdown.dart';
 
@@ -337,7 +338,8 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
         apiServer = 'http://$apiServer';
       }
 
-      final url = Uri.parse('$apiServer/api/support/ticket');
+      final url = await ApiEndpointSelector()
+          .resolve(Uri.parse('$apiServer/api/support/ticket'));
       final token = bind.mainGetLocalOption(key: 'access_token');
 
       http.Response response;
