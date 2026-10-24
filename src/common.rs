@@ -2196,7 +2196,7 @@ pub fn get_api_server(api: String, custom: String) -> String {
     {
         return res.replace(":21114", "");
     }
-    res
+    crate::api_endpoint::cached_server(res)
 }
 
 fn get_api_server_(api: String, custom: String) -> String {
@@ -2591,13 +2591,18 @@ where
 /// - 4xx responses are returned as-is (server is reachable, business logic error).
 /// - If fallback also fails, returns the original HTTP result (text or error).
 pub async fn post_request(url: String, body: String, header: &str) -> ResultType<String> {
-    with_tcp_proxy_fallback(
+    let url = crate::api_endpoint::resolve_url(url).await;
+    let result = with_tcp_proxy_fallback(
         &url,
         "POST",
         post_request_http(&url, &body, header),
         post_request_via_tcp_proxy(&url, &body, header),
     )
-    .await
+    .await;
+    if result.is_err() {
+        crate::api_endpoint::invalidate(&url);
+    }
+    result
 }
 
 /// POST request via TCP proxy, preserving the HTTP status code.
@@ -2625,10 +2630,14 @@ pub async fn post_request_with_status(
     body: String,
     header: &str,
 ) -> ResultType<(u16, String)> {
+    let url = crate::api_endpoint::resolve_url(url).await;
     if should_use_raw_tcp_for_api(&url) {
         return post_request_via_tcp_proxy_status(&url, &body, header).await;
     }
     let http_result = post_request_http(&url, &body, header).await;
+    if http_result.is_err() {
+        crate::api_endpoint::invalidate(&url);
+    }
     let should_fallback = match &http_result {
         Err(_) => true,
         Ok((status, _)) => *status >= 500,
@@ -2916,13 +2925,18 @@ pub async fn http_request_sync(
     body: Option<String>,
     header: String,
 ) -> ResultType<String> {
-    with_tcp_proxy_fallback(
+    let url = crate::api_endpoint::resolve_url(url).await;
+    let result = with_tcp_proxy_fallback(
         &url,
         &method,
         http_request_http(&url, &method, body.clone(), &header),
         http_request_via_tcp_proxy(&url, &method, body.as_deref(), &header),
     )
-    .await
+    .await;
+    if result.is_err() {
+        crate::api_endpoint::invalidate(&url);
+    }
+    result
 }
 
 /// General HTTP request via TCP proxy. Header is a JSON string (used by http_request_sync).

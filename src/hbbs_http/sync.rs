@@ -167,7 +167,7 @@ async fn start_hbbs_sync_async() {
     loop {
         tokio::select! {
             _ = interval.tick() => {
-                let url = heartbeat_url();
+                let url = crate::api_endpoint::resolve_url(heartbeat_url()).await;
                 let id = Config::get_id();
                 if url.is_empty() {
                     *PRO.lock().unwrap() = false;

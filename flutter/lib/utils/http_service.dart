@@ -6,11 +6,14 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:http/http.dart' as http;
+import 'api_endpoint_selector.dart';
 import '../models/platform_model.dart';
 import 'package:flutter_hbb/common.dart';
 export 'package:http/http.dart' show Response;
 
 enum HttpMethod { get, post, put, delete }
+
+final _apiEndpoints = ApiEndpointSelector();
 
 class HttpService {
   Future<http.Response> sendRequest(
@@ -33,7 +36,13 @@ class HttpService {
     }
 
     if (useFlutterHttp) {
-      return await _pollFlutterHttp(url, method, headers: headers, body: body);
+      final target = await _apiEndpoints.resolve(url);
+      try {
+        return await _pollFlutterHttp(target, method, headers: headers, body: body);
+      } on Exception {
+        _apiEndpoints.invalidate(url);
+        rethrow;
+      }
     }
 
     String headersJson = jsonEncode(headers);

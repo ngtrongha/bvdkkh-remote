@@ -1,0 +1,42 @@
+# Hospital API endpoint selection
+
+The client prefers `http://172.16.3.28:21114` and falls back to
+`https://danhba.bvkhanhhoa.cloud`. These are two routes to the same backend.
+
+A credential-free GET `/healthz` must return HTTP 200 with body `ok` to select
+the internal route. The probe has a two-second timeout and the choice is cached
+for sixty seconds. Concurrent calls share the probe. A transport failure causes
+the next request to check again; it does not replay the failed write through the
+other API origin. Authentication responses do not trigger endpoint switching.
+Custom API origins and the existing Dart/Rust transport choice are preserved.
+
+Review and verification on 2026-10-24:
+
+- On Ethernet, the real Dart selector chose the internal API in 44 ms and its
+  health request returned 200. On external Wi-Fi, it chose public in 2015 ms and
+  the public health request returned 200.
+- Selector tests cover internal preference and shared probes, caching and
+  rechecking after a connection failure, timeout fallback and custom origins.
+- The support dialog's direct HTTP/multipart submission also resolves the API
+  before sending, so it does not depend on the background process's cached route.
+- The local machine has no Rust compiler. Rust source syntax was checked with
+  Tree-sitter; native compilation is delegated to the existing GitHub Actions
+  builds. A requested build is not evidence of a successful native compilation.
+
+Existing runtime paths changed, and why:
+
+- `flutter/lib/utils/http_service.dart`: resolve the origin before Dart HTTP
+  sends a request and invalidate only after a transport failure.
+- `flutter/lib/common/widgets/support_dialog.dart`: resolve direct HTTP and
+  multipart ticket requests which bypass `HttpService`.
+- `src/common.rs`: return the selected cached API and resolve native POST/HTTP
+  requests before dispatch; invalidate on transport failure for the next call.
+- `src/hbbs_http/sync.rs`: check selection during background heartbeat, including
+  when the UI is idle, and keep sync bookkeeping on the selected URL.
+- `src/deployment_agent.rs`: resolve direct HTTP/agent WebSocket endpoints before
+  connection, because these calls bypass the common request wrapper.
+- `src/lib.rs`: register the new endpoint module.
+
+ID and relay servers are unchanged. API fallback alone does not establish a
+remote desktop session from outside the hospital. Browser CORS/LAN permissions
+are separate from native client networking.
