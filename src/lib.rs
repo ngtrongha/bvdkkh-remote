@@ -1,3 +1,8 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
+
+mod api_endpoint;
 #[cfg(any(test, not(target_os = "linux")))]
 mod audio_resampler;
 mod keyboard;
