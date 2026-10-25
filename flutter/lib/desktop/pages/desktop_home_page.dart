@@ -14,6 +14,7 @@ import 'package:flutter_hbb/common/widgets/animated_rotation_widget.dart';
 import 'package:flutter_hbb/common/widgets/custom_password.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
+import '../../common/widgets/api_connection_badge.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/widgets/update_progress.dart';
@@ -532,13 +533,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 ),
             ],
           ),
-          Text(
+          const ApiConnectionBadge(),
+          Flexible(child: Text(
             'Bản quyền © 2026 Bệnh viện Đa khoa Tỉnh Khánh Hòa',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 10,
               color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.5),
             ),
-          ),
+          )),
         ],
       ),
     );

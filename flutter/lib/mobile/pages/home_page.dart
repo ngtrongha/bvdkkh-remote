@@ -1,4 +1,9 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
+
 import 'package:flutter/material.dart';
+import '../../common/widgets/api_connection_badge.dart';
 import 'package:flutter_hbb/mobile/pages/server_page.dart';
 import 'package:flutter_hbb/mobile/pages/settings_page.dart';
 import 'package:flutter_hbb/web/settings_page.dart';
@@ -77,6 +82,11 @@ class HomePageState extends State<HomePage> {
           appBar: AppBar(
             centerTitle: true,
             title: appTitle(),
+            bottom: const PreferredSize(
+              preferredSize: Size.fromHeight(28),
+              child: Padding(padding: EdgeInsets.only(bottom: 4),
+                  child: ApiConnectionBadge()),
+            ),
             actions: _pages.elementAt(_selectedIndex).appBarActions,
           ),
           bottomNavigationBar: BottomNavigationBar(
@@ -167,6 +177,11 @@ class WebHomePage extends StatelessWidget {
       appBar: AppBar(
         centerTitle: true,
         title: Text("${bind.mainGetAppNameSync()} (Preview)"),
+        bottom: const PreferredSize(
+          preferredSize: Size.fromHeight(28),
+          child: Padding(padding: EdgeInsets.only(bottom: 4),
+              child: ApiConnectionBadge()),
+        ),
         actions: connectionPage.appBarActions,
       ),
       body: connectionPage,

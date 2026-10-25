@@ -53,6 +53,20 @@ pub fn invalidate(url: &str) {
     }
 }
 
+pub fn annotate_response(response: String, endpoint: &str) -> String {
+    let (Ok(mut data), Ok(endpoint)) = (
+        serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&response),
+        url::Url::parse(endpoint),
+    ) else {
+        return response;
+    };
+    data.insert(
+        "api_origin".to_owned(),
+        serde_json::json!(endpoint.origin().ascii_serialization()),
+    );
+    serde_json::Value::Object(data).to_string()
+}
+
 async fn internal_available() -> bool {
     let client = match reqwest::Client::builder()
         .no_proxy()
@@ -106,6 +120,21 @@ pub async fn resolve_url(url: String) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reports_request_origin_without_credentials_or_query() {
+        let response = annotate_response(
+            r#"{"status_code":200,"body":"ok"}"#.to_owned(),
+            "https://user:password@danhba.bvkhanhhoa.cloud/api/test?token=secret",
+        );
+        let data: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(data["api_origin"], PUBLIC);
+        assert_eq!(data["body"], "ok");
+        assert_eq!(
+            annotate_response("transport failed".to_owned(), PUBLIC),
+            "transport failed"
+        );
+    }
 
     #[test]
     fn recognizes_only_hospital_api_origins_and_preserves_path_and_query() {
