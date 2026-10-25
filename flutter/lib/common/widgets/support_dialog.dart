@@ -14,6 +14,7 @@ import 'package:http/http.dart' as http;
 import '../../common.dart' hide Dialog;
 import '../../models/platform_model.dart';
 import '../../utils/api_endpoint_selector.dart';
+import '../../utils/api_connection_status.dart';
 import '../support_ticket_listener.dart';
 import 'animated_dropdown.dart';
 
@@ -312,6 +313,7 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
       _errorMessage = '';
     });
 
+    Uri? attemptedApi;
     try {
       if (_deviceId.isEmpty) {
         try {
@@ -340,6 +342,7 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
 
       final url = await ApiEndpointSelector()
           .resolve(Uri.parse('$apiServer/api/support/ticket'));
+      attemptedApi = url;
       final token = bind.mainGetLocalOption(key: 'access_token');
 
       http.Response response;
@@ -417,6 +420,7 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
         response = await http.Response.fromStream(streamedResponse);
       }
 
+      reportApiConnection(url);
       if (response.statusCode == 200) {
         final body = json.decode(utf8.decode(response.bodyBytes));
 
@@ -470,6 +474,10 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
         });
       }
     } catch (e) {
+      if (attemptedApi != null &&
+          (e is http.ClientException || e is TimeoutException || e is SocketException)) {
+        reportApiConnection(attemptedApi, failed: true);
+      }
       setState(() {
         _isSubmitting = false;
         _errorMessage =

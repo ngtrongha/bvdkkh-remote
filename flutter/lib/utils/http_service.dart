@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:http/http.dart' as http;
 import 'api_endpoint_selector.dart';
+import 'api_connection_status.dart';
 import '../models/platform_model.dart';
 import 'package:flutter_hbb/common.dart';
 export 'package:http/http.dart' show Response;
@@ -38,23 +39,41 @@ class HttpService {
     if (useFlutterHttp) {
       final target = await _apiEndpoints.resolve(url);
       try {
-        return await _pollFlutterHttp(target, method, headers: headers, body: body);
+        final response = await _pollFlutterHttp(target, method, headers: headers, body: body);
+        reportApiConnection(target);
+        return response;
       } on Exception {
         _apiEndpoints.invalidate(url);
+        reportApiConnection(target, failed: true);
         rethrow;
       }
     }
 
     String headersJson = jsonEncode(headers);
     String methodName = method.toString().split('.').last;
-    await bind.mainHttpRequest(
+    var endpoint = url;
+    try {
+      await bind.mainHttpRequest(
         url: url.toString(),
         method: methodName.toLowerCase(),
         body: body,
         header: headersJson);
 
-    var resJson = await _pollForResponse(url.toString());
-    return _parseHttpResponse(resJson);
+      final resJson = await _pollForResponse(url.toString());
+      if (isHospitalApi(url)) {
+        endpoint = Uri.parse(await bind.mainGetApiServer());
+      }
+      final response = _parseHttpResponse(resJson);
+      final origin = (jsonDecode(resJson) as Map)['api_origin'];
+      if (origin is String) {
+        endpoint = Uri.tryParse(origin) ?? endpoint;
+      }
+      reportApiConnection(endpoint);
+      return response;
+    } on Exception {
+      reportApiConnection(endpoint, failed: true);
+      rethrow;
+    }
   }
 
   // Bounds only the pure-Dart branch below, which the OS would otherwise
