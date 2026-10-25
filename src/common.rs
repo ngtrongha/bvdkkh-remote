@@ -2936,7 +2936,7 @@ pub async fn http_request_sync(
     if result.is_err() {
         crate::api_endpoint::invalidate(&url);
     }
-    result
+    result.map(|response| crate::api_endpoint::annotate_response(response, &url))
 }
 
 /// General HTTP request via TCP proxy. Header is a JSON string (used by http_request_sync).
