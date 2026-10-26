@@ -37,9 +37,9 @@ Existing runtime paths changed, and why:
   connection, because these calls bypass the common request wrapper.
 - `src/lib.rs`: register the new endpoint module.
 
-ID and relay servers are unchanged. API fallback alone does not establish a
-remote desktop session from outside the hospital. Browser CORS/LAN permissions
-are separate from native client networking.
+API fallback alone does not establish a remote desktop session. Hospital native
+ID/relay selection is now handled separately; see [public remote connectivity](public-remote-connectivity.md).
+Browser CORS/LAN permissions are separate from native client networking.
 
 ## API route indicator
 

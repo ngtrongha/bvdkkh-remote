@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
+
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -405,6 +409,7 @@ async fn create_relay_connection_(
     meta: ConnectionMeta,
 ) -> ResultType<()> {
     // The proxy's address family does not constrain the relay target.
+    let relay_server = crate::remote_endpoint::relay_server(relay_server);
     let relay_server = crate::check_port(relay_server, RELAY_PORT);
     let use_ws_proxy = Config::is_proxy() && is_ws_endpoint(&check_ws(&relay_server));
     let mut stream = socket_client::connect_tcp(
