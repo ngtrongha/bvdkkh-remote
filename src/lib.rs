@@ -3,6 +3,7 @@
 // Author: Nguyễn Trọng Hà
 
 mod api_endpoint;
+mod remote_endpoint;
 #[cfg(any(test, not(target_os = "linux")))]
 mod audio_resampler;
 mod keyboard;
