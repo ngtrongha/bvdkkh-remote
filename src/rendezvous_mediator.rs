@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
+
 use std::{
     collections::{hash_map::RandomState, HashMap, VecDeque},
     hash::BuildHasher,
@@ -272,6 +276,7 @@ impl RendezvousMediator {
     }
 
     pub async fn start_all() {
+        let _ = crate::remote_endpoint::select_server().await;
         crate::test_nat_type();
         if config::is_outgoing_only() {
             loop {
