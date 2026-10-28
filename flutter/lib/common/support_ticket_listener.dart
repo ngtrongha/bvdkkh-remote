@@ -13,7 +13,10 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../common.dart';
+import '../consts.dart';
+import 'support_ticket_client_state.dart';
 import 'support_ticket_feed_cursor.dart';
+import 'support_ticket_mobile_notifications.dart';
 import '../models/platform_model.dart';
 import '../utils/http_service.dart' as http;
 
@@ -110,10 +113,7 @@ class SupportTicketListener {
   // Client watcher fields (runs for user on their workstation)
   Timer? _clientPollingTimer;
   bool _isClientChecking = false;
-  int _activeClientTicketId = 0;
-  String _lastClientStatus = '';
-  bool _clientNotifiedAssigned = false;
-  bool _clientNotifiedResolved = false;
+  final _clientState = SupportTicketClientState();
 
   bool get isRunning => _isAdminRunning;
   bool get isClientWatching => _clientPollingTimer != null;
@@ -198,7 +198,10 @@ class SupportTicketListener {
     }
   }
 
-  void checkNow() { _checkNewTickets(); }
+  void checkNow() {
+    _checkNewTickets();
+    if (isClientWatching) _checkClientTicket();
+  }
 
   void _onNewTicketReceived(SupportTicket ticket) {
     debugPrint(
@@ -207,16 +210,13 @@ class SupportTicketListener {
     // 1. Play audible chime
     _playChime();
 
-    // 2. Native Windows Toast notification
-    if (Platform.isWindows) {
-      final displayName =
-          ticket.hostname.isNotEmpty ? ticket.hostname : ticket.deviceId;
-      _showWindowsToast(
-        title: '[BVĐKKH] Yêu cầu hỗ trợ IT: $displayName',
-        body:
-            '${ticket.category}: ${ticket.description}\nID: ${ticket.deviceId}',
-      );
-    }
+    final displayName =
+        ticket.hostname.isNotEmpty ? ticket.hostname : ticket.deviceId;
+    _showSystemNotification(
+      ticketId: ticket.id,
+      title: '[BVĐKKH] Yêu cầu hỗ trợ IT: $displayName',
+      body: '${ticket.category}: ${ticket.description}\nID: ${ticket.deviceId}',
+    );
 
     // 3. Bring window to front
     if (isDesktop) {
@@ -237,6 +237,7 @@ class SupportTicketListener {
   // ---------------------------------------------------------------------------
   void initClientWatcher() {
     if (_clientPollingTimer != null) return;
+    if (isAndroid || isIOS) _requestMobileNotificationPermission();
     debugPrint('[SupportTicketListener] Initializing Client Watcher');
 
     // First check after 2 seconds
@@ -252,10 +253,7 @@ class SupportTicketListener {
 
   void trackTicket(int ticketId) {
     debugPrint('[SupportTicketListener] Tracking Client Ticket #$ticketId');
-    _activeClientTicketId = ticketId;
-    _lastClientStatus = 'open';
-    _clientNotifiedAssigned = false;
-    _clientNotifiedResolved = false;
+    _clientState.track(ticketId);
 
     // Expedite checking: check immediately and keep 10-second polling
     _clientPollingTimer?.cancel();
@@ -268,7 +266,7 @@ class SupportTicketListener {
   void stopClientWatcher() {
     _clientPollingTimer?.cancel();
     _clientPollingTimer = null;
-    _activeClientTicketId = 0;
+    _clientState.track(0);
   }
 
   Future<void> _checkClientTicket() async {
@@ -301,44 +299,22 @@ class SupportTicketListener {
       final ticket =
           SupportTicket.fromJson(body['data'] as Map<String, dynamic>);
 
-      // If we are tracking a specific ticket and a strictly older ticket was returned, ignore
-      if (_activeClientTicketId > 0 && ticket.id < _activeClientTicketId) {
-        return;
-      }
-
-      // If a newer active ticket exists, adopt its ID
-      if (_activeClientTicketId == 0 &&
-          (ticket.status == 'open' ||
-              ticket.status == 'assigned' ||
-              ticket.status == 'in_progress')) {
-        _activeClientTicketId = ticket.id;
-      }
-
-      final status = ticket.status.toLowerCase().trim();
+      final event = _clientState.consume(ticket.id, ticket.status);
 
       // 1. KTV IT đã tiếp nhận (assigned / in_progress)
-      if (status == 'assigned' || status == 'in_progress') {
-        if (!_clientNotifiedAssigned || _lastClientStatus != status) {
-          _clientNotifiedAssigned = true;
-          _lastClientStatus = status;
-          _onClientTicketAssigned(ticket);
-        }
+      if (event == SupportTicketClientEvent.assigned) {
+        _onClientTicketAssigned(ticket);
       }
 
       // 2. KTV IT đã xử lý xong (resolved / closed)
-      if (status == 'resolved' || status == 'closed') {
-        if (!_clientNotifiedResolved) {
-          _clientNotifiedResolved = true;
-          _lastClientStatus = status;
-          _onClientTicketResolved(ticket);
+      if (event == SupportTicketClientEvent.resolved) {
+        _onClientTicketResolved(ticket);
 
-          // Once resolved, relax the polling interval back to 60s
-          _clientPollingTimer?.cancel();
-          _clientPollingTimer =
-              Timer.periodic(const Duration(seconds: 60), (_) {
-            _checkClientTicket();
-          });
-        }
+        // Once resolved, relax the polling interval back to 60s
+        _clientPollingTimer?.cancel();
+        _clientPollingTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+          _checkClientTicket();
+        });
       }
     } catch (e) {
       debugPrint('[SupportTicketListener] Error checking client ticket: $e');
@@ -348,6 +324,7 @@ class SupportTicketListener {
   }
 
   void _onClientTicketAssigned(SupportTicket ticket) {
+    if (!mainGetBoolOptionSync(kOptionEnableSupportTicketNotifications)) return;
     debugPrint('[SupportTicketListener] Client Ticket #${ticket.id} Assigned');
     _playChime();
 
@@ -357,14 +334,13 @@ class SupportTicketListener {
     final title = '[BVĐKKH IT] Tiếp nhận sự cố #${ticket.id}';
     final body = '$adminName đã tiếp nhận và đang hỗ trợ xử lý sự cố của bạn.';
 
-    if (Platform.isWindows) {
-      _showWindowsToast(title: title, body: body);
-    }
+    _showSystemNotification(ticketId: ticket.id, title: title, body: body);
 
     _showClientAssignedBanner(ticket);
   }
 
   void _onClientTicketResolved(SupportTicket ticket) {
+    if (!mainGetBoolOptionSync(kOptionEnableSupportTicketNotifications)) return;
     debugPrint('[SupportTicketListener] Client Ticket #${ticket.id} Resolved');
     _playChime();
 
@@ -377,9 +353,7 @@ class SupportTicketListener {
         : 'Sự cố đã được kiểm tra và xử lý hoàn tất.';
     final body = 'KTV: $adminName\nPhản hồi: $note';
 
-    if (Platform.isWindows) {
-      _showWindowsToast(title: title, body: body);
-    }
+    _showSystemNotification(ticketId: ticket.id, title: title, body: body);
 
     _showClientResolvedBanner(ticket);
   }
@@ -388,6 +362,8 @@ class SupportTicketListener {
   // NOTIFICATION UTILITIES: Âm thanh & Native Windows Toast
   // ---------------------------------------------------------------------------
   Future<void> _playChime() async {
+    if (isAndroid || isIOS) return;
+    if (!mainGetBoolOptionSync(kOptionEnableSupportTicketSound)) return;
     try {
       await SystemSound.play(SystemSoundType.alert);
       if (Platform.isWindows) {
@@ -402,15 +378,54 @@ class SupportTicketListener {
     }
   }
 
+  Future<void> _requestMobileNotificationPermission() async {
+    try {
+      if (!await requestSupportNotificationPermission()) {
+        debugPrint('[SupportTicketListener] Mobile notifications are disabled');
+      }
+    } catch (e) {
+      debugPrint('[SupportTicketListener] Notification permission failed: $e');
+    }
+  }
+
+  Future<void> _showSystemNotification({
+    required int ticketId,
+    required String title,
+    required String body,
+  }) async {
+    if (Platform.isWindows) {
+      await _showWindowsToast(title: title, body: body);
+    } else if (isAndroid || isIOS) {
+      try {
+        await showMobileSupportNotification(
+          ticketId: ticketId,
+          title: title,
+          body: body,
+          sound: mainGetBoolOptionSync(kOptionEnableSupportTicketSound),
+        );
+      } on PlatformException catch (e) {
+        debugPrint('[SupportTicketListener] Mobile notification failed: $e');
+        BotToast.showText(text: e.code == 'notifications_disabled'
+            ? 'Thông báo hệ thống đang bị tắt. Hãy bật thông báo cho BVĐKKH - Remote trong Cài đặt thiết bị.'
+            : 'Không thể hiển thị thông báo hệ thống: ${e.message}');
+      } catch (e) {
+        debugPrint('[SupportTicketListener] Mobile notification failed: $e');
+        BotToast.showText(text: 'Không thể hiển thị thông báo hệ thống: $e');
+      }
+    }
+  }
+
   Future<void> _showWindowsToast({
     required String title,
     required String body,
     String sound = 'Reminder',
   }) async {
     if (!Platform.isWindows) return;
+    final soundEnabled = mainGetBoolOptionSync(kOptionEnableSupportTicketSound);
     try {
       final psScript = '''
 \$ErrorActionPreference = 'Stop'
+\$ProgressPreference = 'SilentlyContinue'
 \$payload = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(\$env:BVDKKH_TOAST_DATA)) | ConvertFrom-Json
 \$title = [string]\$payload.title
 \$body = [string]\$payload.body
@@ -420,7 +435,12 @@ try {
     [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > \$null
     [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] > \$null
     [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > \$null
-    \$appId = '{1AC14E77-02E7-4E5D-B744-22D60870027C}\\WindowsPowerShell\\v1.0\\powershell.exe'
+    \$appId = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe'
+    \$notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier(\$appId)
+    if (\$notifier.Setting.ToString() -ne 'Enabled') {
+        [Console]::Error.WriteLine('Windows notifications are disabled: ' + \$notifier.Setting.ToString())
+        exit 2
+    }
     \$xml = [Windows.Data.Xml.Dom.XmlDocument]::new()
     \$toastXml = @"
 <toast duration="long">
@@ -430,16 +450,67 @@ try {
       <text>\$xmlBody</text>
     </binding>
   </visual>
-  <audio src="ms-winsoundevent:Notification.$sound"/>
+  <audio ${soundEnabled ? 'src="ms-winsoundevent:Notification.$sound"' : 'silent="true"'}/>
 </toast>
 "@
     \$xml.LoadXml(\$toastXml)
     \$toast = [Windows.UI.Notifications.ToastNotification]::new(\$xml)
-    [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier(\$appId).Show(\$toast)
+    \$notifier.Show(\$toast)
 } catch {
     try {
         Add-Type -AssemblyName System.Windows.Forms
         Add-Type -AssemblyName System.Drawing
+        if (-not \$payload.sound) {
+            # WinForms ShowBalloonTip does not expose NIIF_NOSOUND.
+            Add-Type -ReferencedAssemblies System.Windows.Forms,System.Drawing -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Windows.Forms;
+using System.Drawing;
+public static class SilentSupportBalloon {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct NotifyIconData {
+        public uint cbSize;
+        public IntPtr hWnd;
+        public uint uID, uFlags, uCallbackMessage;
+        public IntPtr hIcon;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string szTip;
+        public uint dwState, dwStateMask;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string szInfo;
+        public uint uTimeout;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)] public string szInfoTitle;
+        public uint dwInfoFlags;
+        public Guid guidItem;
+        public IntPtr hBalloonIcon;
+    }
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool Shell_NotifyIconW(uint message, ref NotifyIconData data);
+    public static void Show(string title, string body) {
+        using (var window = new Form()) {
+            var data = new NotifyIconData {
+                cbSize = (uint)Marshal.SizeOf(typeof(NotifyIconData)),
+                hWnd = window.Handle, uID = 1, uFlags = 2 | 4 | 16,
+                hIcon = SystemIcons.Information.Handle, szTip = "BVĐKKH IT",
+                szInfo = body.Length > 255 ? body.Substring(0, 255) : body,
+                szInfoTitle = title.Length > 63 ? title.Substring(0, 63) : title,
+                uTimeout = 10000, dwInfoFlags = 1 | 16
+            };
+            if (!Shell_NotifyIconW(0, ref data))
+                throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());
+            try {
+                var timer = System.Diagnostics.Stopwatch.StartNew();
+                while (timer.ElapsedMilliseconds < 5000) {
+                    Application.DoEvents();
+                    System.Threading.Thread.Sleep(100);
+                }
+            } finally { Shell_NotifyIconW(2, ref data); }
+        }
+    }
+}
+'@
+            [SilentSupportBalloon]::Show(\$title, \$body)
+            exit 0
+        }
         \$notify = New-Object System.Windows.Forms.NotifyIcon
         \$notify.Icon = [System.Drawing.SystemIcons]::Information
         \$notify.BalloonTipTitle = \$title
@@ -454,7 +525,10 @@ try {
         }
         \$notify.Visible = \$false
         \$notify.Dispose()
-    } catch { exit 1 }
+    } catch {
+        [Console]::Error.WriteLine(\$_.Exception.Message)
+        exit 1
+    }
 }
 ''';
 
@@ -467,16 +541,29 @@ try {
 
       final result = await Process.run('powershell.exe', [
         '-NoProfile',
+        '-NonInteractive',
+        '-OutputFormat',
+        'Text',
         '-WindowStyle',
         'Hidden',
         '-EncodedCommand',
         encoded,
       ], environment: {
-        'BVDKKH_TOAST_DATA': base64.encode(utf8.encode(json.encode({'title': title, 'body': body}))),
+        'BVDKKH_TOAST_DATA': base64.encode(utf8.encode(json.encode(
+            {'title': title, 'body': body, 'sound': soundEnabled}))),
       });
-      if (result.exitCode != 0) throw StateError('Windows notification failed');
+      if (result.exitCode != 0) {
+        final reason = result.stderr.toString().trim();
+        debugPrint('[SupportTicketListener] Windows notification failed: $reason');
+        BotToast.showText(
+          text: result.exitCode == 2
+              ? 'Thông báo Windows đang bị tắt. Hãy bật trong Cài đặt Windows > Hệ thống > Thông báo.'
+              : 'Không thể hiển thị thông báo Windows: $reason',
+        );
+      }
     } catch (e) {
       debugPrint('[SupportTicketListener] Failed to show Windows toast: $e');
+      BotToast.showText(text: 'Không thể hiển thị thông báo Windows: $e');
     }
   }
 

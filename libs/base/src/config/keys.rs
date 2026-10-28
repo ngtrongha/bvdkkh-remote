@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
 //! Option keys shared across the app.
 //!
 //! The handful that `hbb_common` itself reads stay defined there and are
@@ -66,6 +69,10 @@ pub const OPTION_WINDOWS_SERVICE_VIDEO_SAVE_DIRECTORY: &str =
 pub const OPTION_VIDEO_SAVE_DIRECTORY: &str = "video-save-directory";
 pub const OPTION_ENABLE_ABR: &str = "enable-abr";
 pub const OPTION_ALLOW_REMOVE_WALLPAPER: &str = "allow-remove-wallpaper";
+pub const OPTION_ENABLE_WALLPAPER_UPDATE_ON_STARTUP: &str = "enable-wallpaper-update-on-startup";
+pub const OPTION_ENABLE_WALLPAPER_LOCK: &str = "enable-wallpaper-lock";
+pub const OPTION_ENABLE_SUPPORT_TICKET_SOUND: &str = "enable-support-ticket-sound";
+pub const OPTION_ENABLE_SUPPORT_TICKET_NOTIFICATIONS: &str = "enable-support-ticket-notifications";
 pub const OPTION_ALLOW_ALWAYS_SOFTWARE_RENDER: &str = "allow-always-software-render";
 pub const OPTION_ENABLE_HWCODEC: &str = "enable-hwcodec";
 pub const OPTION_APPROVE_MODE: &str = "approve-mode";
@@ -297,6 +304,10 @@ pub const KEYS_SETTINGS: &[&str] = &[
     OPTION_WINDOWS_SERVICE_VIDEO_SAVE_DIRECTORY,
     OPTION_ENABLE_ABR,
     OPTION_ALLOW_REMOVE_WALLPAPER,
+    OPTION_ENABLE_WALLPAPER_UPDATE_ON_STARTUP,
+    OPTION_ENABLE_WALLPAPER_LOCK,
+    OPTION_ENABLE_SUPPORT_TICKET_SOUND,
+    OPTION_ENABLE_SUPPORT_TICKET_NOTIFICATIONS,
     OPTION_ALLOW_ALWAYS_SOFTWARE_RENDER,
     OPTION_ENABLE_HWCODEC,
     OPTION_APPROVE_MODE,

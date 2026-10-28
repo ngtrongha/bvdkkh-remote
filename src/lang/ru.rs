@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
 lazy_static::lazy_static! {
 pub static ref T: std::collections::HashMap<&'static str, &'static str> =
     [
@@ -813,5 +816,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("shortcut-key-not-supported", "\"{}\" невозможно использовать как сочетание клавиш."),
         ("On", "вкл"),
         ("Off", "откл"),
+        ("Update wallpaper on startup", ""),
+        ("Lock Windows wallpaper changes", ""),
+        ("Play support ticket notification sounds", ""),
+        ("Show support ticket status notifications", ""),
     ].iter().cloned().collect();
 }

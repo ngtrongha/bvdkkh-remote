@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
@@ -173,6 +176,12 @@ const String kOptionAllowAlwaysSoftwareRender = "allow-always-software-render";
 const String kOptionEnableCheckUpdate = "enable-check-update";
 const String kOptionAllowAutoUpdate = "allow-auto-update";
 const String kOptionAllowRemoveWallpaper = "allow-remove-wallpaper";
+const String kOptionEnableWallpaperUpdateOnStartup =
+    "enable-wallpaper-update-on-startup";
+const String kOptionEnableWallpaperLock = "enable-wallpaper-lock";
+const String kOptionEnableSupportTicketSound = "enable-support-ticket-sound";
+const String kOptionEnableSupportTicketNotifications =
+    "enable-support-ticket-notifications";
 const String kOptionStopService = "stop-service";
 const String kOptionDirectxCapture = "enable-directx-capture";
 const String kOptionAllowRemoteCmModification = "allow-remote-cm-modification";
