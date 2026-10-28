@@ -721,7 +721,7 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
 
     // Tự động kiểm tra và cập nhật hình nền BVDKKH-Remote khi dịch vụ khởi động
     std::thread::spawn(|| {
-        setup_hospital_wallpaper_native();
+        update_hospital_wallpaper_on_startup();
     });
 
     // Start Software Deployment Agent background task
@@ -1688,6 +1688,171 @@ pub fn generate_hospital_device_password() -> String {
     crate::common::derive_device_password(&raw_name)
 }
 
+pub fn update_hospital_wallpaper_on_startup() {
+    // The tray must read the service's settings, which belong to the SYSTEM account.
+    let _ = ipc::get_options();
+    if Config::get_bool_option(base::config::keys::OPTION_ENABLE_WALLPAPER_UPDATE_ON_STARTUP) {
+        setup_hospital_wallpaper_native();
+    } else {
+        sync_hospital_wallpaper_lock();
+    }
+}
+
+fn set_hospital_wallpaper_lock(root: &RegKey, enabled: bool, image: &Path) -> io::Result<()> {
+    let system_path = r"Software\Microsoft\Windows\CurrentVersion\Policies\System";
+    let active_path = r"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop";
+    if enabled {
+        let system = root.create_subkey(system_path)?.0;
+        system.set_value("Wallpaper", &image.to_string_lossy().as_ref())?;
+        system.set_value("WallpaperStyle", &"2")?;
+        root.create_subkey(active_path)?
+            .0
+            .set_value("NoChangingWallPaper", &1u32)?;
+    } else {
+        let system = match root.open_subkey_with_flags(system_path, KEY_READ | KEY_WRITE) {
+            Ok(key) => key,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        let wallpaper: String = match system.get_value("Wallpaper") {
+            Ok(value) => value,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error),
+        };
+        let owned = [image.with_extension("jpg"), image.with_extension("bmp")]
+            .iter()
+            .any(|path| {
+                wallpaper
+                    .replace('/', "\\")
+                    .eq_ignore_ascii_case(&path.to_string_lossy())
+            });
+        if !owned {
+            return Ok(());
+        }
+        // Leave unrelated/domain policies and the current desktop image untouched.
+        for name in ["Wallpaper", "WallpaperStyle", "TileWallpaper"] {
+            if let Err(error) = system.delete_value(name) {
+                if error.kind() != io::ErrorKind::NotFound {
+                    return Err(error);
+                }
+            }
+        }
+        match root.open_subkey_with_flags(active_path, KEY_WRITE) {
+            Ok(active) => {
+                if let Err(error) = active.delete_value("NoChangingWallPaper") {
+                    if error.kind() != io::ErrorKind::NotFound {
+                        return Err(error);
+                    }
+                }
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
+pub fn sync_hospital_wallpaper_lock_if_changed(previous: bool) {
+    if previous != Config::get_bool_option(base::config::keys::OPTION_ENABLE_WALLPAPER_LOCK) {
+        std::thread::spawn(sync_hospital_wallpaper_lock);
+    }
+}
+
+pub fn sync_hospital_wallpaper_lock() {
+    let enabled = Config::get_bool_option(base::config::keys::OPTION_ENABLE_WALLPAPER_LOCK);
+    let program_data = std::env::var("ProgramData").unwrap_or_else(|_| r"C:\ProgramData".into());
+    let dir = PathBuf::from(program_data).join("BVDKKH-Remote").join("wallpaper");
+    let image = if is_win_10_or_greater() || !dir.join("wallpaper.bmp").exists() {
+        dir.join("wallpaper.jpg")
+    } else {
+        dir.join("wallpaper.bmp")
+    };
+    if enabled && !image.exists() {
+        log::warn!("Cannot lock hospital wallpaper: cached image is missing");
+        return;
+    }
+    for (name, root) in [
+        ("HKCU", RegKey::predef(HKEY_CURRENT_USER)),
+        ("HKLM", RegKey::predef(HKEY_LOCAL_MACHINE)),
+    ] {
+        if let Err(error) = set_hospital_wallpaper_lock(&root, enabled, &image) {
+            log::warn!("Cannot update hospital wallpaper lock for {name}: {error}");
+        }
+    }
+    let users = RegKey::predef(HKEY_USERS);
+    for name in users
+        .enum_keys()
+        .filter_map(Result::ok)
+        .filter(|name| !name.ends_with("_Classes"))
+    {
+        match users.open_subkey_with_flags(&name, KEY_READ | KEY_WRITE) {
+            Ok(root) => {
+                if let Err(error) = set_hospital_wallpaper_lock(&root, enabled, &image) {
+                    log::warn!("Cannot update hospital wallpaper lock for {name}: {error}");
+                }
+            }
+            Err(error) => log::warn!("Cannot open wallpaper policy for {name}: {error}"),
+        }
+    }
+    let policy: Vec<u16> = "Policy".encode_utf16().chain(Some(0)).collect();
+    unsafe {
+        SendMessageTimeoutW(
+            HWND_BROADCAST,
+            WM_SETTINGCHANGE,
+            0,
+            policy.as_ptr() as _,
+            SMTO_ABORTIFHUNG,
+            1000,
+            null_mut(),
+        );
+    }
+}
+
+#[cfg(test)]
+mod wallpaper_lock_tests {
+    use super::*;
+
+    #[test]
+    fn unlock_preserves_desktop_image_and_unrelated_policies() {
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        let test_path = format!(
+            r"Software\BVDKKH-Remote\Tests\WallpaperLock-{}",
+            std::process::id()
+        );
+        let root = hkcu.create_subkey(&test_path).unwrap().0;
+        let image = Path::new(r"C:\ProgramData\BVDKKH-Remote\wallpaper\wallpaper.jpg");
+        let desktop = root.create_subkey(r"Control Panel\Desktop").unwrap().0;
+        desktop.set_value("Wallpaper", &"current.jpg").unwrap();
+
+        set_hospital_wallpaper_lock(&root, true, image).unwrap();
+        let system = root
+            .open_subkey_with_flags(
+                r"Software\Microsoft\Windows\CurrentVersion\Policies\System",
+                KEY_READ | KEY_WRITE,
+            )
+            .unwrap();
+        assert_eq!(
+            system.get_value::<String, _>("Wallpaper").unwrap(),
+            image.to_string_lossy()
+        );
+        set_hospital_wallpaper_lock(&root, false, image).unwrap();
+        assert_eq!(
+            system.get_value::<String, _>("Wallpaper").unwrap_err().kind(),
+            io::ErrorKind::NotFound
+        );
+        assert_eq!(desktop.get_value::<String, _>("Wallpaper").unwrap(), "current.jpg");
+
+        set_hospital_wallpaper_lock(&root, true, image).unwrap();
+        system.set_value("Wallpaper", &r"C:\Company\policy.jpg").unwrap();
+        set_hospital_wallpaper_lock(&root, false, image).unwrap();
+        assert_eq!(system.get_value::<String, _>("Wallpaper").unwrap(), r"C:\Company\policy.jpg");
+        drop(system);
+        drop(desktop);
+        drop(root);
+        hkcu.delete_subkey_all(&test_path).unwrap();
+    }
+}
+
 /// Cài đặt hình nền bệnh viện có in tên máy tính và khóa đổi hình nền
 pub fn setup_hospital_wallpaper_native() {
     let mut computer_name = std::env::var("COMPUTERNAME")
@@ -2004,6 +2169,7 @@ try {
     } else {
         target_bmp.to_string_lossy().to_string()
     };
+    let lock_wallpaper = Config::get_bool_option(base::config::keys::OPTION_ENABLE_WALLPAPER_LOCK);
 
     // 1. Áp dụng cho tài khoản HKCU hiện tại
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
@@ -2012,21 +2178,25 @@ try {
         let _ = desktop.set_value("WallpaperStyle", &"2");
         let _ = desktop.set_value("TileWallpaper", &"0");
     }
-    if let Ok(pol_act) = hkcu.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop") {
-        let _ = pol_act.0.set_value("NoChangingWallPaper", &1u32);
-    }
-    if let Ok(pol_sys) = hkcu.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\System") {
-        let _ = pol_sys.0.set_value("Wallpaper", &chosen_path);
-        let _ = pol_sys.0.set_value("WallpaperStyle", &"2");
-        let _ = pol_sys.0.set_value("TileWallpaper", &"0");
+    if lock_wallpaper {
+        if let Ok(pol_act) = hkcu.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\ActiveDesktop") {
+            let _ = pol_act.0.set_value("NoChangingWallPaper", &1u32);
+        }
+        if let Ok(pol_sys) = hkcu.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\System") {
+            let _ = pol_sys.0.set_value("Wallpaper", &chosen_path);
+            let _ = pol_sys.0.set_value("WallpaperStyle", &"2");
+            let _ = pol_sys.0.set_value("TileWallpaper", &"0");
+        }
     }
 
     // 2. Áp dụng chính sách toàn máy HKLM (mọi user đăng nhập đều nhận hình nền này)
     let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    if let Ok(pol_sys_lm) = hklm.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\System") {
-        let _ = pol_sys_lm.0.set_value("Wallpaper", &chosen_path);
-        let _ = pol_sys_lm.0.set_value("WallpaperStyle", &"2");
-        let _ = pol_sys_lm.0.set_value("TileWallpaper", &"0");
+    if lock_wallpaper {
+        if let Ok(pol_sys_lm) = hklm.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\System") {
+            let _ = pol_sys_lm.0.set_value("Wallpaper", &chosen_path);
+            let _ = pol_sys_lm.0.set_value("WallpaperStyle", &"2");
+            let _ = pol_sys_lm.0.set_value("TileWallpaper", &"0");
+        }
     }
 
     // 3. Quét và cập nhật tất cả profile user đang nạp trong HKEY_USERS (kể cả .DEFAULT và user SID)
@@ -2041,12 +2211,18 @@ try {
                 let _ = desktop.set_value("WallpaperStyle", &"2");
                 let _ = desktop.set_value("TileWallpaper", &"0");
             }
-            if let Ok(pol_sys) = user_key.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\System") {
-                let _ = pol_sys.0.set_value("Wallpaper", &chosen_path);
-                let _ = pol_sys.0.set_value("WallpaperStyle", &"2");
-                let _ = pol_sys.0.set_value("TileWallpaper", &"0");
+            if lock_wallpaper {
+                if let Ok(pol_sys) = user_key.create_subkey(r"Software\Microsoft\Windows\CurrentVersion\Policies\System") {
+                    let _ = pol_sys.0.set_value("Wallpaper", &chosen_path);
+                    let _ = pol_sys.0.set_value("WallpaperStyle", &"2");
+                    let _ = pol_sys.0.set_value("TileWallpaper", &"0");
+                }
             }
         }
+    }
+
+    if !lock_wallpaper {
+        sync_hospital_wallpaper_lock();
     }
 
     // 4. Phát lệnh SystemParametersInfoW làm tươi hình nền ngay lập tức

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
 use crate::client::translate;
 #[cfg(windows)]
 use crate::ipc::Data;
@@ -25,7 +28,7 @@ pub fn start_tray() {
 
     #[cfg(windows)]
     std::thread::spawn(|| {
-        crate::platform::windows::setup_hospital_wallpaper_native();
+        crate::platform::windows::update_hospital_wallpaper_on_startup();
     });
 
     #[cfg(windows)]
