@@ -1,7 +1,7 @@
 // Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
 // Project: BVĐKKH - Remote
 // Author: Nguyễn Trọng Hà
-﻿lazy_static::lazy_static! {
+lazy_static::lazy_static! {
 pub static ref T: std::collections::HashMap<&'static str, &'static str> =
     [
         ("Status", "حالت"),
