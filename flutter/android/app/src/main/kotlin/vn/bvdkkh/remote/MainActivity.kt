@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
 package vn.bvdkkh.remote
 
 /**
@@ -89,6 +92,7 @@ class MainActivity : FlutterActivity() {
             channelTag
         )
         initFlutterChannel(flutterMethodChannel!!)
+        SupportTicketNotifications.register(this, flutterEngine.dartExecutor.binaryMessenger)
         thread {
             try {
                 setCodecInfo()

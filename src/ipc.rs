@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
 #[path = "ipc/auth.rs"]
 mod ipc_auth;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -1040,10 +1043,14 @@ async fn handle(data: Data, stream: &mut Connection) {
             Some(value) => {
                 let _chk = CheckIfRestart::new();
                 let _nat = CheckTestNatType::new();
+                #[cfg(windows)]
+                let wallpaper_lock = Config::get_bool_option(keys::OPTION_ENABLE_WALLPAPER_LOCK);
                 if let Some(v) = value.get("privacy-mode-impl-key") {
                     crate::privacy_mode::switch(v);
                 }
                 Config::set_options(value);
+                #[cfg(windows)]
+                crate::platform::windows::sync_hospital_wallpaper_lock_if_changed(wallpaper_lock);
                 allow_err!(stream.send(&Data::Options(None)).await);
             }
         },
@@ -1054,8 +1061,12 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::SyncConfig(Some(configs)) => {
             let (config, config2) = *configs;
             let _chk = CheckIfRestart::new();
+            #[cfg(windows)]
+            let wallpaper_lock = Config::get_bool_option(keys::OPTION_ENABLE_WALLPAPER_LOCK);
             Config::set(config);
             Config2::set(config2);
+            #[cfg(windows)]
+            crate::platform::windows::sync_hospital_wallpaper_lock_if_changed(wallpaper_lock);
             allow_err!(stream.send(&Data::SyncConfig(None)).await);
         }
         Data::SyncConfig(None) => {
@@ -1921,12 +1932,16 @@ pub fn set_option(key: &str, value: &str) {
 #[tokio::main(flavor = "current_thread")]
 pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
     let _nat = CheckTestNatType::new();
+    #[cfg(windows)]
+    let wallpaper_lock = Config::get_bool_option(keys::OPTION_ENABLE_WALLPAPER_LOCK);
     if let Ok(mut c) = connect(1000, "").await {
         c.send(&Data::Options(Some(value.clone()))).await?;
         // do not put below before connect, because we need to check should_exit
         c.next_timeout(1000).await.ok();
     }
     Config::set_options(value);
+    #[cfg(windows)]
+    crate::platform::windows::sync_hospital_wallpaper_lock_if_changed(wallpaper_lock);
     Ok(())
 }
 

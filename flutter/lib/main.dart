@@ -30,6 +30,7 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'common.dart';
+import 'common/support_ticket_listener.dart';
 import 'consts.dart';
 import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
@@ -462,6 +463,13 @@ class _AppState extends State<App> with WidgetsBindingObserver {
   @override
   void didChangeMetrics() {
     _updateOrientation();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if ((isAndroid || isIOS) && state == AppLifecycleState.resumed) {
+      SupportTicketListener.instance.checkNow();
+    }
   }
 
   void _updateOrientation() {

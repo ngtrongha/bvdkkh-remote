@@ -657,6 +657,28 @@ class _GeneralState extends State<_General> {
       if (!isWeb && !outgoingOnly)
         _OptionCheckBox(context, 'Adaptive bitrate', kOptionEnableAbr),
       if (!isWeb) wallpaper(),
+      if (isWindows) ...[
+        _OptionCheckBox(
+          context,
+          'Update wallpaper on startup',
+          kOptionEnableWallpaperUpdateOnStartup,
+        ),
+        _OptionCheckBox(
+          context,
+          'Lock Windows wallpaper changes',
+          kOptionEnableWallpaperLock,
+        ),
+        _OptionCheckBox(
+          context,
+          'Play support ticket notification sounds',
+          kOptionEnableSupportTicketSound,
+        ),
+        _OptionCheckBox(
+          context,
+          'Show support ticket status notifications',
+          kOptionEnableSupportTicketNotifications,
+        ),
+      ],
       if (!isWeb && !incomingOnly) ...[
         _OptionCheckBox(
           context,
