@@ -106,7 +106,7 @@ class DesktopSettingPage extends StatefulWidget {
         Rx<SettingsTabKey> selected =
             Get.find<Rx<SettingsTabKey>>(tag: _kSettingPageTabKeyTag);
         selected.value = page;
-        controller.jumpToPage(index);
+        if (controller.hasClients) controller.jumpToPage(index);
       } else {
         DesktopTabPage.onAddSetting(initialPage: page);
       }
@@ -378,30 +378,35 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
     super.build(context);
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
-      body: _buildBlock(
-        children: <Widget>[
-          SizedBox(
-            width: _kTabWidth,
-            child: Column(
-              children: [
-                _header(context),
-                Flexible(child: _listView(tabs: _settingTabs())),
-              ],
-            ),
-          ),
-          const VerticalDivider(width: 1),
-          Expanded(
-            child: Container(
-              color: Theme.of(context).scaffoldBackgroundColor,
-              child: PageView(
-                controller: controller,
-                physics: const NeverScrollableScrollPhysics(),
-                children: _children(),
+      body: Obx(() {
+        if (!gFFI.userModel.canAccessSettings) {
+          return _buildLockedSettings(context);
+        }
+        return _buildBlock(
+          children: <Widget>[
+            SizedBox(
+              width: _kTabWidth,
+              child: Column(
+                children: [
+                  _header(context),
+                  Flexible(child: _listView(tabs: _settingTabs())),
+                ],
               ),
             ),
-          )
-        ],
-      ),
+            const VerticalDivider(width: 1),
+            Expanded(
+              child: Container(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                child: PageView(
+                  controller: controller,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: _children(),
+                ),
+              ),
+            )
+          ],
+        );
+      }),
     );
   }
 
