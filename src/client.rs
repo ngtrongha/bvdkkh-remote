@@ -5303,7 +5303,7 @@ async fn hc_connection_(
 pub mod peer_online {
     use hbb_common::{
         anyhow::bail,
-        config::{Config, CONNECT_TIMEOUT, READ_TIMEOUT},
+        config::{Config, LocalConfig, CONNECT_TIMEOUT, READ_TIMEOUT},
         log,
         rendezvous_proto::*,
         sleep,
@@ -5350,6 +5350,16 @@ pub mod peer_online {
         ids: &Vec<String>,
         timeout: std::time::Duration,
     ) -> ResultType<(Vec<String>, Vec<String>)> {
+        let managed = crate::remote_endpoint::select_server().await.is_some();
+        let token = LocalConfig::get_option("access_token");
+        if managed && crate::ui_interface::get_api_server() == crate::api_endpoint::PUBLIC {
+            if token.is_empty() {
+                bail!("Login required to query peer states over the public API");
+            }
+            // hbbs handles OnlineRequest on its NAT port, not the /ws/id listener.
+            return query_online_states_api(ids, &token, timeout).await;
+        }
+
         let mut msg_out = RendezvousMessage::new();
         msg_out.set_online_request(OnlineRequest {
             id: Config::get_id(),
@@ -5416,10 +5426,102 @@ pub mod peer_online {
         bail!("Failed to query online states, no online response");
     }
 
+    async fn query_online_states_api(
+        ids: &[String],
+        token: &str,
+        timeout: std::time::Duration,
+    ) -> ResultType<(Vec<String>, Vec<String>)> {
+        let url = format!("{}/api/peers/online", crate::api_endpoint::PUBLIC);
+        let client = hbb_common::tokio::time::timeout(
+            timeout,
+            crate::hbbs_http::create_http_client_async_with_url_strict(&url),
+        )
+        .await??;
+        let mut onlines = Vec::new();
+        let mut offlines = Vec::new();
+        for chunk in ids.chunks(500) {
+            let body = client
+                .get(&url)
+                .bearer_auth(token)
+                .query(&[("ids", chunk.join(","))])
+                .timeout(timeout)
+                .send()
+                .await?
+                .error_for_status()?
+                .text()
+                .await?;
+            let (online, offline) = parse_api_online_states(&body, chunk)?;
+            onlines.extend(online);
+            offlines.extend(offline);
+        }
+        Ok((onlines, offlines))
+    }
+
+    fn parse_api_online_states(
+        body: &str,
+        ids: &[String],
+    ) -> ResultType<(Vec<String>, Vec<String>)> {
+        #[derive(serde::Deserialize)]
+        struct PeerState {
+            id: String,
+            is_online: bool,
+        }
+        #[derive(serde::Deserialize)]
+        struct Response {
+            data: Vec<PeerState>,
+        }
+        let response: Response = serde_json::from_str(body)?;
+        let mut onlines = Vec::new();
+        let mut offlines = Vec::new();
+        for peer in response.data {
+            if ids.contains(&peer.id) {
+                if peer.is_online {
+                    onlines.push(peer.id);
+                } else {
+                    offlines.push(peer.id);
+                }
+            }
+        }
+        Ok((onlines, offlines))
+    }
+
     #[cfg(test)]
     mod tests {
+        use super::parse_api_online_states;
         use crate::client::Client;
         use hbb_common::rendezvous_proto::IceCandidate;
+
+        #[test]
+        fn public_api_reports_only_explicit_states_for_requested_peers() {
+            let ids = vec![
+                "online".to_owned(),
+                "offline".to_owned(),
+                "missing".to_owned(),
+            ];
+            let (onlines, offlines) = parse_api_online_states(
+                r#"{"data":[{"id":"online","is_online":true},{"id":"offline","is_online":false},{"id":"other","is_online":true}]}"#,
+                &ids,
+            )
+            .unwrap();
+            assert_eq!(onlines, vec!["online"]);
+            assert_eq!(offlines, vec!["offline"]);
+        }
+
+        #[test]
+        fn public_api_errors_or_invalid_states_do_not_become_offline() {
+            let ids = vec!["online".to_owned()];
+            for body in [
+                r#"{"error":"Unauthorized"}"#,
+                r#"{"data":[{"id":"online"}]}"#,
+                r#"{"data":[{"id":"online","is_online":"false"}]}"#,
+            ] {
+                assert!(parse_api_online_states(body, &ids).is_err());
+            }
+            assert_eq!(
+                parse_api_online_states(r#"{"data":[]}"#, &ids).unwrap(),
+                (vec![], vec![])
+            );
+        }
 
         #[test]
         fn accepts_webrtc_ice_by_session_key_only() {
