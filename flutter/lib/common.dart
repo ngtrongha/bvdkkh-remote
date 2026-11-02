@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
-// Project: BVDKKH-Remote
+// Project: BVĐKKH - Remote
 // Author: Nguyễn Trọng Hà
 
 import 'dart:async';
@@ -51,6 +51,7 @@ import 'package:flutter_hbb/native/win32.dart'
 import 'package:flutter_hbb/native/common.dart'
     if (dart.library.html) 'package:flutter_hbb/web/common.dart';
 import 'package:flutter_hbb/utils/http_service.dart' as http;
+import 'package:flutter_hbb/utils/wake_on_lan.dart';
 
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
@@ -2862,6 +2863,20 @@ connect(BuildContext context, String id,
   FocusScopeNode currentFocus = FocusScope.of(context);
   if (!currentFocus.hasPrimaryFocus) {
     currentFocus.unfocus();
+  }
+}
+
+Future<void> wakeOnLan(String id) async {
+  try {
+    final message = await requestWakeOnLan(id,
+        server: await bind.mainGetApiServer(),
+        token: bind.mainGetLocalOption(key: 'access_token'),
+        senderId: await bind.mainGetMyId(),
+        sendLocal: (id) => bind.mainWol(id: id),
+        post: http.post);
+    showToast(message);
+  } catch (e) {
+    showToast('Không gửi được WOL: $e');
   }
 }
 

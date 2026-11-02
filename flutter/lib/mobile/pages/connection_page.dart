@@ -341,8 +341,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     showToast('Vui lòng nhập ID hoặc địa chỉ MAC cần bật');
                     return;
                   }
-                  bind.mainWol(id: id);
-                  showToast('Đã gửi tín hiệu bật máy (WOL) đến $id');
+                  wakeOnLan(id);
                 },
               ),
               SizedBox(
