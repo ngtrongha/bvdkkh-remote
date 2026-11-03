@@ -26,6 +26,9 @@ namespace BVDKKH.Remote.AutoInstaller
 {
     static class Program
     {
+        private const string LAN_HOST = "connect.bvkhanhhoa.cloud";
+        private const string LAN_API = "http://" + LAN_HOST + ":21114";
+
         // 1. Cấu hình máy chủ chia sẻ nội bộ mạng LAN bệnh viện
         public const string DEFAULT_LAN_SHARE = @"\\172.16.2.9\chuongtrinhtest\_RushDesk";
         public static string LanSharePath = DEFAULT_LAN_SHARE;
@@ -608,7 +611,7 @@ namespace BVDKKH.Remote.AutoInstaller
             // Trường hợp offline hoàn toàn hoặc không thể truy cập internet
             if (string.IsNullOrEmpty(info.TagName))
             {
-                info.TagName = "v1.5.18";
+                info.TagName = "v1.5.19";
             }
 
             return info;
@@ -652,7 +655,7 @@ namespace BVDKKH.Remote.AutoInstaller
             }
 
             // Fallback khi không quét được assets
-            string tag = (release != null && !string.IsNullOrEmpty(release.TagName)) ? release.TagName : "v1.5.18";
+            string tag = (release != null && !string.IsNullOrEmpty(release.TagName)) ? release.TagName : "v1.5.19";
             string ver = tag.TrimStart('v');
             string fallbackFile = "";
             if (info.Arch == "x86" || !info.IsWin10OrLater)
@@ -825,8 +828,8 @@ namespace BVDKKH.Remote.AutoInstaller
                 // 4. Đăng ký Registry Uninstall & InstallState
                 RegisterSystemInstallation(targetDir, mainExe);
 
-                // 4.5. Thiết lập file cấu hình kết nối Máy chủ nội bộ 172.16.3.28 trước khi bật service
-                if (logMessage != null) logMessage("Đang cấu hình máy chủ kết nối nội bộ 172.16.3.28...");
+                // 4.5. Thiết lập cấu hình kết nối nội bộ trước khi bật service
+                if (logMessage != null) logMessage("Đang cấu hình máy chủ kết nối nội bộ " + LAN_HOST + "...");
                 WriteServerConfig();
 
                 // 5. Khởi tạo và BẮT BUỘC KHỞI ĐỘNG Windows Service
@@ -1070,8 +1073,8 @@ namespace BVDKKH.Remote.AutoInstaller
                     {
                         key.SetValue("DisplayName", "BVDKKH-Remote");
                         key.SetValue("DisplayIcon", mainExe + ",0");
-                        key.SetValue("DisplayVersion", "1.5.18");
-                        key.SetValue("Version", "1.5.18");
+                        key.SetValue("DisplayVersion", "1.5.19");
+                        key.SetValue("Version", "1.5.19");
                         key.SetValue("Publisher", "Bệnh viện Đa khoa Khánh Hòa");
                         key.SetValue("InstallLocation", targetDir);
                         key.SetValue("UninstallString", "\"" + mainExe + "\" --uninstall");
@@ -1496,14 +1499,14 @@ namespace BVDKKH.Remote.AutoInstaller
             try
             {
                 string configContent =
-                    "rendezvous_server = '172.16.3.28:21116'\r\n" +
+                    "rendezvous_server = '" + LAN_HOST + ":21116'\r\n" +
                     "nat_type = 1\r\n" +
                     "serial = 0\r\n\r\n" +
                     "[options]\r\n" +
-                    "custom-rendezvous-server = '172.16.3.28'\r\n" +
-                    "relay-server = '172.16.3.28'\r\n" +
+                    "custom-rendezvous-server = '" + LAN_HOST + "'\r\n" +
+                    "relay-server = '" + LAN_HOST + "'\r\n" +
                     "key = ''\r\n" +
-                    "api-server = 'http://172.16.3.28:21114'\r\n" +
+                    "api-server = '" + LAN_API + "'\r\n" +
                     "allow-auto-update = 'Y'\r\n" +
                     "verification-method = 'use-permanent-password'\r\n" +
                     "approve-mode = 'password'\r\n";
@@ -1609,10 +1612,10 @@ namespace BVDKKH.Remote.AutoInstaller
                     RunCli(installedExe, "--option verification-method use-permanent-password");
                     RunCli(installedExe, "--option approve-mode password");
                     RunCli(installedExe, "--option disable-change-permanent-password Y");
-                    RunCli(installedExe, "--option custom-rendezvous-server 172.16.3.28");
-                    RunCli(installedExe, "--option relay-server 172.16.3.28");
+                    RunCli(installedExe, "--option custom-rendezvous-server " + LAN_HOST);
+                    RunCli(installedExe, "--option relay-server " + LAN_HOST);
                     RunCli(installedExe, "--option key \"\"");
-                    RunCli(installedExe, "--option api-server http://172.16.3.28:21114");
+                    RunCli(installedExe, "--option api-server " + LAN_API);
                     WriteServerConfig();
                 }
 
@@ -1620,7 +1623,7 @@ namespace BVDKKH.Remote.AutoInstaller
                 if (!string.IsNullOrEmpty(rdId) && !string.IsNullOrEmpty(devicePassword))
                 {
                     if (logMessage != null) logMessage(string.Format("Đang đồng bộ mật khẩu ID {0} lên máy chủ trung tâm...", rdId));
-                    string url = string.Format("http://172.16.3.28:21114/api/admin/devices/{0}/control-password", rdId);
+                    string url = string.Format(LAN_API + "/api/admin/devices/{0}/control-password", rdId);
                     string body = string.Format("{{\"password\":\"{0}\"}}", devicePassword);
                     var req = (HttpWebRequest)WebRequest.Create(url);
                     req.Method = "POST";

@@ -333,7 +333,7 @@ class _SupportDialogBodyState extends State<SupportDialogBody> {
 
       var apiServer = await bind.mainGetApiServer();
       if (apiServer.isEmpty) {
-        apiServer = 'http://172.16.3.28:21114';
+        apiServer = internalApiOrigin;
       }
       if (!apiServer.startsWith('http://') &&
           !apiServer.startsWith('https://')) {

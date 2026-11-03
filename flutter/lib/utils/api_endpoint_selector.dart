@@ -4,13 +4,17 @@
 
 import 'package:http/http.dart' as http;
 
-const internalApiOrigin = 'http://172.16.3.28:21114';
+const internalApiOrigin = 'http://connect.bvkhanhhoa.cloud:21114';
+const _legacyInternalApiOrigin = 'http://172.16.3.28:21114';
 const publicApiOrigin = 'https://danhba.bvkhanhhoa.cloud';
+
+bool isInternalApiOrigin(String? origin) =>
+    origin == internalApiOrigin || origin == _legacyInternalApiOrigin;
 
 bool isHospitalApi(Uri uri) =>
     uri.hasAuthority &&
     uri.userInfo.isEmpty &&
-    (uri.origin == internalApiOrigin || uri.origin == publicApiOrigin);
+    (isInternalApiOrigin(uri.origin) || uri.origin == publicApiOrigin);
 
 class ApiEndpointSelector {
   final http.Client Function() _createClient;
