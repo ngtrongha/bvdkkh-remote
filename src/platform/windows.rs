@@ -1936,7 +1936,7 @@ pub fn setup_hospital_wallpaper_native() {
 
     let api_server = crate::ui_interface::get_api_server();
     let api_server = if api_server.trim().is_empty() {
-        "http://172.16.3.28:21114".to_string()
+        crate::api_endpoint::INTERNAL.to_string()
     } else {
         api_server.trim().trim_end_matches('/').to_string()
     };

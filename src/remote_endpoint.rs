@@ -5,32 +5,22 @@
 use base::config::keys;
 use hbb_common::config::{self, Config};
 
-const INTERNAL_HOST: &str = "172.16.3.28";
+pub const INTERNAL_HOST: &str = "connect.bvkhanhhoa.cloud";
+const LEGACY_INTERNAL_HOST: &str = "172.16.3.28";
 const PUBLIC_HOST: &str = "danhba.bvkhanhhoa.cloud";
 
 fn hospital_host(host: &str) -> bool {
-    matches!(
-        host,
-        "172.16.3.28"
-            | "172.16.3.28:21116"
-            | "172.16.3.28:21117"
-            | "172.16.3.28:21118"
-            | "172.16.3.28:21119"
-            | "danhba.bvkhanhhoa.cloud"
-            | "danhba.bvkhanhhoa.cloud:21116"
-            | "danhba.bvkhanhhoa.cloud:21117"
-            | "danhba.bvkhanhhoa.cloud:21118"
-            | "danhba.bvkhanhhoa.cloud:21119"
-    )
+    let host = match host.rsplit_once(':') {
+        Some((host, "21116" | "21117" | "21118" | "21119")) => host,
+        _ => host,
+    };
+    matches!(host, INTERNAL_HOST | LEGACY_INTERNAL_HOST | PUBLIC_HOST)
 }
 
 fn managed(server: &str, relay: &str, api: &str) -> bool {
     hospital_host(server)
         && (relay.is_empty() || hospital_host(relay))
-        && matches!(
-            api,
-            crate::api_endpoint::INTERNAL | crate::api_endpoint::PUBLIC
-        )
+        && crate::api_endpoint::is_hospital_origin(api)
 }
 
 fn route(internal: bool) -> (&'static str, &'static str, &'static str) {
@@ -118,7 +108,10 @@ mod tests {
     #[test]
     fn public_route_uses_the_public_host_https_and_websocket_together() {
         assert_eq!(route(false), ("danhba.bvkhanhhoa.cloud", "https://danhba.bvkhanhhoa.cloud", "Y"));
-        assert_eq!(route(true), ("172.16.3.28", "http://172.16.3.28:21114", "N"));
+        assert_eq!(
+            route(true),
+            ("connect.bvkhanhhoa.cloud", "http://connect.bvkhanhhoa.cloud:21114", "N"),
+        );
     }
 
     #[test]
@@ -128,6 +121,25 @@ mod tests {
         assert!(!managed("custom.example:21116", INTERNAL_HOST, crate::api_endpoint::INTERNAL));
         assert!(!managed("172.16.3.28:21116", "custom.example", crate::api_endpoint::INTERNAL));
         assert!(!managed("172.16.3.28:21116", INTERNAL_HOST, "https://custom.example"));
+    }
+
+    #[test]
+    fn web_lan_hostname_uses_managed_native_routes() {
+        assert!(managed(
+            INTERNAL_HOST,
+            "connect.bvkhanhhoa.cloud:21117",
+            crate::api_endpoint::INTERNAL,
+        ));
+        assert_eq!(
+            relay_for_route(LEGACY_INTERNAL_HOST.to_owned(), INTERNAL_HOST),
+            INTERNAL_HOST,
+        );
+        assert_eq!(
+            relay_for_route(INTERNAL_HOST.to_owned(), PUBLIC_HOST),
+            PUBLIC_HOST,
+        );
+        assert!(!hospital_host("connect.bvkhanhhoa.cloud:21120"));
+        assert!(!hospital_host("connect.bvkhanhhoa.cloud.example"));
     }
 
     #[test]

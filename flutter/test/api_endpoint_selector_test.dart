@@ -15,12 +15,14 @@ void main() {
     final selector = ApiEndpointSelector(
         createClient: () => MockClient((request) async {
               probes++;
+              expect(request.url.toString(),
+                  'http://connect.bvkhanhhoa.cloud:21114/healthz');
               expect(request.headers.containsKey('authorization'), isFalse);
               return http.Response('ok\n', 200);
             }));
     final results = await Future.wait([
       selector.resolve(Uri.parse('$publicApiOrigin/api/currentUser?q=1')),
-      selector.resolve(Uri.parse('$internalApiOrigin/api/heartbeat')),
+      selector.resolve(Uri.parse('http://172.16.3.28:21114/api/heartbeat')),
     ]);
     expect(results.every((url) => url.origin == internalApiOrigin), isTrue);
     expect(results.first.path, '/api/currentUser');

@@ -4,8 +4,17 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/generated_bridge.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
+
+class _WallpaperBinding extends Fake implements RustdeskImpl {
+  @override
+  bool isCustomClient({dynamic hint}) => false;
+}
 
 void main() {
+  setUpAll(() => platformFFI.setBindingForTesting(_WallpaperBinding()));
+
   for (final key in [
     kOptionEnableWallpaperUpdateOnStartup,
     kOptionEnableWallpaperLock,

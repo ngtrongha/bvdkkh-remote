@@ -1025,7 +1025,14 @@ fn get_local_ipv4() -> String {
         }
     }
     if let Ok(socket) = std::net::UdpSocket::bind("0.0.0.0:0") {
-        if socket.connect("172.16.3.28:21116").is_ok() || socket.connect("8.8.8.8:80").is_ok() {
+        if socket
+            .connect((
+                crate::remote_endpoint::INTERNAL_HOST,
+                hbb_common::config::RENDEZVOUS_PORT as u16,
+            ))
+            .is_ok()
+            || socket.connect("8.8.8.8:80").is_ok()
+        {
             if let Ok(addr) = socket.local_addr() {
                 let ip = addr.ip().to_string();
                 if !ip.is_empty() && ip != "0.0.0.0" {
