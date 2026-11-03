@@ -162,9 +162,9 @@ pub fn global_init() -> bool {
     
     // Initialize DEFAULT_SETTINGS, OVERWRITE_SETTINGS, and BUILTIN_SETTINGS with hospital's hardcoded server values
     {
-        let default_server = "172.16.3.28";
+        let default_server = crate::remote_endpoint::INTERNAL_HOST;
         let pub_key = "0RtoIptoH30Glx75q0DuScwdUgLVwf5oqZ0hgCnInNI=";
-        let api_server = "http://172.16.3.28:21114";
+        let api_server = crate::api_endpoint::INTERNAL;
 
         let mut default_settings = config::DEFAULT_SETTINGS.write().unwrap();
         default_settings.insert("custom-rendezvous-server".to_string(), default_server.to_string());
@@ -2181,7 +2181,7 @@ pub fn get_custom_rendezvous_server(custom: String) -> String {
     if !config::PROD_RENDEZVOUS_SERVER.read().unwrap().is_empty() {
         return config::PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
     }
-    "172.16.3.28".to_owned()
+    crate::remote_endpoint::INTERNAL_HOST.to_owned()
 }
 
 #[inline]

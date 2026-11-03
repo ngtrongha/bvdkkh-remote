@@ -14,7 +14,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub const INTERNAL: &str = "http://172.16.3.28:21114";
+pub const INTERNAL: &str = "http://connect.bvkhanhhoa.cloud:21114";
+const LEGACY_INTERNAL: &str = "http://172.16.3.28:21114";
 pub const PUBLIC: &str = "https://danhba.bvkhanhhoa.cloud";
 const REFRESH_INTERVAL: Duration = Duration::from_secs(60);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
@@ -24,7 +25,7 @@ type Probe = Shared<BoxFuture<'static, bool>>;
 static PROBE: Mutex<Option<(Instant, Probe)>> = Mutex::new(None);
 
 fn hospital_suffix(url: &str) -> Option<&str> {
-    [INTERNAL, PUBLIC].iter().find_map(|origin| {
+    [INTERNAL, LEGACY_INTERNAL, PUBLIC].iter().find_map(|origin| {
         url.strip_prefix(*origin).filter(|suffix| {
             suffix.is_empty() || suffix.starts_with('/') || suffix.starts_with('?')
         })
@@ -39,8 +40,12 @@ fn selected_origin() -> &'static str {
     }
 }
 
+pub fn is_hospital_origin(origin: &str) -> bool {
+    matches!(origin, INTERNAL | LEGACY_INTERNAL | PUBLIC)
+}
+
 pub fn cached_server(configured: String) -> String {
-    if configured == INTERNAL || configured == PUBLIC {
+    if is_hospital_origin(&configured) {
         selected_origin().to_owned()
     } else {
         configured
@@ -138,6 +143,11 @@ mod tests {
 
     #[test]
     fn recognizes_only_hospital_api_origins_and_preserves_path_and_query() {
+        assert!(is_hospital_origin(LEGACY_INTERNAL));
+        assert_eq!(
+            hospital_suffix(&format!("{LEGACY_INTERNAL}/api/heartbeat?q=1")),
+            Some("/api/heartbeat?q=1")
+        );
         assert_eq!(
             hospital_suffix(&format!("{INTERNAL}/api/heartbeat?q=1")),
             Some("/api/heartbeat?q=1")

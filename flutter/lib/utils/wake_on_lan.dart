@@ -26,7 +26,7 @@ Future<String> requestWakeOnLan(
   final isMac = RegExp(r'^([0-9a-fA-F]{2}[:-]){5}[0-9a-fA-F]{2}$').hasMatch(id);
   if (isMac ||
       !hospital ||
-      (token.isEmpty && endpoint.origin == internalApiOrigin)) {
+      (token.isEmpty && isInternalApiOrigin(endpoint.origin))) {
     await sendLocal(id);
     return 'Đã yêu cầu phát WOL trong LAN đến $id';
   }
@@ -52,7 +52,7 @@ Future<String> requestWakeOnLan(
     throw const FormatException('Phản hồi WOL không hợp lệ');
   }
   final data = result['data'];
-  if (endpoint.origin == internalApiOrigin &&
+  if (isInternalApiOrigin(endpoint.origin) &&
       const ['DeviceNotFound', 'NoValidMacAddressFound']
           .contains(result['message'])) {
     await sendLocal(id);

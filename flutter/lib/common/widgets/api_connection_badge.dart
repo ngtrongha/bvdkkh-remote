@@ -15,7 +15,7 @@ class ApiConnectionBadge extends StatelessWidget {
       valueListenable: apiConnectionStatus,
       builder: (context, connection, _) {
         final origin = connection.origin;
-        final internal = origin == internalApiOrigin;
+        final internal = isInternalApiOrigin(origin);
         final route = origin == null
             ? 'Chưa xác định'
             : internal

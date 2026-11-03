@@ -18,11 +18,15 @@ class _SettingsBinding extends Fake implements RustdeskImpl {
         return invocation.namedArguments[#name];
       case #mainGetBuildinOption:
       case #mainGetLocalOption:
+      case #getLocalFlutterOption:
         return '';
       case #isOutgoingOnly:
       case #isIncomingOnly:
       case #isDisableSettings:
       case #isDisableAccount:
+      case #isDisableAb:
+      case #isDisableGroupPanel:
+      case #isCustomClient:
         return false;
       case #mainGetCommon:
         return Future.value('true');
@@ -73,5 +77,6 @@ void main() {
     expect(find.text('Settings Locked'), findsOneWidget);
     expect(find.byType(PageView), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(Duration.zero);
   });
 }
