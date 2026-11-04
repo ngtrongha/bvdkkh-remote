@@ -1086,6 +1086,7 @@ namespace BVDKKH.Remote.AutoInstaller
                     if (key != null)
                     {
                         key.SetValue("InstallLocation", targetDir);
+                        key.SetValue("WindowsInstaller", 0, RegistryValueKind.DWord);
                     }
                 }
             }

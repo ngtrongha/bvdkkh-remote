@@ -24,4 +24,12 @@ void main() {
     expect(state.consume(1, 'assigned'), isNull);
     expect(state.consume(0, 'resolved'), isNull);
   });
+
+  test('after restart, a dismissed completion stays hidden for that ticket',
+      () {
+    final state = SupportTicketClientState();
+    expect(state.consume(29, 'closed', dismissedResolvedTicketId: 29), isNull);
+    expect(state.consume(30, 'resolved', dismissedResolvedTicketId: 29),
+        SupportTicketClientEvent.resolved);
+  });
 }

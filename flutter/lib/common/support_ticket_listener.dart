@@ -111,6 +111,7 @@ class SupportTicketListener {
   SupportTicketFeedCursor _adminFeed = SupportTicketFeedCursor();
 
   // Client watcher fields (runs for user on their workstation)
+  static const _dismissedResolutionKey = 'support-ticket-dismissed-resolution';
   Timer? _clientPollingTimer;
   bool _isClientChecking = false;
   final _clientState = SupportTicketClientState();
@@ -299,7 +300,9 @@ class SupportTicketListener {
       final ticket =
           SupportTicket.fromJson(body['data'] as Map<String, dynamic>);
 
-      final event = _clientState.consume(ticket.id, ticket.status);
+      final event = _clientState.consume(ticket.id, ticket.status,
+          dismissedResolvedTicketId: int.tryParse(
+              bind.mainGetLocalOption(key: _dismissedResolutionKey)));
 
       // 1. KTV IT đã tiếp nhận (assigned / in_progress)
       if (event == SupportTicketClientEvent.assigned) {
@@ -827,6 +830,16 @@ public static class SilentSupportBalloon {
     BotToast.showCustomNotification(
       duration: const Duration(seconds: 30),
       toastBuilder: (cancelFunc) {
+        Future<void> dismiss() async {
+          cancelFunc();
+          try {
+            await bind.mainSetLocalOption(
+                key: _dismissedResolutionKey, value: ticket.id.toString());
+          } catch (e) {
+            debugPrint('[SupportTicketListener] Failed to save dismissal: $e');
+          }
+        }
+
         return Card(
           margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           elevation: 10,
@@ -881,7 +894,7 @@ public static class SilentSupportBalloon {
                     IconButton(
                       icon: const Icon(Icons.close,
                           color: Colors.white70, size: 18),
-                      onPressed: cancelFunc,
+                      onPressed: dismiss,
                       tooltip: 'Đóng',
                     ),
                   ],
@@ -926,7 +939,7 @@ public static class SilentSupportBalloon {
                       foregroundColor: Colors.white,
                       visualDensity: VisualDensity.compact,
                     ),
-                    onPressed: cancelFunc,
+                    onPressed: dismiss,
                     child: const Text('ĐÃ HIỂU & ĐÓNG'),
                   ),
                 ),
