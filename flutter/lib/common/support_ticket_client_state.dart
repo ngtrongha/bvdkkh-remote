@@ -17,7 +17,8 @@ class SupportTicketClientState {
     _notifiedResolved = false;
   }
 
-  SupportTicketClientEvent? consume(int ticketId, String status) {
+  SupportTicketClientEvent? consume(int ticketId, String status,
+      {int? dismissedResolvedTicketId}) {
     if (ticketId <= 0 || ticketId < _ticketId) return null;
     if (ticketId > _ticketId) track(ticketId);
     status = status.toLowerCase().trim();
@@ -28,7 +29,7 @@ class SupportTicketClientState {
         return SupportTicketClientEvent.assigned;
       }
     } else if (status == 'resolved' || status == 'closed') {
-      if (!_notifiedResolved) {
+      if (!_notifiedResolved && ticketId != dismissedResolvedTicketId) {
         _notifiedResolved = true;
         _lastStatus = status;
         return SupportTicketClientEvent.resolved;
