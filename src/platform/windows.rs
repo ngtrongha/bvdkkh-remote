@@ -2355,7 +2355,9 @@ fn get_after_install(
 pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
     // MSI and EXE installations use different registry layouts, so MSI-to-EXE upgrades are not supported.
     let (installed_subkey, _, _, _) = get_install_info();
-    if get_windows_installer_state(&installed_subkey)? == Some(true) {
+    if get_windows_installer_state(&RegKey::predef(HKEY_LOCAL_MACHINE), &installed_subkey)?
+        == Some(true)
+    {
         bail!("Cannot install the EXE package over an existing MSI installation");
     }
     let uninstall_str = get_uninstall(false, false)?;
@@ -2670,7 +2672,7 @@ fn get_before_uninstall(kill_self: bool) -> String {
 /// related command is omitted from the script.
 fn get_uninstall(kill_self: bool, uninstall_printer: bool) -> ResultType<String> {
     let (subkey, path, start_menu, _) = get_install_info();
-    let installer_state = get_windows_installer_state(&subkey)?;
+    let installer_state = get_windows_installer_state(&RegKey::predef(HKEY_LOCAL_MACHINE), &subkey)?;
     if let Some(product_code) = get_msi_product_code(&subkey, installer_state)? {
         return Ok(build_msi_uninstall_command(&product_code));
     }
@@ -4252,6 +4254,30 @@ fn get_directory_size_kb(path: &str) -> u64 {
     total_size / 1024
 }
 
+fn copy_update_payload_cmd(src_exe: &str, exe: &str, path: &str) -> ResultType<String> {
+    let source = Path::new(src_exe);
+    let source_dir = source
+        .parent()
+        .and_then(Path::to_str)
+        .ok_or_else(|| anyhow!("Invalid update executable directory"))?;
+    for value in [src_exe, source_dir, exe, path] {
+        validate_install_value(value)?;
+    }
+    let broker = win_topmost_window::INJECTED_PROCESS_EXE;
+    let app_exe = format!("{}.exe", crate::get_app_name());
+    // Install the running payload last, since older installs may have stale alias EXEs.
+    Ok(format!(
+        "if not exist \"{src_exe}\" goto update_copy_failed\n\
+         robocopy \"{source_dir}\" \"{path}\" /E /XJ /IS /IT /R:2 /W:1 /XF \"{app_exe}\" \"{broker}\"\n\
+         if errorlevel 8 goto update_copy_failed\n\
+         copy /B /Y \"{src_exe}\" \"{exe}\" > nul || goto update_copy_failed\n\
+         if exist \"{path}\\BVDKKH - Remote.exe\" copy /B /Y \"{src_exe}\" \"{path}\\BVDKKH - Remote.exe\" > nul\n\
+         if exist \"{path}\\BVĐKKH - Remote.exe\" copy /B /Y \"{src_exe}\" \"{path}\\BVĐKKH - Remote.exe\" > nul\n\
+         copy /B /Y \"{origin_broker}\" \"{path}\\{broker}\" > nul",
+        origin_broker = win_topmost_window::ORIGIN_PROCESS_EXE,
+    ))
+}
+
 pub fn update_me(debug: bool) -> ResultType<()> {
     let app_name = crate::get_app_name();
     let src_exe = std::env::current_exe()?.to_string_lossy().to_string();
@@ -4406,18 +4432,20 @@ sc stop \"BVDKKH - Remote\"
 sc stop {app_name}
 sc stop rustdesk
 taskkill /F /IM {app_name}.exe{filter}
-{reg_cmd}
 {copy_exe}
-{rename_exe}
+{reg_cmd}
 {remove_meta_toml}
 {restore_service_cmd}
 {uninstall_printer_cmd}
 {install_printer_cmd}
 {sleep}
+exit /b 0
+:update_copy_failed
+{restore_service_cmd}
+exit /b 1
     ",
         app_name = app_name,
-        copy_exe = copy_exe_cmd(&src_exe, &exe, &path)?,
-        rename_exe = rename_exe_cmd(&src_exe, &path)?,
+        copy_exe = copy_update_payload_cmd(&src_exe, &exe, &path)?,
         remove_meta_toml = remove_meta_toml_cmd(is_msi.unwrap_or(true), &path),
         sleep = if debug { "timeout 300" } else { "" },
     );
@@ -4506,10 +4534,9 @@ ver > nul"
     )
 }
 
-fn get_reg_string_of(subkey: &str, name: &str) -> ResultType<Option<String>> {
-    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+fn get_reg_string_of(registry: &RegKey, subkey: &str, name: &str) -> ResultType<Option<String>> {
     let path = subkey.strip_prefix(HKLM_PREFIX).unwrap_or(subkey);
-    let key = match hklm.open_subkey(path) {
+    let key = match registry.open_subkey(path) {
         Ok(key) => key,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(err) => bail!("Failed to open registry key {subkey}: {err}"),
@@ -4521,10 +4548,9 @@ fn get_reg_string_of(subkey: &str, name: &str) -> ResultType<Option<String>> {
     }
 }
 
-fn get_windows_installer_state(subkey: &str) -> ResultType<Option<bool>> {
-    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+fn get_windows_installer_state(registry: &RegKey, subkey: &str) -> ResultType<Option<bool>> {
     let path = subkey.strip_prefix(HKLM_PREFIX).unwrap_or(subkey);
-    let key = match hklm.open_subkey(path) {
+    let key = match registry.open_subkey(path) {
         Ok(key) => key,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(err) => bail!("Failed to open registry key {subkey}: {err}"),
@@ -4566,7 +4592,8 @@ fn get_msi_product_code(subkey: &str, installer_state: Option<bool>) -> ResultTy
     if installer_state == Some(false) {
         return Ok(None);
     }
-    let product_code = get_reg_string_of(subkey, REG_NAME_MSI_PRODUCT_CODE)?;
+    let registry = RegKey::predef(HKEY_LOCAL_MACHINE);
+    let product_code = get_reg_string_of(&registry, subkey, REG_NAME_MSI_PRODUCT_CODE)?;
     if let Some(product_code) = product_code.filter(|value| !value.is_empty()) {
         return normalize_msi_product_code(&product_code)
             .map(Some)
@@ -4574,7 +4601,7 @@ fn get_msi_product_code(subkey: &str, installer_state: Option<bool>) -> ResultTy
     }
 
     let uninstall_string =
-        get_reg_string_of(subkey, REG_NAME_UNINSTALL_STRING)?.unwrap_or_default();
+        get_reg_string_of(&registry, subkey, REG_NAME_UNINSTALL_STRING)?.unwrap_or_default();
     match parse_msi_product_code_from_uninstall_string(&uninstall_string, subkey)? {
         Some(product_code) => Ok(Some(product_code)),
         None if installer_state == Some(true) => {
@@ -5376,12 +5403,37 @@ fn get_pids<S: AsRef<str>>(name: S) -> ResultType<Vec<u32>> {
     Ok(pids)
 }
 
-pub fn is_msi_installed() -> std::io::Result<bool> {
-    let (subkey, _, _, _) = get_install_info();
-    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
-    let install_key = hklm.open_subkey(subkey.strip_prefix(HKLM_PREFIX).unwrap_or(&subkey))?;
-    Ok(MSI_WINDOWS_INSTALLER_VALUE
-        == install_key.get_value::<u32, _>(REG_NAME_WINDOWS_INSTALLER)?)
+pub fn is_msi_installed() -> ResultType<bool> {
+    let (subkey, path, _, _) = get_install_info();
+    let app_name = crate::get_app_name();
+    detect_msi_installation(
+        &RegKey::predef(HKEY_LOCAL_MACHINE),
+        &subkey,
+        &path,
+        &[&get_subkey(&app_name, false), &get_subkey(&app_name, true)],
+    )
+}
+
+fn detect_msi_installation(
+    registry: &RegKey,
+    subkey: &str,
+    path: &str,
+    uninstall_keys: &[&str],
+) -> ResultType<bool> {
+    if let Some(is_msi) = get_windows_installer_state(registry, subkey)? {
+        return Ok(is_msi);
+    }
+    // Older EXE installers only recorded the type in the uninstall entry.
+    for &uninstall_key in uninstall_keys {
+        if let Some(location) = get_reg_string_of(registry, uninstall_key, "InstallLocation")? {
+            if location.trim_end_matches('\\').eq_ignore_ascii_case(path) {
+                if let Some(is_msi) = get_windows_installer_state(registry, uninstall_key)? {
+                    return Ok(is_msi);
+                }
+            }
+        }
+    }
+    bail!("Missing {REG_NAME_WINDOWS_INSTALLER} for installation at {path}");
 }
 
 pub fn is_cur_exe_the_installed() -> bool {
@@ -5684,6 +5736,87 @@ mod tests {
                 "unsafe application name was accepted: {app_name}"
             );
         }
+    }
+
+    #[test]
+    fn detects_legacy_exe_installation_from_matching_uninstall_entry() {
+        let registry = RegKey::predef(HKEY_CURRENT_USER);
+        let fixture_path = format!(r"Software\BVDKKH-Remote-test-{}", uuid::Uuid::new_v4());
+        let path = r"C:\Program Files\BVDKKH-Remote";
+        let (legacy, unrelated, msi) = {
+            let fixture = registry.create_subkey(&fixture_path).unwrap().0;
+            let state = fixture.create_subkey("InstallState").unwrap().0;
+            state.set_value("InstallLocation", &path).unwrap();
+            let uninstall = fixture.create_subkey("Uninstall").unwrap().0;
+            uninstall
+                .set_value("InstallLocation", &r"c:\program files\bvdkkh-remote\")
+                .unwrap();
+            uninstall.set_value(REG_NAME_WINDOWS_INSTALLER, &0u32).unwrap();
+
+            let legacy = detect_msi_installation(&fixture, "InstallState", path, &["Uninstall"]);
+            let unrelated = detect_msi_installation(
+                &fixture,
+                "InstallState",
+                r"D:\Other install",
+                &["Uninstall"],
+            );
+            state
+                .set_value(REG_NAME_WINDOWS_INSTALLER, &MSI_WINDOWS_INSTALLER_VALUE)
+                .unwrap();
+            let msi = detect_msi_installation(&fixture, "InstallState", path, &["Uninstall"]);
+            (legacy, unrelated, msi)
+        };
+        registry.delete_subkey_all(&fixture_path).unwrap();
+
+        assert!(!legacy.unwrap());
+        assert!(unrelated.is_err());
+        assert!(msi.unwrap());
+    }
+
+    #[test]
+    fn exe_update_uses_new_payload_instead_of_stale_installed_alias() {
+        let root = std::env::temp_dir().join(format!("update-{}", uuid::Uuid::new_v4()));
+        let source_dir = root.join("new payload");
+        let install_dir = root.join("old install");
+        fs::create_dir_all(&source_dir).unwrap();
+        fs::create_dir_all(&install_dir).unwrap();
+        let app_exe = format!("{}.exe", crate::get_app_name());
+        let source = source_dir.join(&app_exe);
+        let installed = install_dir.join(&app_exe);
+        fs::write(&source, b"new launcher").unwrap();
+        fs::write(source_dir.join("librustdesk.dll"), b"new library").unwrap();
+        fs::write(&installed, b"old launcher").unwrap();
+        fs::write(install_dir.join("rustdesk-x64.exe"), b"old alias").unwrap();
+
+        let copy = copy_update_payload_cmd(
+            source.to_str().unwrap(),
+            installed.to_str().unwrap(),
+            install_dir.to_str().unwrap(),
+        )
+        .unwrap();
+        fs::write(
+            root.join("update.cmd"),
+            format!("@chcp 65001 > nul\n{copy}\nexit /b 0\n:update_copy_failed\nexit /b 1\n")
+                .replace('\n', "\r\n"),
+        )
+        .unwrap();
+        let mut cmd =
+            std::process::Command::new(installer_shell::get_system_executable("cmd.exe").unwrap());
+        cmd.current_dir(&root).args(["/D", "/C", "update.cmd"]);
+        let status = cmd.output().unwrap().status;
+        let launcher = fs::read(&installed).unwrap();
+        let library = fs::read(install_dir.join("librustdesk.dll")).unwrap();
+        fs::remove_file(source).unwrap();
+        fs::write(source_dir.join("librustdesk.dll"), b"incomplete update").unwrap();
+        let missing_payload_status = cmd.output().unwrap().status;
+        let library_after_failure = fs::read(install_dir.join("librustdesk.dll")).unwrap();
+        fs::remove_dir_all(root).unwrap();
+
+        assert!(status.success());
+        assert_eq!(launcher, b"new launcher");
+        assert_eq!(library, b"new library");
+        assert!(!missing_payload_status.success());
+        assert_eq!(library_after_failure, library);
     }
 
     #[test]
