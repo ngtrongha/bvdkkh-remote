@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::keyboard::input_source::{change_input_source, get_cur_session_input_source};
 #[cfg(target_os = "linux")]
@@ -45,12 +48,7 @@ fn initialize(app_dir: &str, custom_client_config: &str) {
         *config::APP_DIR.write().unwrap() = app_dir.to_owned();
     }
     #[cfg(windows)]
-    {
-        crate::tray::start_global_support_hotkey();
-        std::thread::spawn(|| {
-            crate::platform::windows::setup_hospital_wallpaper_native();
-        });
-    }
+    crate::tray::start_global_support_hotkey();
     // core_main's load_custom_client does not work for flutter since it is only applied to its load_library in main.c
     if custom_client_config.is_empty() {
         crate::load_custom_client();
