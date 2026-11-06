@@ -27,11 +27,6 @@ pub fn start_tray() {
     start_global_support_hotkey();
 
     #[cfg(windows)]
-    std::thread::spawn(|| {
-        crate::platform::windows::update_hospital_wallpaper_on_startup();
-    });
-
-    #[cfg(windows)]
     if !crate::platform::is_self_service_running() {
         log::info!("No Windows service running, spawning background server from tray...");
         std::thread::spawn(|| {
