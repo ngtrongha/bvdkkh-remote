@@ -720,9 +720,7 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
     check_and_fix_ghost_machine_guid();
 
     // Tự động kiểm tra và cập nhật hình nền BVDKKH-Remote khi dịch vụ khởi động
-    std::thread::spawn(|| {
-        update_hospital_wallpaper_on_startup();
-    });
+    std::thread::spawn(update_hospital_wallpaper_on_startup);
 
     // Start Software Deployment Agent background task
     tokio::spawn(async move {
@@ -1688,9 +1686,7 @@ pub fn generate_hospital_device_password() -> String {
     crate::common::derive_device_password(&raw_name)
 }
 
-pub fn update_hospital_wallpaper_on_startup() {
-    // The tray must read the service's settings, which belong to the SYSTEM account.
-    let _ = ipc::get_options();
+fn update_hospital_wallpaper_on_startup() {
     if Config::get_bool_option(base::config::keys::OPTION_ENABLE_WALLPAPER_UPDATE_ON_STARTUP) {
         setup_hospital_wallpaper_native();
     } else {
@@ -1854,7 +1850,7 @@ mod wallpaper_lock_tests {
 }
 
 /// Cài đặt hình nền bệnh viện có in tên máy tính và khóa đổi hình nền
-pub fn setup_hospital_wallpaper_native() {
+fn setup_hospital_wallpaper_native() {
     let mut computer_name = std::env::var("COMPUTERNAME")
         .unwrap_or_default()
         .trim()
@@ -1934,7 +1930,10 @@ pub fn setup_hospital_wallpaper_native() {
         }
     }
 
-    let api_server = crate::ui_interface::get_api_server();
+    let api_server = crate::get_api_server(
+        Config::get_option("api-server"),
+        Config::get_option("custom-rendezvous-server"),
+    );
     let api_server = if api_server.trim().is_empty() {
         crate::api_endpoint::INTERNAL.to_string()
     } else {
@@ -2474,15 +2473,7 @@ if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} 
     // 1. Tự động kiểm tra và khắc phục GUID máy Ghost/Clone
     check_and_fix_ghost_machine_guid();
 
-    // Tự động kiểm tra và cập nhật hình nền BVDKKH-Remote khi dịch vụ khởi động
-    std::thread::spawn(|| {
-        setup_hospital_wallpaper_native();
-    });
-
-    // 2. Tự động áp dụng Hình nền Bệnh viện & Cấu hình Wake-on-LAN
-    if !options.contains("no-wallpaper") {
-        setup_hospital_wallpaper_native();
-    }
+    // 2. Cấu hình Wake-on-LAN
     if !options.contains("no-wol") {
         setup_wake_on_lan_native();
     }
