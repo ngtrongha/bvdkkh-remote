@@ -54,16 +54,6 @@ class UserModel {
       //  For login success, should clear network error
       networkError.value = '';
     });
-    isAdmin.listen((isAdminValue) {
-      if (isAdminValue) {
-        SupportTicketListener.instance.start();
-      } else {
-        SupportTicketListener.instance.stop();
-      }
-    });
-    if (isAdmin.value) {
-      SupportTicketListener.instance.start();
-    }
   }
 
   void refreshCurrentUser() async {
@@ -72,10 +62,15 @@ class UserModel {
     networkErrorFromServer.value = false;
     final token = bind.mainGetLocalOption(key: 'access_token');
     if (token == '') {
+      SupportTicketListener.instance.stop();
       await updateOtherModels();
       return;
     }
     _updateLocalUserInfo();
+    if (!isWeb) {
+      SupportTicketListener.instance
+          .setAccountSession(token, receiveSupport: isAdmin.value);
+    }
     final url = await bind.mainGetApiServer();
     final body = {
       'id': await bind.mainGetMyId(),
@@ -97,6 +92,7 @@ class UserModel {
         rethrow;
       }
       refreshingUser = false;
+      if (bind.mainGetLocalOption(key: 'access_token') != token) return;
       final status = response.statusCode;
       if (status == 401 || status == 400) {
         reset(resetOther: status == 401);
@@ -114,6 +110,10 @@ class UserModel {
 
       final user = UserPayload.fromJson(data);
       _parseAndUpdateUser(user);
+      if (!isWeb) {
+        SupportTicketListener.instance
+            .setAccountSession(token, receiveSupport: user.isAdmin);
+      }
     } catch (e) {
       debugPrint('Failed to refreshCurrentUser: $e');
       // Surface failures in the address book / group tabs, which offer a
@@ -150,13 +150,11 @@ class UserModel {
       avatar.value = (userInfo['avatar'] ?? '').toString();
       isAdmin.value =
           userInfo['is_admin'] == true || userInfo['isAdmin'] == true;
-      if (isAdmin.value) {
-        SupportTicketListener.instance.start();
-      }
     }
   }
 
   Future<void> reset({bool resetOther = false}) async {
+    SupportTicketListener.instance.stop();
     await bind.mainSetLocalOption(key: 'access_token', value: '');
     await bind.mainSetLocalOption(key: 'user_info', value: '');
     if (resetOther) {
@@ -167,7 +165,6 @@ class UserModel {
     displayName.value = '';
     avatar.value = '';
     isAdmin.value = false;
-    SupportTicketListener.instance.stop();
   }
 
   _parseAndUpdateUser(UserPayload user) {
@@ -175,11 +172,6 @@ class UserModel {
     displayName.value = user.displayName;
     avatar.value = user.avatar;
     isAdmin.value = user.isAdmin;
-    if (user.isAdmin) {
-      SupportTicketListener.instance.start();
-    } else {
-      SupportTicketListener.instance.stop();
-    }
     bind.mainSetLocalOption(key: 'user_info', value: jsonEncode(user));
     if (isWeb) {
       // ugly here, tmp solution

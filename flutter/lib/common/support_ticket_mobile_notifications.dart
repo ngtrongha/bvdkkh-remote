@@ -18,6 +18,7 @@ Future<void> showMobileSupportNotification({
   required String title,
   required String body,
   required bool sound,
+  bool assignment = false,
 }) async {
   final permission = _permissionRequest;
   if (permission != null) await permission;
@@ -26,6 +27,7 @@ Future<void> showMobileSupportNotification({
     'title': title,
     'body': body,
     'sound': sound,
+    if (assignment) 'assignment': true,
   });
   if (shown != true) {
     throw PlatformException(

@@ -15,7 +15,7 @@ import 'package:get/get.dart';
 import '../common.dart';
 import '../consts.dart';
 import 'support_ticket_client_state.dart';
-import 'support_ticket_feed_cursor.dart';
+import 'notification_feed_cursor.dart';
 import 'support_ticket_mobile_notifications.dart';
 import '../models/platform_model.dart';
 import '../utils/http_service.dart' as http;
@@ -101,14 +101,11 @@ class SupportTicketListener {
 
   final ValueNotifier<int?> adminOpenCount = ValueNotifier(null);
   final ValueNotifier<String?> adminNotificationError = ValueNotifier(null);
-  int _adminGeneration = 0;
-  String _adminToken = '';
-
-  // Admin polling fields
-  Timer? _adminPollingTimer;
-  bool _isAdminRunning = false;
-  bool _isAdminChecking = false;
-  SupportTicketFeedCursor _adminFeed = SupportTicketFeedCursor();
+  String _accountToken = '';
+  Timer? _accountPollingTimer;
+  final _accountFeedsInFlight = <bool>{};
+  NotificationFeedCursor? _supportFeed;
+  NotificationFeedCursor? _assignmentFeed;
 
   // Client watcher fields (runs for user on their workstation)
   static const _dismissedResolutionKey = 'support-ticket-dismissed-resolution';
@@ -116,110 +113,154 @@ class SupportTicketListener {
   bool _isClientChecking = false;
   final _clientState = SupportTicketClientState();
 
-  bool get isRunning => _isAdminRunning;
   bool get isClientWatching => _clientPollingTimer != null;
 
-  // ---------------------------------------------------------------------------
-  // ADMIN MODE: Lắng nghe toàn bộ sự cố mới từ nhân viên / phòng khám
-  // ---------------------------------------------------------------------------
-  void start() {
-    final token = bind.mainGetLocalOption(key: 'access_token');
-    if (token.isEmpty) { stop(); return; }
-    if (_isAdminRunning && _adminToken == token) return;
-    stop();
-    _adminToken = token;
-    _isAdminRunning = true;
-    _adminFeed = SupportTicketFeedCursor();
-    debugPrint('[SupportTicketListener] Started for Admin user');
-
-    // Run first check immediately
-    _checkNewTickets();
-
-    // Periodic check every 5 seconds
-    _adminPollingTimer?.cancel();
-    _adminPollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      _checkNewTickets();
+  void setAccountSession(String token, {required bool receiveSupport}) {
+    final receiveAssignments = isWindows || isAndroid || isIOS;
+    if (token.isEmpty || (!receiveAssignments && !receiveSupport)) {
+      stop();
+      return;
+    }
+    if (_accountToken == token && (_supportFeed != null) == receiveSupport) {
+      return;
+    }
+    if (_accountToken != token) {
+      stop();
+      _accountToken = token;
+      if (receiveAssignments) _assignmentFeed = NotificationFeedCursor();
+    }
+    if (receiveSupport) {
+      _supportFeed ??= NotificationFeedCursor();
+    } else {
+      _clearSupportFeed();
+    }
+    _accountPollingTimer ??= Timer.periodic(const Duration(seconds: 5), (_) {
+      _checkAccountFeeds();
     });
+    _checkAccountFeeds();
   }
 
   void stop() {
-    _adminGeneration++;
-    _isAdminChecking = false;
-    _adminToken = '';
-    adminNotificationError.value = null;
-    adminOpenCount.value = null;
-    _adminPollingTimer?.cancel();
-    _adminPollingTimer = null;
-    _isAdminRunning = false;
-    _adminFeed = SupportTicketFeedCursor();
-    debugPrint('[SupportTicketListener] Stopped Admin listener');
+    _accountToken = '';
+    _accountPollingTimer?.cancel();
+    _accountPollingTimer = null;
+    _assignmentFeed = null;
+    _clearSupportFeed();
   }
 
-  Future<void> _checkNewTickets() async {
-    if (!_isAdminRunning || _isAdminChecking) return;
-    final generation = _adminGeneration;
-    _isAdminChecking = true;
+  void _clearSupportFeed() {
+    _supportFeed = null;
+    adminNotificationError.value = null;
+    adminOpenCount.value = null;
+  }
+
+  void _checkAccountFeeds() {
+    unawaited(_checkAccountFeed(support: true));
+    unawaited(_checkAccountFeed(support: false));
+  }
+
+  Future<void> _checkAccountFeed({required bool support}) async {
+    final feed = support ? _supportFeed : _assignmentFeed;
+    final token = _accountToken;
+    if (feed == null || !_accountFeedsInFlight.add(support)) return;
+    bool isCurrent() =>
+        identical(feed, support ? _supportFeed : _assignmentFeed) &&
+        bind.mainGetLocalOption(key: 'access_token') == token;
     try {
       var apiServer = await bind.mainGetApiServer();
       if (apiServer.isEmpty) throw StateError('API server is empty');
-      if (!apiServer.startsWith('http://') && !apiServer.startsWith('https://')) {
+      if (!apiServer.startsWith('http://') &&
+          !apiServer.startsWith('https://')) {
         apiServer = 'http://$apiServer';
       }
-      if (generation != _adminGeneration) return;
-      for (var page = 0; page < 10; page++) {
-        final cursor = _adminFeed.sinceId;
+      final path =
+          support ? '/api/support/ticket/feed' : '/api/tasks/assignment-feed';
+      for (var page = 0; page < 10 && isCurrent(); page++) {
+        final cursor = feed.sinceId;
         final query = cursor == null ? '' : '?since_id=$cursor';
+        // The Rust HTTP bridge keeps responses by URL. Wait for its own
+        // timeout before issuing another request for the same feed.
         final response = await http.get(
-          Uri.parse('$apiServer/api/support/ticket/feed$query'),
-          headers: {'Accept': 'application/json', 'Authorization': 'Bearer $_adminToken'},
-        ).timeout(const Duration(seconds: 4));
-        if (generation != _adminGeneration) return;
+          Uri.parse('$apiServer$path$query'),
+          headers: {
+            'Accept': 'application/json',
+            'Authorization': 'Bearer $token'
+          },
+        );
+        if (!isCurrent()) return;
         if ([401, 403, 406].contains(response.statusCode)) {
-          adminNotificationError.value = 'Phiên hoặc quyền admin không còn hợp lệ. Vui lòng đăng nhập lại.';
+          if (support) {
+            adminNotificationError.value =
+                'Phiên hoặc quyền admin không còn hợp lệ. Vui lòng đăng nhập lại.';
+          }
           return;
         }
-        if (response.statusCode != 200) throw StateError('Feed HTTP ${response.statusCode}');
-        final body = json.decode(utf8.decode(response.bodyBytes));
-        final tickets = _adminFeed.consume(body as Map<String, dynamic>)
-            .map(SupportTicket.fromJson).toList();
-        adminOpenCount.value = body['open_count'] as int;
-        adminNotificationError.value = null;
-        for (final ticket in tickets) {
-          _onNewTicketReceived(ticket);
+        if (!support && response.statusCode == 404) return;
+        if (response.statusCode != 200) {
+          throw StateError('Feed HTTP ${response.statusCode}');
+        }
+        final body =
+            json.decode(decode_http_response(response)) as Map<String, dynamic>;
+        if (support) {
+          final count = body['open_count'] as int;
+          final tickets = feed.consume(body);
+          adminOpenCount.value = count;
+          adminNotificationError.value = null;
+          for (final ticket in tickets) {
+            _onNewTicketReceived(SupportTicket.fromJson(ticket));
+          }
+        } else {
+          final assignments = feed.consume(body,
+              isValid: (event) =>
+                  event['task_id'] is int && event['title'] is String);
+          for (final assignment in assignments) {
+            _onTaskAssigned(assignment);
+          }
         }
         if (body['has_more'] != true) break;
       }
     } catch (e) {
-      if (generation == _adminGeneration) {
-        adminNotificationError.value = 'Mất kết nối nhận thông báo. Đang tự động thử lại…';
-        debugPrint('[SupportTicketListener] Admin feed failed: $e');
+      if (isCurrent()) {
+        if (support) {
+          adminNotificationError.value =
+              'Mất kết nối nhận thông báo. Đang tự động thử lại…';
+        }
+        debugPrint('[SupportTicketListener] Notification feed failed: $e');
       }
     } finally {
-      if (generation == _adminGeneration) _isAdminChecking = false;
+      _accountFeedsInFlight.remove(support);
     }
   }
 
   void checkNow() {
-    _checkNewTickets();
+    _checkAccountFeeds();
     if (isClientWatching) _checkClientTicket();
+  }
+
+  void _onTaskAssigned(Map<String, dynamic> assignment) {
+    _showSystemNotification(
+      ticketId: assignment['id'] as int,
+      title: 'Bạn được giao công việc',
+      body: assignment['title'] as String,
+      assignment: true,
+    );
   }
 
   void _onNewTicketReceived(SupportTicket ticket) {
     debugPrint(
         '[SupportTicketListener] New Ticket #${ticket.id} from ${ticket.hostname} (${ticket.deviceId})');
 
-    // 1. Play audible chime
-    _playChime();
-
     final displayName =
         ticket.hostname.isNotEmpty ? ticket.hostname : ticket.deviceId;
     _showSystemNotification(
       ticketId: ticket.id,
       title: '[BVĐKKH] Yêu cầu hỗ trợ IT: $displayName',
-      body: '${ticket.category}: ${ticket.description}\nID: ${ticket.deviceId}',
+      body:
+          '${ticket.categoryDisplay}: ${ticket.description}\nID: ${ticket.deviceId}',
     );
 
-    // 3. Bring window to front
+    if (isWindows || isAndroid || isIOS) return;
+    _playChime();
     if (isDesktop) {
       try {
         windowOnTop(null);
@@ -229,7 +270,6 @@ class SupportTicketListener {
       }
     }
 
-    // 4. Floating In-App Banner with 1-click connect button
     _showInAppBanner(ticket);
   }
 
@@ -395,6 +435,7 @@ class SupportTicketListener {
     required int ticketId,
     required String title,
     required String body,
+    bool assignment = false,
   }) async {
     if (Platform.isWindows) {
       await _showWindowsToast(title: title, body: body);
@@ -405,15 +446,10 @@ class SupportTicketListener {
           title: title,
           body: body,
           sound: mainGetBoolOptionSync(kOptionEnableSupportTicketSound),
+          assignment: assignment,
         );
-      } on PlatformException catch (e) {
-        debugPrint('[SupportTicketListener] Mobile notification failed: $e');
-        BotToast.showText(text: e.code == 'notifications_disabled'
-            ? 'Thông báo hệ thống đang bị tắt. Hãy bật thông báo cho BVĐKKH - Remote trong Cài đặt thiết bị.'
-            : 'Không thể hiển thị thông báo hệ thống: ${e.message}');
       } catch (e) {
         debugPrint('[SupportTicketListener] Mobile notification failed: $e');
-        BotToast.showText(text: 'Không thể hiển thị thông báo hệ thống: $e');
       }
     }
   }
@@ -434,15 +470,42 @@ class SupportTicketListener {
 \$body = [string]\$payload.body
 \$xmlTitle = [Security.SecurityElement]::Escape(\$title)
 \$xmlBody = [Security.SecurityElement]::Escape(\$body)
+\$hasToastApi = \$false
 try {
     [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > \$null
     [Windows.UI.Notifications.ToastNotification, Windows.UI.Notifications, ContentType = WindowsRuntime] > \$null
     [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] > \$null
-    \$appId = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe'
+    \$hasToastApi = \$true
+    \$appId = Get-StartApps | Where-Object { \$_.Name -eq \$payload.appName } | Select-Object -First 1 -ExpandProperty AppID
+    if (-not \$appId) {
+        throw ('Start menu app identity not found: ' + \$payload.appName)
+    }
     \$notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier(\$appId)
-    if (\$notifier.Setting.ToString() -ne 'Enabled') {
-        [Console]::Error.WriteLine('Windows notifications are disabled: ' + \$notifier.Setting.ToString())
+    if (\$null -eq \$notifier) { throw 'Unable to create the Windows toast notifier' }
+    \$setting = \$notifier.Setting
+    # Windows PowerShell can project the Enabled enum value (0) as null.
+    if ([int]\$setting -ne 0) {
+        [Console]::Error.WriteLine('Windows notifications are disabled: ' + \$setting)
         exit 2
+    }
+    \$iconPath = Join-Path (Split-Path -LiteralPath \$payload.executable) 'data\\flutter_assets\\assets\\logo.png'
+    if (Test-Path -LiteralPath \$iconPath -PathType Leaf) {
+        try {
+            \$sender = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey('Software\\Classes\\AppUserModelId\\' + \$appId)
+            try {
+                # Windows Shell reads the sender icon from the app identity.
+                if (\$sender.GetValue('IconUri') -ne \$iconPath) {
+                    \$sender.SetValue('IconUri', \$iconPath, [Microsoft.Win32.RegistryValueKind]::ExpandString)
+                }
+                if (\$sender.GetValue('DisplayName') -ne \$payload.appName) {
+                    \$sender.SetValue('DisplayName', [string]\$payload.appName)
+                }
+            } finally {
+                \$sender.Dispose()
+            }
+        } catch {
+            [Console]::Error.WriteLine('Could not register the toast icon: ' + \$_.Exception.Message)
+        }
     }
     \$xml = [Windows.Data.Xml.Dom.XmlDocument]::new()
     \$toastXml = @"
@@ -460,6 +523,10 @@ try {
     \$toast = [Windows.UI.Notifications.ToastNotification]::new(\$xml)
     \$notifier.Show(\$toast)
 } catch {
+    if (\$hasToastApi) {
+        [Console]::Error.WriteLine(\$_.Exception.Message)
+        exit 1
+    }
     try {
         Add-Type -AssemblyName System.Windows.Forms
         Add-Type -AssemblyName System.Drawing
@@ -542,7 +609,10 @@ public static class SilentSupportBalloon {
       }
       final encoded = base64.encode(utf16leBytes);
 
-      final result = await Process.run('powershell.exe', [
+      final systemRoot = Platform.environment['SystemRoot'] ?? r'C:\Windows';
+      final powershell =
+          '$systemRoot' r'\System32\WindowsPowerShell\v1.0\powershell.exe';
+      final result = await Process.run(powershell, [
         '-NoProfile',
         '-NonInteractive',
         '-OutputFormat',
@@ -552,21 +622,21 @@ public static class SilentSupportBalloon {
         '-EncodedCommand',
         encoded,
       ], environment: {
-        'BVDKKH_TOAST_DATA': base64.encode(utf8.encode(json.encode(
-            {'title': title, 'body': body, 'sound': soundEnabled}))),
+        'BVDKKH_TOAST_DATA': base64.encode(utf8.encode(json.encode({
+          'title': title,
+          'body': body,
+          'sound': soundEnabled,
+          'appName': bind.mainGetAppNameSync(),
+          'executable': Platform.resolvedExecutable,
+        }))),
       });
-      if (result.exitCode != 0) {
-        final reason = result.stderr.toString().trim();
-        debugPrint('[SupportTicketListener] Windows notification failed: $reason');
-        BotToast.showText(
-          text: result.exitCode == 2
-              ? 'Thông báo Windows đang bị tắt. Hãy bật trong Cài đặt Windows > Hệ thống > Thông báo.'
-              : 'Không thể hiển thị thông báo Windows: $reason',
-        );
+      final reason = result.stderr.toString().trim();
+      if (result.exitCode != 0 || reason.isNotEmpty) {
+        debugPrint(
+            '[SupportTicketListener] Windows notification output: $reason');
       }
     } catch (e) {
       debugPrint('[SupportTicketListener] Failed to show Windows toast: $e');
-      BotToast.showText(text: 'Không thể hiển thị thông báo Windows: $e');
     }
   }
 

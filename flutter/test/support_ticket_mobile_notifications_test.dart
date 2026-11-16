@@ -65,6 +65,23 @@ void main() {
     });
   });
 
+  test('passes the task assignment type to the system notification handler',
+      () async {
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'show');
+      expect(call.arguments['assignment'], true);
+      expect(call.arguments['id'], 7);
+      return true;
+    });
+    await showMobileSupportNotification(
+      ticketId: 7,
+      title: 'Bạn được giao công việc',
+      body: 'Kiểm tra máy in',
+      sound: true,
+      assignment: true,
+    );
+  });
+
   test(
       'permission rejection and native delivery failures stay visible to the caller',
       () async {

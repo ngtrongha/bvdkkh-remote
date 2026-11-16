@@ -89,6 +89,7 @@ internal object SupportTicketNotifications {
         val title = call.argument<String>("title")
         val body = call.argument<String>("body")
         val sound = call.argument<Boolean>("sound")
+        val assignment = call.argument<Boolean>("assignment") == true
         require(ticketId != null && ticketId > 0 &&
             !title.isNullOrBlank() && !body.isNullOrBlank() && sound != null) {
             "A positive ticket id, title, body and sound flag are required"
@@ -108,9 +109,10 @@ internal object SupportTicketNotifications {
             }
         }
         val intent = Intent(activity, MainActivity::class.java).apply {
-            action = "vn.bvdkkh.remote.SUPPORT_TICKET.$ticketId"
+            action = if (assignment) "vn.bvdkkh.remote.TASK_ASSIGNMENT.$ticketId"
+                else "vn.bvdkkh.remote.SUPPORT_TICKET.$ticketId"
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra("support_ticket_id", ticketId)
+            if (!assignment) putExtra("support_ticket_id", ticketId)
         }
         val pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT or
             (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
@@ -128,6 +130,7 @@ internal object SupportTicketNotifications {
             .setDefaults(if (sound) Notification.DEFAULT_SOUND else 0)
             .setSilent(!sound)
             .build()
-        notifications.notify("support-ticket-$ticketId", 0, notification)
+        val tag = if (assignment) "task-assignment-$ticketId" else "support-ticket-$ticketId"
+        notifications.notify(tag, 0, notification)
     }
 }
