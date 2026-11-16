@@ -101,8 +101,10 @@ import UserNotifications
       if sound && settings.soundSetting == .enabled {
         content.sound = .default
       }
+      let assignment = arguments["assignment"] as? Bool == true
+      let identifier = assignment ? "bvdkkh-support-assignment-\(id)" : "bvdkkh-support-\(id)"
       let request = UNNotificationRequest(
-        identifier: "bvdkkh-support-\(id)", content: content, trigger: nil
+        identifier: identifier, content: content, trigger: nil
       )
       center.add(request) { error in
         DispatchQueue.main.async {
