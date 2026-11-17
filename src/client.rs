@@ -2835,6 +2835,7 @@ struct ConnToken {
 pub struct LoginConfigHandler {
     id: String,
     pub conn_type: ConnType,
+    pub(super) lan_webrtc_offer: String,
     pub is_terminal_admin: bool,
     hash: Hash,
     password: Vec<u8>, // remember password for reconnect
@@ -2919,6 +2920,7 @@ impl LoginConfigHandler {
         shared_password: Option<String>,
         conn_token: Option<String>,
     ) {
+        self.lan_webrtc_offer.clear();
         let mut id = id;
         if id.contains("@") {
             let mut v = id.split("@");
@@ -4825,10 +4827,14 @@ async fn send_login(
     password: Vec<u8>,
     peer: &mut Stream,
 ) {
-    let msg_out = lc
-        .read()
-        .unwrap()
-        .create_login_msg(os_username, os_password, password);
+    let msg_out = {
+        let lc = lc.read().unwrap();
+        let mut msg = lc.create_login_msg(os_username, os_password, password);
+        if lc.conn_type == ConnType::DEFAULT_CONN {
+            msg.mut_login_request().lan_webrtc_offer = lc.lan_webrtc_offer.clone();
+        }
+        msg
+    };
     allow_err!(peer.send(&msg_out).await);
 }
 
