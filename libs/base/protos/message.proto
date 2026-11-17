@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
+
 syntax = "proto3";
 package hbb;
 
@@ -84,6 +88,7 @@ message LoginRequest {
   string my_platform = 13;
   bytes hwid = 14;
   string avatar = 17;
+  string lan_webrtc_offer = 31;
 }
 
 message Terminal {
@@ -1032,5 +1037,14 @@ message Message {
     PortForwardChannel port_forward_channel = 33;
     // Auto Login: the peer types the password only if it is at its logon or lock screen.
     OSLogin os_login = 34;
+    LanWebrtc lan_webrtc = 35;
+  }
+}
+
+message LanWebrtc {
+  oneof union {
+    string answer = 1;
+    bool commit = 2;
+    bool accepted = 3;
   }
 }

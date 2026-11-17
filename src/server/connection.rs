@@ -361,6 +361,7 @@ pub struct Connection {
     inner: ConnInner,
     display_idx: usize,
     stream: super::Stream,
+    lan_pending: std::collections::VecDeque<bytes::BytesMut>,
     server: super::ServerPtrWeak,
     hash: Hash,
     read_jobs: Vec<fs::TransferJob>,
@@ -589,6 +590,7 @@ impl Connection {
             port_forward_mux: None,
             port_forward_address: "".to_owned(),
             tx_to_cm,
+            lan_pending: Default::default(),
             authorized: false,
             unauthorized_id: Some(unauthorized),
             keyboard: Self::permission(keys::OPTION_ENABLE_KEYBOARD, &control_permissions),
@@ -1021,7 +1023,12 @@ impl Connection {
                         _ => {}
                     }
                 },
-                res = conn.stream.next() => {
+                res = async {
+                    if let Some(bytes) = conn.lan_pending.pop_front() {
+                        return Some(Ok(bytes));
+                    }
+                    conn.stream.next().await
+                } => {
                     if let Some(res) = res {
                         match res {
                             Err(err) => {
@@ -2184,6 +2191,11 @@ impl Connection {
             }
             self.on_remote_authorized();
         }
+        if matches!(res.union.as_ref(), Some(login_response::Union::PeerInfo(_)))
+            && !self.try_lan_webrtc().await
+        {
+            return false;
+        }
         let mut msg_out = Message::new();
         msg_out.set_login_response(res);
         self.send(msg_out).await;
@@ -2233,7 +2245,97 @@ impl Connection {
         }
     }
 
-    #[inline]
+    async fn try_lan_webrtc(&mut self) -> bool {
+        use base::message_proto::{lan_webrtc, LanWebrtc};
+        use hbb_common::webrtc::WebRTCStream;
+
+        if self.lr.lan_webrtc_offer.is_empty()
+            || !self.is_remote()
+            || !self.stream.is_secured()
+            || self.stream.is_webrtc()
+            || Config::is_proxy()
+            || crate::is_udp_disabled()
+            || !crate::get_udp_punch_enabled()
+            || !crate::get_webrtc_enabled()
+            || !Config::get_option(keys::OPTION_WHITELIST).trim().is_empty()
+        {
+            return true;
+        }
+        // The guard closes abandoned peer connections, including cancellation of this future.
+        struct Candidate(Option<WebRTCStream>);
+        impl Drop for Candidate {
+            fn drop(&mut self) {
+                if let Some(stream) = self.0.take() {
+                    stream.close_detached();
+                }
+            }
+        }
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let result = time::timeout_at(
+            deadline,
+            WebRTCStream::new_lan(&self.lr.lan_webrtc_offer, SEND_TIMEOUT_VIDEO),
+        )
+        .await;
+        let Ok(Ok(candidate)) = result else {
+            return true;
+        };
+        let mut candidate = Candidate(Some(candidate));
+        let Some(rtc) = candidate.0.as_mut() else {
+            return true;
+        };
+        let Ok(Ok(answer)) = time::timeout_at(deadline, rtc.get_local_endpoint()).await else {
+            return true;
+        };
+        let mut upgrade = LanWebrtc::new();
+        upgrade.set_answer(answer);
+        let mut msg = Message::new();
+        msg.set_lan_webrtc(upgrade);
+        if !matches!(time::timeout_at(deadline, self.stream.send(&msg)).await, Ok(Ok(()))) {
+            return false;
+        }
+        let mut queued = 0usize;
+        loop {
+            let frame = match time::timeout_at(deadline, self.stream.next()).await {
+                Err(_) => return true,
+                Ok(Some(Ok(frame))) => frame,
+                _ => return false,
+            };
+            let Ok(msg) = Message::parse_from_bytes(&frame) else {
+                return false;
+            };
+            if let Some(message::Union::LanWebrtc(upgrade)) = msg.union.as_ref() {
+                if matches!(upgrade.union.as_ref(), Some(lan_webrtc::Union::Commit(true))) {
+                    break;
+                }
+                return false;
+            }
+            queued += frame.len();
+            if queued > 64 * 1024 || self.lan_pending.len() >= 128 {
+                return false;
+            }
+            self.lan_pending.push_back(frame);
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now()).as_millis() as u64;
+        if remaining == 0 || rtc.wait_connected(remaining).await.is_err() {
+            return false;
+        }
+        let mut accepted = LanWebrtc::new();
+        accepted.set_accepted(true);
+        let mut msg = Message::new();
+        msg.set_lan_webrtc(accepted);
+        if !matches!(time::timeout_at(deadline, self.stream.send(&msg)).await, Ok(Ok(()))) {
+            return false;
+        }
+        rtc.mark_authenticated();
+        let Some(rtc) = candidate.0.take() else {
+            return false;
+        };
+        self.stream = super::Stream::WebRTC(rtc);
+        self.stream.set_send_timeout(SEND_TIMEOUT_VIDEO);
+        log::info!("Accepted LAN WebRTC/UDP remote session");
+        true
+    }
+
     fn is_remote(&self) -> bool {
         self.file_transfer.is_none()
             && !self.is_port_forward()
