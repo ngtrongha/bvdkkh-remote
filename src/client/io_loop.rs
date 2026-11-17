@@ -1,10 +1,14 @@
+// Copyright (c) 2026 Nguyễn Trọng Hà. All rights reserved.
+// Project: BVĐKKH - Remote
+// Author: Nguyễn Trọng Hà
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::clipboard::{clipboard_listener, update_clipboard, ClipboardSide};
 #[cfg(not(any(target_os = "ios")))]
 use crate::{audio_service, clipboard::CLIPBOARD_INTERVAL, ConnInner, CLIENT_SERVER};
 use crate::{
     client::{
-        self, new_voice_call_request, Client, Data, Interface, MediaData, MediaSender,
+        self, new_voice_call_request, Client, Data, Interface, MediaData, MediaSender, OffererGuard,
         QualityStatus, MILLI1, SEC30,
     },
     common::get_default_sound_input,
@@ -55,6 +59,7 @@ use hbb_common::{
         sync::mpsc,
         time::{self, Duration, Instant},
     },
+    webrtc::WebRTCStream,
     Stream,
 };
 #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
@@ -102,6 +107,9 @@ pub struct Remote<T: InvokeUiSession> {
     last_record_state: bool,
     sent_close_reason: bool,
     cursor_dedupe: CursorDedupe,
+    lan_upgrade: bool,
+    lan_offer: Option<OffererGuard>,
+    lan_commit_deadline: Option<Instant>,
 }
 
 #[derive(Default)]
@@ -154,6 +162,9 @@ impl<T: InvokeUiSession> Remote<T> {
             last_record_state: false,
             sent_close_reason: false,
             cursor_dedupe: Default::default(),
+            lan_upgrade: false,
+            lan_offer: None,
+            lan_commit_deadline: None,
         }
     }
 
@@ -207,6 +218,18 @@ impl<T: InvokeUiSession> Remote<T> {
                     .unwrap()
                     .set_connected();
                 let is_secured = peer.is_secured();
+                self.lan_upgrade = conn_type == ConnType::DEFAULT_CONN
+                    && is_secured
+                    && kcp.is_none()
+                    && !peer.is_webrtc()
+                    && !self.handler.is_policy_relay()
+                    && !crate::is_udp_disabled()
+                    && crate::get_udp_punch_enabled()
+                    && crate::get_webrtc_enabled()
+                    && crate::api_endpoint::is_hospital_origin(&crate::get_api_server(
+                        config::Config::get_option(keys::OPTION_API_SERVER),
+                        config::Config::get_option(keys::OPTION_CUSTOM_RENDEZVOUS_SERVER),
+                    ));
                 // Only WebRTC needs refining: its label names the transport that won the race,
                 // not the family ICE ended up nominating, and it is the one path where the two
                 // can disagree with the address the rendezvous observed.
@@ -271,7 +294,17 @@ impl<T: InvokeUiSession> Remote<T> {
                 let mut peer_gone = false;
 
                 loop {
+                    let lan_commit_deadline = self.lan_commit_deadline;
                     tokio::select! {
+                        _ = async move {
+                            match lan_commit_deadline {
+                                Some(deadline) => time::sleep_until(deadline).await,
+                                None => std::future::pending().await,
+                            }
+                        } => {
+                            self.handler.on_establish_connection_error("LAN WebRTC confirmation timed out".to_owned());
+                            break;
+                        }
                         res = peer.next() => {
                             if let Some(res) = res {
                                 match res {
@@ -302,18 +335,19 @@ impl<T: InvokeUiSession> Remote<T> {
                                 break;
                             }
                         }
-                        d = self.receiver.recv() => {
+                        // The commit is the final outbound frame on the old stream.
+                        d = self.receiver.recv(), if lan_commit_deadline.is_none() => {
                             if let Some(d) = d {
                                 if !self.handle_msg_from_ui(d, &mut peer).await {
                                     break;
                                 }
                             }
                         }
-                        _msg = rx_clip_client.recv() => {
+                        _msg = rx_clip_client.recv(), if lan_commit_deadline.is_none() => {
                             #[cfg(any(target_os = "windows", feature = "unix-file-copy-paste"))]
                             self.handle_local_clipboard_msg(&mut peer, _msg).await;
                         }
-                        _ = self.timer.tick() => {
+                        _ = self.timer.tick(), if lan_commit_deadline.is_none() => {
                             if last_recv_time.elapsed() >= SEC30 {
                                 self.handler.msgbox("error", "Connection Error", "Timeout", "");
                                 break;
@@ -382,7 +416,8 @@ impl<T: InvokeUiSession> Remote<T> {
                             self.video_threads.iter().for_each(|(_, v)| {
                                 *v.frame_count.write().unwrap() = 0;
                             });
-                            self.fps_control(direct, fps.clone());
+                            let current_direct = self.handler.lc.read().unwrap().direct.unwrap_or(direct);
+                            self.fps_control(current_direct, fps.clone());
                             let chroma = self.chroma.read().unwrap().clone();
                             let chroma = match chroma {
                                 Some(Chroma::I444) => "4:4:4",
@@ -405,6 +440,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
                     }
                 }
+                self.clear_lan_offer();
                 log::debug!("Exit io_loop of id={}", self.handler.get_id());
                 // Stop client audio server.
                 if let Some(s) = self.stop_voice_call_sender.take() {
@@ -728,6 +764,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 return false;
             }
             Data::Login((os_username, os_password, password, remember)) => {
+                self.prepare_lan_offer().await;
                 self.handler
                     .handle_login_from_ui(os_username, os_password, password, remember, peer)
                     .await;
@@ -1524,8 +1561,93 @@ impl<T: InvokeUiSession> Remote<T> {
         return false;
     }
 
+    fn clear_lan_offer(&mut self) {
+        self.lan_offer = None;
+        self.lan_commit_deadline = None;
+        self.handler.lc.write().unwrap().lan_webrtc_offer.clear();
+    }
+
+    async fn prepare_lan_offer(&mut self) {
+        if !self.lan_upgrade || self.lan_commit_deadline.is_some() {
+            return;
+        }
+        self.clear_lan_offer();
+        let prepared = time::timeout(Duration::from_millis(850), async {
+            if crate::api_endpoint::resolve_url(crate::api_endpoint::INTERNAL.to_owned()).await
+                != crate::api_endpoint::INTERNAL
+            {
+                return None;
+            }
+            let offer = OffererGuard::new(
+                WebRTCStream::new_lan("", config::CONNECT_TIMEOUT).await.ok()?,
+            );
+            let endpoint = offer.stream()?.get_local_endpoint().await.ok()?;
+            Some((offer, endpoint))
+        })
+        .await;
+        if let Ok(Some((offer, endpoint))) = prepared {
+            self.handler.lc.write().unwrap().lan_webrtc_offer = endpoint;
+            self.lan_offer = Some(offer);
+        }
+    }
+
+    async fn handle_lan_webrtc(&mut self, msg: LanWebrtc, peer: &mut Stream) -> bool {
+        match msg.union {
+            Some(lan_webrtc::Union::Answer(answer)) if self.lan_commit_deadline.is_none() => {
+                let Some(mut candidate) = self
+                    .lan_offer
+                    .as_ref()
+                    .and_then(OffererGuard::stream)
+                    .cloned()
+                else {
+                    return true;
+                };
+                let made_connection = time::timeout(Duration::from_millis(1300), async {
+                    candidate.set_remote_endpoint(&answer).await?;
+                    candidate.wait_connected(0).await
+                })
+                .await;
+                if !matches!(made_connection, Ok(Ok(()))) {
+                    self.clear_lan_offer();
+                    return true;
+                }
+                let mut control = LanWebrtc::new();
+                control.set_commit(true);
+                let mut message = Message::new();
+                message.set_lan_webrtc(control);
+                self.lan_commit_deadline = Some(Instant::now() + Duration::from_secs(3));
+                matches!(
+                    time::timeout(Duration::from_secs(1), peer.send(&message)).await,
+                    Ok(Ok(()))
+                )
+            }
+            Some(lan_webrtc::Union::Accepted(true)) if self.lan_commit_deadline.is_some() => {
+                let Some(candidate) = self.lan_offer.take().and_then(OffererGuard::into_inner)
+                else {
+                    return false;
+                };
+                candidate.mark_authenticated();
+                *peer = Stream::WebRTC(candidate);
+                self.clear_lan_offer();
+                self.handler.update_direct(Some(true));
+                self.handler.set_connection_type(true, true, "WebRTC/UDP");
+                log::info!("Upgraded remote session to LAN WebRTC/UDP");
+                true
+            }
+            _ => true,
+        }
+    }
+
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
+            if self.lan_commit_deadline.is_some()
+                && !matches!(
+                    msg_in.union.as_ref(),
+                    Some(message::Union::LanWebrtc(_) | message::Union::LoginResponse(_))
+                )
+            {
+                return false;
+            }
             match msg_in.union {
                 Some(message::Union::VideoFrame(vf)) => {
                     if !self.first_frame {
@@ -1560,6 +1682,7 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
                 Some(message::Union::Hash(hash)) => {
+                    self.prepare_lan_offer().await;
                     if !self
                         .handler
                         .handle_hash(&self.handler.password.clone(), hash, peer)
@@ -1568,17 +1691,24 @@ impl<T: InvokeUiSession> Remote<T> {
                         return false;
                     }
                 }
+                Some(message::Union::LanWebrtc(message)) => {
+                    return self.handle_lan_webrtc(message, peer).await;
+                }
                 Some(message::Union::LoginResponse(lr)) => match lr.union {
                     Some(login_response::Union::Error(err)) => {
                         if err == client::REQUIRE_2FA {
                             self.handler.lc.write().unwrap().enable_trusted_devices =
                                 lr.enable_trusted_devices;
+                        } else {
+                            self.clear_lan_offer();
                         }
                         if !self.handler.handle_login_error(&err) {
                             return false;
                         }
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
+                        self.clear_lan_offer();
+                        self.lan_upgrade = false;
                         let peer_version = pi.version.clone();
                         let peer_platform = pi.platform.clone();
                         self.set_peer_info(&pi);
