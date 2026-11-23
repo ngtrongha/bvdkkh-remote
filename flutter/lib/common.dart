@@ -254,18 +254,58 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
 class MyTheme {
   MyTheme._();
 
-  static const Color grayBg = Color(0xFFEFEFF2);
+  static const Color grayBg = Color(0xFFF1F5F9);
   static const Color accent = Color(0xFF0D9488); // BVĐKKH Clinical Teal
   static const Color accent50 = Color(0x770D9488);
   static const Color accent80 = Color(0xAA0D9488);
-  static const Color canvasColor = Color(0xFF0F172A); // Clinical Slate
+  static const Color canvasColor = Color(0xFF0B0F19); // Deep Clinical Canvas
   static const Color border = Color(0xFF334155);
+  static const Color borderLight = Color(0xFFE2E8F0);
   static const Color idColor = Color(0xFF14B8A6); // High-contrast Teal ID
-  static const Color darkGray = Color.fromARGB(255, 148, 148, 148);
+  static const Color darkGray = Color(0xFF64748B);
   static const Color cmIdColor = Color(0xFF0D9488);
   static const Color dark = Colors.black87;
   static const Color button = Color(0xFF0D9488); // BVĐKKH Primary Action
   static const Color hoverBorder = Color(0xFF0F766E);
+
+  // Clinical Design Tokens (Aligned with DESIGN.md & Stitch Mobile Designs)
+  static const Color statusOnline = Color(0xFF10B981);
+  static const Color statusWol = Color(0xFFF59E0B);
+  static const Color statusOffline = Color(0xFF64748B);
+  static const Color statusDanger = Color(0xFFEF4444);
+
+  static const Color mobileDarkCanvas = Color(0xFF0B0F19);
+  static const Color mobileDarkSurface = Color(0xFF0F172A);
+  static const Color mobileDarkCard = Color(0xFF1E293B);
+  static const Color mobileLightCanvas = Color(0xFFF8FAFC);
+  static const Color mobileLightCard = Color(0xFFFFFFFF);
+
+  static const double mobileOuterRadius = 16.0;
+  static const double mobileCardRadius = 12.0;
+  static const double mobileControlRadius = 10.0;
+
+  static Color mobileSurface(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+          ? mobileDarkSurface
+          : mobileLightCard;
+
+  static Color mobileCard(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+          ? mobileDarkCard
+          : mobileLightCard;
+
+  static Color mobileHairline(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? border : borderLight;
+
+  static Color mobileMutedText(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+          ? const Color(0xFF94A3B8)
+          : const Color(0xFF64748B);
+
+  static Color mobilePrimaryText(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark
+          ? const Color(0xFFF8FAFC)
+          : const Color(0xFF0F172A);
 
   // ListTile
   static const ListTileThemeData listTileTheme = ListTileThemeData(
@@ -379,10 +419,14 @@ class MyTheme {
     // https://stackoverflow.com/questions/77537315/after-upgrading-to-flutter-3-16-the-app-bar-background-color-button-size-and
     useMaterial3: false,
     brightness: Brightness.light,
-    hoverColor: Color.fromARGB(255, 224, 224, 224),
-    scaffoldBackgroundColor: Colors.white, dialogBackgroundColor: Colors.white,
+    hoverColor: Color(0xFFE2E8F0),
+    scaffoldBackgroundColor: isMobile ? mobileLightCanvas : Colors.white,
+    dialogBackgroundColor: Colors.white,
 
     appBarTheme: AppBarTheme(
+      backgroundColor: isMobile ? Colors.white : null,
+      foregroundColor: isMobile ? Color(0xFF0F172A) : null,
+      elevation: 0,
       shadowColor: Colors.transparent,
     ),
     dialogTheme: DialogThemeData(
@@ -479,9 +523,12 @@ class MyTheme {
     useMaterial3: false,
     brightness: Brightness.dark,
     hoverColor: Color(0xFF1E293B),
-    scaffoldBackgroundColor: Color(0xFF0F172A),
+    scaffoldBackgroundColor: isMobile ? mobileDarkCanvas : Color(0xFF0F172A),
     dialogBackgroundColor: Color(0xFF0F172A),
     appBarTheme: AppBarTheme(
+      backgroundColor: isMobile ? mobileDarkSurface : null,
+      foregroundColor: isMobile ? Color(0xFFF8FAFC) : null,
+      elevation: 0,
       shadowColor: Colors.transparent,
     ),
     dialogTheme: DialogThemeData(

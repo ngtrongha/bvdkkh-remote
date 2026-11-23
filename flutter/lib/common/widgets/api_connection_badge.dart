@@ -26,12 +26,12 @@ class ApiConnectionBadge extends StatelessWidget {
         final label = 'API: $route${connection.failed ? ' · Lỗi' : ''}';
         final colors = Theme.of(context).colorScheme;
         final color = connection.failed
-            ? colors.error
+            ? const Color(0xFFEF4444)
             : origin == null
                 ? colors.onSurfaceVariant
                 : internal
-                    ? colors.primary
-                    : colors.secondary;
+                    ? const Color(0xFF10B981)
+                    : const Color(0xFF0284C7);
         final detail = origin == null
             ? 'Chưa có phản hồi API trong phiên này.'
             : '$origin\n${connection.failed ? 'Yêu cầu gần nhất gặp lỗi kết nối.' : 'Đường API của phản hồi gần nhất.'}';
@@ -40,24 +40,25 @@ class ApiConnectionBadge extends StatelessWidget {
               '$label\n$detail\nTrạng thái API độc lập với phiên điều khiển từ xa.',
           triggerMode: TooltipTriggerMode.tap,
           child: Container(
-            constraints: const BoxConstraints(maxWidth: 240),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            constraints: const BoxConstraints(maxWidth: 168),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               color: color.withAlpha(24),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: color.withAlpha(72), width: 1),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                    connection.failed
-                        ? Icons.cloud_off_outlined
-                        : internal
-                            ? Icons.lan_outlined
-                            : Icons.cloud_outlined,
-                    size: 14,
-                    color: color),
-                const SizedBox(width: 5),
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(width: 6),
                 Flexible(
                     child: Text(label,
                         maxLines: 1,

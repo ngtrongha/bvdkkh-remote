@@ -305,73 +305,96 @@ class ScamWarningDialogState extends State<ScamWarningDialog> {
   @override
   Widget build(BuildContext context) {
     final isButtonLocked = _countdown > 0;
+    final cardColor = MyTheme.mobileCard(context);
+    final hairline = MyTheme.mobileHairline(context);
+    final primaryText = MyTheme.mobilePrimaryText(context);
+    final mutedText = MyTheme.mobileMutedText(context);
 
     return AlertDialog(
-      content: ClipRRect(
-        borderRadius: BorderRadius.circular(20.0),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      contentPadding: EdgeInsets.zero,
+      content: Container(
+        decoration: BoxDecoration(
+          color: cardColor,
+          borderRadius: BorderRadius.circular(MyTheme.mobileOuterRadius),
+          border: Border.all(
+            color: MyTheme.statusWol.withOpacity(0.55),
+            width: 1.2,
+          ),
+        ),
+        padding: const EdgeInsets.all(20.0),
         child: SingleChildScrollView(
-          child: Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topRight,
-                end: Alignment.bottomLeft,
-                colors: [
-                  Color(0xffe242bc),
-                  Color(0xfff4727c),
-                ],
-              ),
-            ),
-            padding: EdgeInsets.all(25.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.warning_amber_sharp,
-                      color: Colors.white,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: MyTheme.statusWol.withOpacity(0.14),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                    SizedBox(width: 10),
-                    Text(
+                    child: const Icon(
+                      Icons.warning_amber_rounded,
+                      color: MyTheme.statusWol,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
                       translate("Warning"),
                       style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20.0,
+                        color: primaryText,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 18.0,
                       ),
                     ),
-                  ],
-                ),
-                SizedBox(height: 20),
-                Center(
-                  child: Image.asset(
-                    'assets/scam.png',
-                    width: 180,
                   ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: Image.asset(
+                  'assets/scam.png',
+                  width: 140,
                 ),
-                SizedBox(height: 18),
-                Text(
-                  translate("scam_title"),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 22.0,
-                  ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                translate("scam_title"),
+                style: TextStyle(
+                  color: primaryText,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16.0,
                 ),
-                SizedBox(height: 18),
-                Text(
-                  "${translate("scam_text1")}\n\n${translate("scam_text2")}\n",
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16.0,
-                  ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                "${translate("scam_text1")}\n\n${translate("scam_text2")}",
+                style: TextStyle(
+                  color: mutedText,
+                  fontSize: 14.0,
+                  height: 1.4,
                 ),
-                Row(
+              ),
+              const SizedBox(height: 12),
+              Divider(color: hairline, height: 1),
+              const SizedBox(height: 8),
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () {
+                  setState(() {
+                    show_warning = !show_warning;
+                  });
+                },
+                child: Row(
                   children: <Widget>[
                     Checkbox(
+                      activeColor: MyTheme.accent,
                       value: show_warning,
                       onChanged: (value) {
                         setState(() {
@@ -379,77 +402,81 @@ class ScamWarningDialogState extends State<ScamWarningDialog> {
                         });
                       },
                     ),
-                    Text(
-                      translate("Don't show again"),
+                    Expanded(
+                      child: Text(
+                        translate("Don't show again"),
+                        style: TextStyle(
+                          color: primaryText,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14.0,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size(0, 44),
+                      side: BorderSide(color: hairline),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                            MyTheme.mobileControlRadius),
+                      ),
+                    ),
+                    child: Text(
+                      translate("Decline"),
                       style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15.0,
+                        color: primaryText,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13.0,
                       ),
                     ),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Container(
-                      constraints: BoxConstraints(maxWidth: 150),
-                      child: ElevatedButton(
-                        onPressed: isButtonLocked
-                            ? null
-                            : () {
-                                Navigator.of(context).pop();
-                                _serverModel.toggleService();
-                                if (show_warning) {
-                                  bind.mainSetLocalOption(
-                                      key: "show-scam-warning", value: "N");
-                                }
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent,
-                        ),
-                        child: Text(
-                          isButtonLocked
-                              ? "${translate("I Agree")} (${_countdown}s)"
-                              : translate("I Agree"),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13.0,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                  ),
+                  const SizedBox(width: 10),
+                  ElevatedButton(
+                    onPressed: isButtonLocked
+                        ? null
+                        : () {
+                            Navigator.of(context).pop();
+                            _serverModel.toggleService();
+                            if (show_warning) {
+                              bind.mainSetLocalOption(
+                                  key: "show-scam-warning", value: "N");
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size(0, 44),
+                      backgroundColor: MyTheme.accent,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(
+                            MyTheme.mobileControlRadius),
                       ),
                     ),
-                    SizedBox(width: 15),
-                    Container(
-                      constraints: BoxConstraints(maxWidth: 150),
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent,
-                        ),
-                        child: Text(
-                          translate("Decline"),
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13.0,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                    child: Text(
+                      isButtonLocked
+                          ? "${translate("I Agree")} (${_countdown}s)"
+                          : translate("I Agree"),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13.0,
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
-      contentPadding: EdgeInsets.all(0.0),
     );
   }
 }
@@ -463,15 +490,10 @@ class ServerInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
-
-    const Color colorPositive = Colors.green;
-    const Color colorNegative = Colors.red;
-    const double iconMarginRight = 15;
-    const double iconSize = 24;
-    const TextStyle textStyleHeading = TextStyle(
-        fontSize: 16.0, fontWeight: FontWeight.bold, color: Colors.grey);
-    const TextStyle textStyleValue =
-        TextStyle(fontSize: 25.0, fontWeight: FontWeight.bold);
+    final hairline = MyTheme.mobileHairline(context);
+    final surface = MyTheme.mobileSurface(context);
+    final mutedText = MyTheme.mobileMutedText(context);
+    final primaryText = MyTheme.mobilePrimaryText(context);
 
     void copyToClipboard(String value) {
       Clipboard.setData(ClipboardData(text: value));
@@ -479,26 +501,62 @@ class ServerInfo extends StatelessWidget {
     }
 
     Widget ConnectionStateNotification() {
+      Color statusColor;
+      Widget leading;
+      String text;
       if (serverModel.connectStatus == -1) {
-        return Row(children: [
-          const Icon(Icons.warning_amber_sharp,
-                  color: colorNegative, size: iconSize)
-              .marginOnly(right: iconMarginRight),
-          Expanded(child: Text(translate('not_ready_status')))
-        ]);
+        statusColor = MyTheme.statusDanger;
+        leading = Icon(Icons.error_outline_rounded,
+            color: statusColor, size: 16);
+        text = translate('not_ready_status');
       } else if (serverModel.connectStatus == 0) {
-        return Row(children: [
-          SizedBox(width: 20, height: 20, child: CircularProgressIndicator())
-              .marginOnly(left: 4, right: iconMarginRight),
-          Expanded(child: Text(translate('connecting_status')))
-        ]);
+        statusColor = MyTheme.statusWol;
+        leading = SizedBox(
+          width: 14,
+          height: 14,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: statusColor,
+          ),
+        );
+        text = translate('connecting_status');
       } else {
-        return Row(children: [
-          const Icon(Icons.check, color: colorPositive, size: iconSize)
-              .marginOnly(right: iconMarginRight),
-          Expanded(child: Text(translate('Ready')))
-        ]);
+        statusColor = MyTheme.statusOnline;
+        leading = Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: statusColor,
+          ),
+        );
+        text = translate('Ready');
       }
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: statusColor.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(MyTheme.mobileControlRadius),
+          border: Border.all(color: statusColor.withOpacity(0.35), width: 1),
+        ),
+        child: Row(
+          children: [
+            leading,
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: statusColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
     final showOneTime = serverModel.approveMode != 'click' &&
@@ -506,60 +564,126 @@ class ServerInfo extends StatelessWidget {
     return PaddingCard(
         title: translate('Your Device'),
         child: Column(
-          // ID
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(children: [
-              const Icon(Icons.perm_identity,
-                      color: Colors.grey, size: iconSize)
-                  .marginOnly(right: iconMarginRight),
-              Text(
-                translate('ID'),
-                style: textStyleHeading,
-              )
-            ]),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text(
-                model.serverId.value.text,
-                style: textStyleValue,
+            ConnectionStateNotification(),
+            const SizedBox(height: 12),
+            // ID Box
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius:
+                    BorderRadius.circular(MyTheme.mobileControlRadius),
+                border: Border.all(color: hairline, width: 1),
               ),
-              IconButton(
-                  visualDensity: VisualDensity.compact,
-                  icon: Icon(Icons.copy_outlined),
-                  onPressed: () {
-                    copyToClipboard(model.serverId.value.text.trim());
-                  })
-            ]).marginOnly(left: 39, bottom: 10),
-            // Password
-            Row(children: [
-              const Icon(Icons.lock_outline, color: Colors.grey, size: iconSize)
-                  .marginOnly(right: iconMarginRight),
-              Text(
-                translate('One-time Password'),
-                style: textStyleHeading,
-              )
-            ]),
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text(
-                !showOneTime ? '-' : model.serverPasswd.value.text,
-                style: textStyleValue,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          translate('ID'),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: mutedText,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          model.serverId.value.text,
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.8,
+                            color: primaryText,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    constraints:
+                        const BoxConstraints(minWidth: 44, minHeight: 44),
+                    icon: const Icon(Icons.copy_rounded,
+                        size: 20, color: MyTheme.accent),
+                    onPressed: () {
+                      copyToClipboard(model.serverId.value.text.trim());
+                    },
+                  ),
+                ],
               ),
-              !showOneTime
-                  ? SizedBox.shrink()
-                  : Row(children: [
-                      IconButton(
-                          visualDensity: VisualDensity.compact,
-                          icon: const Icon(Icons.refresh),
-                          onPressed: () => bind.mainUpdateTemporaryPassword()),
-                      IconButton(
-                          visualDensity: VisualDensity.compact,
-                          icon: Icon(Icons.copy_outlined),
+            ),
+            const SizedBox(height: 10),
+            // Password Box
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+              decoration: BoxDecoration(
+                color: surface,
+                borderRadius:
+                    BorderRadius.circular(MyTheme.mobileControlRadius),
+                border: Border.all(color: hairline, width: 1),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          translate('One-time Password'),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: mutedText,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          !showOneTime ? '-' : model.serverPasswd.value.text,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.8,
+                            color: primaryText,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (showOneTime)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          constraints:
+                              const BoxConstraints(minWidth: 44, minHeight: 44),
+                          icon: Icon(Icons.refresh_rounded,
+                              size: 20, color: mutedText),
+                          onPressed: () =>
+                              bind.mainUpdateTemporaryPassword(),
+                        ),
+                        IconButton(
+                          constraints:
+                              const BoxConstraints(minWidth: 44, minHeight: 44),
+                          icon: const Icon(Icons.copy_rounded,
+                              size: 20, color: MyTheme.accent),
                           onPressed: () {
                             copyToClipboard(
                                 model.serverPasswd.value.text.trim());
-                          })
-                    ])
-            ]).marginOnly(left: 40, bottom: 15),
-            ConnectionStateNotification()
+                          },
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
           ],
         ));
   }
@@ -816,35 +940,38 @@ class PaddingCard extends StatelessWidget {
       children.insert(
           0,
           Padding(
-              padding: const EdgeInsets.fromLTRB(0, 5, 0, 8),
+              padding: const EdgeInsets.only(bottom: 12),
               child: Row(
                 children: [
                   titleIcon?.marginOnly(right: 10) ?? const SizedBox.shrink(),
                   Expanded(
                     child: Text(title!,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleLarge
-                            ?.merge(TextStyle(fontWeight: FontWeight.bold))),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: MyTheme.mobilePrimaryText(context),
+                        )),
                   )
                 ],
               )));
     }
-    return SizedBox(
-        width: double.maxFinite,
-        child: Card(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(13),
-          ),
-          margin: const EdgeInsets.fromLTRB(12.0, 10.0, 12.0, 0),
-          child: Padding(
-            padding:
-                const EdgeInsets.symmetric(vertical: 15.0, horizontal: 20.0),
-            child: Column(
-              children: children,
-            ),
-          ),
-        ));
+    return Container(
+      width: double.maxFinite,
+      margin: const EdgeInsets.fromLTRB(12.0, 12.0, 12.0, 0),
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: MyTheme.mobileCard(context),
+        borderRadius: BorderRadius.circular(MyTheme.mobileOuterRadius),
+        border: Border.all(
+          color: MyTheme.mobileHairline(context),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: children,
+      ),
+    );
   }
 }
 
@@ -868,9 +995,24 @@ class ClientInfo extends StatelessWidget {
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                    Text(client.name, style: const TextStyle(fontSize: 18)),
-                    const SizedBox(width: 8),
-                    Text(client.peerId, style: const TextStyle(fontSize: 10))
+                    Text(
+                      client.name,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: MyTheme.mobilePrimaryText(context),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      client.peerId,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontFamily: 'monospace',
+                        color: MyTheme.mobileMutedText(context),
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    )
                   ]))
             ],
           ),

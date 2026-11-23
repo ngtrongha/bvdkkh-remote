@@ -76,277 +76,284 @@ class _GestureHelpState extends State<GestureHelp> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final space = 12.0;
-    var width = size.width - 2 * space;
-    final minWidth = 90;
-    if (size.width > minWidth + 2 * space) {
-      final n = (size.width / (minWidth + 2 * space)).floor();
-      width = size.width / n - 2 * space;
-    }
-    return Center(
-        child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Center(
+    final space = 8.0;
+    final availableWidth = size.width - 32.0;
+    final cols = availableWidth > 420 ? 3 : 2;
+    final width = (availableWidth - space * (cols - 1)) / cols;
+    final hairline = MyTheme.mobileHairline(context);
+    final mutedText = MyTheme.mobileMutedText(context);
+    final primaryText = MyTheme.mobilePrimaryText(context);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Center(
+          child: Container(
+            width: 36,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: mutedText.withOpacity(0.35),
+              borderRadius: BorderRadius.circular(999),
+            ),
+          ),
+        ),
+        Center(
+          child: ToggleSwitch(
+            initialLabelIndex: _selectedIndex,
+            activeFgColor: Colors.white,
+            inactiveFgColor: mutedText,
+            activeBgColor: const [MyTheme.accent],
+            inactiveBgColor: MyTheme.mobileSurface(context),
+            borderColor: [hairline],
+            borderWidth: 1,
+            cornerRadius: 10,
+            totalSwitches: 2,
+            minWidth: 148,
+            minHeight: 40,
+            fontSize: 13,
+            iconSize: 18,
+            labels: [
+              translate("Mouse mode"),
+              translate("Touch mode"),
+            ],
+            icons: const [Icons.mouse_rounded, Icons.touch_app_rounded],
+            onToggle: (index) {
+              setState(() {
+                if (_selectedIndex != index) {
+                  _selectedIndex = index ?? 0;
+                  _touchMode = index == 0 ? false : true;
+                  widget.onTouchModeChange(_touchMode);
+                  // Exit relative mouse mode when switching to touch mode
+                  _exitRelativeMouseModeIf(_touchMode);
+                }
+              });
+            },
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: MyTheme.mobileSurface(context),
+            borderRadius: BorderRadius.circular(MyTheme.mobileCardRadius),
+            border: Border.all(color: hairline, width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () async {
+                  await _virtualMouseMode.toggleVirtualMouse();
+                  _exitRelativeMouseModeIf(
+                      !_virtualMouseMode.showVirtualMouse);
+                  setState(() {});
+                },
+                child: Row(
+                  children: [
+                    Checkbox(
+                      value: _virtualMouseMode.showVirtualMouse,
+                      activeColor: MyTheme.accent,
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        await _virtualMouseMode.toggleVirtualMouse();
+                        _exitRelativeMouseModeIf(
+                            !_virtualMouseMode.showVirtualMouse);
+                        setState(() {});
+                      },
+                    ),
+                    Expanded(
+                      child: Text(
+                        translate('Show virtual mouse'),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          color: primaryText,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_touchMode && _virtualMouseMode.showVirtualMouse)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ToggleSwitch(
-                        initialLabelIndex: _selectedIndex,
-                        activeFgColor: Colors.white,
-                        inactiveFgColor: Colors.white60,
-                        activeBgColor: [MyTheme.accent],
-                        inactiveBgColor: Theme.of(context).hintColor,
-                        totalSwitches: 2,
-                        minWidth: 150,
-                        fontSize: 15,
-                        iconSize: 18,
-                        labels: [
-                          translate("Mouse mode"),
-                          translate("Touch mode")
-                        ],
-                        icons: [Icons.mouse, Icons.touch_app],
-                        onToggle: (index) {
-                          setState(() {
-                            if (_selectedIndex != index) {
-                              _selectedIndex = index ?? 0;
-                              _touchMode = index == 0 ? false : true;
-                              widget.onTouchModeChange(_touchMode);
-                              // Exit relative mouse mode when switching to touch mode
-                              _exitRelativeMouseModeIf(_touchMode);
-                            }
-                          });
-                        },
+                      Text(
+                        translate('Virtual mouse size'),
+                        style: TextStyle(fontSize: 12, color: mutedText),
                       ),
-                      Transform.translate(
-                        offset: const Offset(-10.0, 0.0),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Checkbox(
-                              value: _virtualMouseMode.showVirtualMouse,
-                              onChanged: (value) async {
-                                if (value == null) return;
-                                await _virtualMouseMode.toggleVirtualMouse();
-                                // Exit relative mouse mode when virtual mouse is hidden
-                                _exitRelativeMouseModeIf(
-                                    !_virtualMouseMode.showVirtualMouse);
+                      Row(
+                        children: [
+                          Text(translate('Small'),
+                              style:
+                                  TextStyle(fontSize: 12, color: mutedText)),
+                          Expanded(
+                            child: Slider(
+                              activeColor: MyTheme.accent,
+                              value: _virtualMouseMode.virtualMouseScale,
+                              min: 0.8,
+                              max: 1.8,
+                              divisions: 10,
+                              onChanged: (value) {
+                                _virtualMouseMode.setVirtualMouseScale(value);
                                 setState(() {});
                               },
                             ),
-                            InkWell(
-                              onTap: () async {
-                                await _virtualMouseMode.toggleVirtualMouse();
-                                // Exit relative mouse mode when virtual mouse is hidden
-                                _exitRelativeMouseModeIf(
-                                    !_virtualMouseMode.showVirtualMouse);
-                                setState(() {});
+                          ),
+                          Text(translate('Large'),
+                              style:
+                                  TextStyle(fontSize: 12, color: mutedText)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              if (!_touchMode && _virtualMouseMode.showVirtualMouse)
+                Padding(
+                  padding: const EdgeInsets.only(left: 16),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () async {
+                      await _virtualMouseMode.toggleVirtualJoystick();
+                      _exitRelativeMouseModeIf(
+                          !_virtualMouseMode.showVirtualJoystick);
+                      setState(() {});
+                    },
+                    child: Row(
+                      children: [
+                        Checkbox(
+                          value: _virtualMouseMode.showVirtualJoystick,
+                          activeColor: MyTheme.accent,
+                          onChanged: (value) async {
+                            if (value == null) return;
+                            await _virtualMouseMode.toggleVirtualJoystick();
+                            _exitRelativeMouseModeIf(
+                                !_virtualMouseMode.showVirtualJoystick);
+                            setState(() {});
+                          },
+                        ),
+                        Expanded(
+                          child: Text(
+                            translate("Show virtual joystick"),
+                            style: TextStyle(fontSize: 13, color: primaryText),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              if (!_touchMode &&
+                  _virtualMouseMode.showVirtualMouse &&
+                  _virtualMouseMode.showVirtualJoystick &&
+                  widget.inputModel != null)
+                Obx(() => Padding(
+                      padding: const EdgeInsets.only(left: 32),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () {
+                          widget.inputModel!.toggleRelativeMouseMode();
+                        },
+                        child: Row(
+                          children: [
+                            Checkbox(
+                              value: widget.inputModel!.relativeMouseMode.value,
+                              activeColor: MyTheme.accent,
+                              onChanged: (value) {
+                                if (value == null) return;
+                                widget.inputModel!.setRelativeMouseMode(value);
                               },
-                              child: Text(translate('Show virtual mouse')),
+                            ),
+                            Expanded(
+                              child: Text(
+                                translate('Relative mouse mode'),
+                                style:
+                                    TextStyle(fontSize: 13, color: primaryText),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      if (_touchMode && _virtualMouseMode.showVirtualMouse)
-                        Padding(
-                          // Indent "Virtual mouse size"
-                          padding: const EdgeInsets.only(left: 24.0),
-                          child: SizedBox(
-                            width: 260,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                      top: 0.0, bottom: 0),
-                                  child: Text(translate('Virtual mouse size')),
-                                ),
-                                Transform.translate(
-                                  offset: Offset(-0.0, -6.0),
-                                  child: Row(
-                                    children: [
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(left: 0.0),
-                                        child: Text(translate('Small')),
-                                      ),
-                                      Expanded(
-                                        child: Slider(
-                                          value: _virtualMouseMode
-                                              .virtualMouseScale,
-                                          min: 0.8,
-                                          max: 1.8,
-                                          divisions: 10,
-                                          onChanged: (value) {
-                                            _virtualMouseMode
-                                                .setVirtualMouseScale(value);
-                                            setState(() {});
-                                          },
-                                        ),
-                                      ),
-                                      Padding(
-                                        padding:
-                                            const EdgeInsets.only(right: 16.0),
-                                        child: Text(translate('Large')),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      if (!_touchMode && _virtualMouseMode.showVirtualMouse)
-                        Transform.translate(
-                          offset: const Offset(-10.0, -12.0),
-                          child: Padding(
-                              // Indent "Show virtual joystick"
-                              padding: const EdgeInsets.only(left: 24.0),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Checkbox(
-                                    value:
-                                        _virtualMouseMode.showVirtualJoystick,
-                                    onChanged: (value) async {
-                                      if (value == null) return;
-                                      await _virtualMouseMode
-                                          .toggleVirtualJoystick();
-                                      // Exit relative mouse mode when joystick is hidden
-                                      _exitRelativeMouseModeIf(
-                                          !_virtualMouseMode
-                                              .showVirtualJoystick);
-                                      setState(() {});
-                                    },
-                                  ),
-                                  InkWell(
-                                    onTap: () async {
-                                      await _virtualMouseMode
-                                          .toggleVirtualJoystick();
-                                      // Exit relative mouse mode when joystick is hidden
-                                      _exitRelativeMouseModeIf(
-                                          !_virtualMouseMode
-                                              .showVirtualJoystick);
-                                      setState(() {});
-                                    },
-                                    child: Text(
-                                        translate("Show virtual joystick")),
-                                  ),
-                                ],
-                              )),
-                        ),
-                      // Relative mouse mode option - only visible when joystick is shown
-                      if (!_touchMode &&
-                          _virtualMouseMode.showVirtualMouse &&
-                          _virtualMouseMode.showVirtualJoystick &&
-                          widget.inputModel != null)
-                        Obx(() => Transform.translate(
-                              offset: const Offset(-10.0, -24.0),
-                              child: Padding(
-                                  // Indent further for 'Relative mouse mode'
-                                  padding: const EdgeInsets.only(left: 48.0),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Checkbox(
-                                        value: widget.inputModel!
-                                            .relativeMouseMode.value,
-                                        onChanged: (value) {
-                                          if (value == null) return;
-                                          widget.inputModel!
-                                              .setRelativeMouseMode(value);
-                                        },
-                                      ),
-                                      InkWell(
-                                        onTap: () {
-                                          widget.inputModel!
-                                              .toggleRelativeMouseMode();
-                                        },
-                                        child: Text(
-                                            translate('Relative mouse mode')),
-                                      ),
-                                    ],
-                                  )),
-                            )),
-                    ],
-                  ),
-                ),
-                Container(
-                    child: Wrap(
-                  spacing: space,
-                  runSpacing: 2 * space,
-                  children: _touchMode
-                      ? [
-                          GestureInfo(
-                              width,
-                              GestureIcons.iconMobileTouch,
-                              translate("One-Finger Tap"),
-                              translate("Left Mouse")),
-                          GestureInfo(
-                              width,
-                              GestureIcons.iconGesturePressHold,
-                              translate("One-Long Tap"),
-                              translate("Right Mouse")),
-                          GestureInfo(
-                              width,
-                              GestureIcons.iconGestureFSwipeRight,
-                              translate("One-Finger Move"),
-                              translate("Mouse Drag")),
-                          GestureInfo(
-                              width,
-                              GestureIcons.iconGestureFThreeFingers,
-                              translate("Three-Finger vertically"),
-                              translate("Mouse Wheel")),
-                          GestureInfo(
-                              width,
-                              GestureIcons.iconGestureFDrag,
-                              translate("Two-Finger Move"),
-                              translate("Canvas Move")),
-                          GestureInfo(
-                              width,
-                              GestureIcons.iconGesturePinch,
-                              translate("Pinch to Zoom"),
-                              translate("Canvas Zoom")),
-                        ]
-                      : [
-                          GestureInfo(
-                              width,
-                              GestureIcons.iconMobileTouch,
-                              translate("One-Finger Tap"),
-                              translate("Left Mouse")),
-                          GestureInfo(
-                              width,
-                              GestureIcons.iconGesturePressHold,
-                              translate("One-Long Tap"),
-                              translate("Right Mouse")),
-                          GestureInfo(
-                              width,
-                              GestureIcons.iconGestureFSwipeRight,
-                              translate("Double Tap & Move"),
-                              translate("Mouse Drag")),
-                          GestureInfo(
-                              width,
-                              GestureIcons.iconGestureFThreeFingers,
-                              translate("Three-Finger vertically"),
-                              translate("Mouse Wheel")),
-                          GestureInfo(
-                              width,
-                              GestureIcons.iconGestureFDrag,
-                              translate("Two-Finger Move"),
-                              translate("Canvas Move")),
-                          GestureInfo(
-                              width,
-                              GestureIcons.iconGesturePinch,
-                              translate("Pinch to Zoom"),
-                              translate("Canvas Zoom")),
-                        ],
-                )),
-              ],
-            )));
+                    )),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: space,
+          runSpacing: space,
+          children: _touchMode
+              ? [
+                  GestureInfo(
+                      width,
+                      GestureIcons.iconMobileTouch,
+                      translate("One-Finger Tap"),
+                      translate("Left Mouse")),
+                  GestureInfo(
+                      width,
+                      GestureIcons.iconGesturePressHold,
+                      translate("One-Long Tap"),
+                      translate("Right Mouse")),
+                  GestureInfo(
+                      width,
+                      GestureIcons.iconGestureFSwipeRight,
+                      translate("One-Finger Move"),
+                      translate("Mouse Drag")),
+                  GestureInfo(
+                      width,
+                      GestureIcons.iconGestureFThreeFingers,
+                      translate("Three-Finger vertically"),
+                      translate("Mouse Wheel")),
+                  GestureInfo(
+                      width,
+                      GestureIcons.iconGestureFDrag,
+                      translate("Two-Finger Move"),
+                      translate("Canvas Move")),
+                  GestureInfo(
+                      width,
+                      GestureIcons.iconGesturePinch,
+                      translate("Pinch to Zoom"),
+                      translate("Canvas Zoom")),
+                ]
+              : [
+                  GestureInfo(
+                      width,
+                      GestureIcons.iconMobileTouch,
+                      translate("One-Finger Tap"),
+                      translate("Left Mouse")),
+                  GestureInfo(
+                      width,
+                      GestureIcons.iconGesturePressHold,
+                      translate("One-Long Tap"),
+                      translate("Right Mouse")),
+                  GestureInfo(
+                      width,
+                      GestureIcons.iconGestureFSwipeRight,
+                      translate("Double Tap & Move"),
+                      translate("Mouse Drag")),
+                  GestureInfo(
+                      width,
+                      GestureIcons.iconGestureFThreeFingers,
+                      translate("Three-Finger vertically"),
+                      translate("Mouse Wheel")),
+                  GestureInfo(
+                      width,
+                      GestureIcons.iconGestureFDrag,
+                      translate("Two-Finger Move"),
+                      translate("Canvas Move")),
+                  GestureInfo(
+                      width,
+                      GestureIcons.iconGesturePinch,
+                      translate("Pinch to Zoom"),
+                      translate("Canvas Zoom")),
+                ],
+        ),
+      ],
+    );
   }
 }
 
@@ -360,32 +367,51 @@ class GestureInfo extends StatelessWidget {
   final IconData icon;
   final double width;
 
-  final iconSize = 35.0;
+  final iconSize = 28.0;
   final iconColor = MyTheme.accent;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-        width: width,
-        child: Column(
-          children: [
-            Icon(
-              icon,
-              size: iconSize,
-              color: iconColor,
+      width: width,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      decoration: BoxDecoration(
+        color: MyTheme.mobileSurface(context),
+        borderRadius: BorderRadius.circular(MyTheme.mobileControlRadius),
+        border: Border.all(color: MyTheme.mobileHairline(context), width: 1),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            icon,
+            size: iconSize,
+            color: iconColor,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            fromText,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              color: MyTheme.mobileMutedText(context),
             ),
-            SizedBox(height: 6),
-            Text(fromText,
-                textAlign: TextAlign.center,
-                style:
-                    TextStyle(fontSize: 9, color: Theme.of(context).hintColor)),
-            SizedBox(height: 3),
-            Text(toText,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                    fontSize: 12,
-                    color: Theme.of(context).textTheme.bodySmall?.color))
-          ],
-        ));
+          ),
+          const SizedBox(height: 2),
+          Text(
+            toText,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: MyTheme.mobilePrimaryText(context),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

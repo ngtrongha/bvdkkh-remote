@@ -14,6 +14,7 @@ import '../../common/widgets/chat_page.dart';
 import '../../models/platform_model.dart';
 import '../../models/state_model.dart';
 import 'connection_page.dart';
+import 'scan_page.dart';
 
 abstract class PageShape extends Widget {
   final String title = "";
@@ -70,6 +71,13 @@ class HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final hairline = MyTheme.mobileHairline(context);
+    final surface = MyTheme.mobileSurface(context);
+    final currentPage = _pages.elementAt(_selectedIndex);
+    final isConnectionTab = currentPage is ConnectionPage;
+    final showQrOnConnection =
+        isConnectionTab && !isWeb && !bind.isDisableSettings();
+
     return WillPopScope(
         onWillPop: () async {
           if (_selectedIndex != 0) {
@@ -82,41 +90,91 @@ class HomePageState extends State<HomePage> {
           return false;
         },
         child: Scaffold(
-          // backgroundColor: MyTheme.grayBg,
           appBar: AppBar(
-            centerTitle: true,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            backgroundColor: surface,
+            foregroundColor: MyTheme.mobilePrimaryText(context),
+            centerTitle: false,
+            titleSpacing: 16,
+            toolbarHeight: 56,
             title: appTitle(),
-            bottom: const PreferredSize(
-              preferredSize: Size.fromHeight(28),
-              child: Padding(padding: EdgeInsets.only(bottom: 4),
-                  child: ApiConnectionBadge()),
+            bottom: PreferredSize(
+              preferredSize: const Size.fromHeight(1),
+              child: Container(height: 1, color: hairline),
             ),
-            actions: _pages.elementAt(_selectedIndex).appBarActions,
+            actions: [
+              const Center(child: ApiConnectionBadge()),
+              const SizedBox(width: 4),
+              if (showQrOnConnection)
+                IconButton(
+                  tooltip: translate('Scan QR'),
+                  constraints:
+                      const BoxConstraints(minWidth: 44, minHeight: 44),
+                  icon: const Icon(Icons.qr_code_scanner_rounded, size: 22),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (BuildContext context) => ScanPage(),
+                      ),
+                    );
+                  },
+                ),
+              ...currentPage.appBarActions,
+              const SizedBox(width: 4),
+            ],
           ),
-          bottomNavigationBar: BottomNavigationBar(
-            key: navigationBarKey,
-            items: _pages
-                .map((page) =>
-                    BottomNavigationBarItem(icon: page.icon, label: page.title))
-                .toList(),
-            currentIndex: _selectedIndex,
-            type: BottomNavigationBarType.fixed,
-            selectedItemColor: MyTheme.accent, //
-            unselectedItemColor: MyTheme.darkGray,
-            onTap: (index) => setState(() {
-              // close chat overlay when go chat page
-              if (_selectedIndex != index) {
-                _selectedIndex = index;
-                if (isChatPageCurrentTab) {
-                  gFFI.chatModel.hideChatIconOverlay();
-                  gFFI.chatModel.hideChatWindowOverlay();
-                  gFFI.chatModel.mobileClearClientUnread(
-                      gFFI.chatModel.currentKey.connId);
+          bottomNavigationBar: Container(
+            decoration: BoxDecoration(
+              color: surface,
+              border: Border(top: BorderSide(color: hairline, width: 1)),
+            ),
+            child: BottomNavigationBar(
+              key: navigationBarKey,
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              items: _pages
+                  .map((page) => BottomNavigationBarItem(
+                        icon: Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: page.icon,
+                        ),
+                        activeIcon: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 4),
+                          margin: const EdgeInsets.only(bottom: 2),
+                          decoration: BoxDecoration(
+                            color: MyTheme.accent.withOpacity(0.14),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: page.icon,
+                        ),
+                        label: page.title,
+                      ))
+                  .toList(),
+              currentIndex: _selectedIndex,
+              type: BottomNavigationBarType.fixed,
+              selectedItemColor: MyTheme.accent,
+              unselectedItemColor: MyTheme.mobileMutedText(context),
+              selectedFontSize: 12,
+              unselectedFontSize: 11,
+              selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
+              onTap: (index) => setState(() {
+                // close chat overlay when go chat page
+                if (_selectedIndex != index) {
+                  _selectedIndex = index;
+                  if (isChatPageCurrentTab) {
+                    gFFI.chatModel.hideChatIconOverlay();
+                    gFFI.chatModel.hideChatWindowOverlay();
+                    gFFI.chatModel.mobileClearClientUnread(
+                        gFFI.chatModel.currentKey.connId);
+                  }
                 }
-              }
-            }),
+              }),
+            ),
           ),
-          body: _pages.elementAt(_selectedIndex),
+          body: currentPage,
         ));
   }
 
@@ -129,7 +187,7 @@ class HomePageState extends State<HomePage> {
       final connected =
           gFFI.serverModel.clients.any((e) => e.id == currentKey.connId);
       return Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Tooltip(
             message: currentKey.isOut
@@ -139,32 +197,72 @@ class HomePageState extends State<HomePage> {
               currentKey.isOut
                   ? Icons.call_made_rounded
                   : Icons.call_received_rounded,
+              size: 18,
+              color: MyTheme.accent,
             ),
           ),
-          Expanded(
-            child: Center(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    "${currentUser.firstName}   ${currentUser.id}",
-                  ),
-                  if (connected)
-                    Container(
-                      width: 10,
-                      height: 10,
-                      decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Color.fromARGB(255, 133, 246, 199)),
-                    ).marginSymmetric(horizontal: 2),
-                ],
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              "${currentUser.firstName} ${currentUser.id}".trim(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: MyTheme.mobilePrimaryText(context),
               ),
             ),
           ),
+          if (connected)
+            Container(
+              width: 8,
+              height: 8,
+              margin: const EdgeInsets.only(left: 6),
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: MyTheme.statusOnline,
+              ),
+            ),
         ],
       );
     }
-    return Text(bind.mainGetAppNameSync());
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: MyTheme.accent.withOpacity(0.14),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: MyTheme.accent.withOpacity(0.35),
+              width: 1,
+            ),
+          ),
+          child: const Icon(
+            Icons.health_and_safety_rounded,
+            size: 18,
+            color: MyTheme.accent,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(
+            bind.mainGetAppNameSync(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: MyTheme.mobilePrimaryText(context),
+              letterSpacing: -0.2,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 

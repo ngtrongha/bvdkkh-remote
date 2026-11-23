@@ -86,13 +86,42 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildPortrait() {
     final peer = super.widget.peer;
-    return Card(
-        margin: EdgeInsets.symmetric(horizontal: 2),
-        child: gestureDetector(
-          child: Container(
-              padding: EdgeInsets.only(left: 12, top: 8, bottom: 8),
-              child: _buildPeerTile(context, peer, null)),
-        ));
+    final hairline = MyTheme.mobileHairline(context);
+    final cardColor = MyTheme.mobileCard(context);
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(MyTheme.mobileCardRadius),
+        border: Border.all(
+          color: peer.online
+              ? MyTheme.statusOnline.withOpacity(0.35)
+              : hairline,
+          width: 1,
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(MyTheme.mobileCardRadius),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border(
+              left: BorderSide(
+                color: peer.online
+                    ? MyTheme.statusOnline
+                    : MyTheme.statusOffline.withOpacity(0.35),
+                width: 3.5,
+              ),
+            ),
+          ),
+          child: gestureDetector(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+              child: _buildPeerTile(context, peer, null),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildLandscape() {
@@ -141,12 +170,14 @@ class _PeerCardState extends State<_PeerCard>
         ? peer.hostname
         : '${peer.username}${peer.username.isNotEmpty && peer.hostname.isNotEmpty ? '@' : ''}${peer.hostname}';
     final greyStyle = TextStyle(
-        fontSize: 11,
-        color: Theme.of(context)
-            .textTheme
-            .titleLarge
-            ?.color
-            ?.withOpacity(0.6));
+        fontSize: isPortrait ? 12 : 11,
+        color: isPortrait
+            ? MyTheme.mobileMutedText(context)
+            : Theme.of(context)
+                .textTheme
+                .titleLarge
+                ?.color
+                ?.withOpacity(0.6));
     final showNote = _showNote(peer);
 
     return Row(
@@ -156,39 +187,51 @@ class _PeerCardState extends State<_PeerCard>
             decoration: BoxDecoration(
               color: peer.online
                   ? MyTheme.accent.withOpacity(0.12)
-                  : Colors.grey.withOpacity(0.12),
+                  : MyTheme.statusOffline.withOpacity(0.12),
               borderRadius: isPortrait
-                  ? BorderRadius.circular(_tileRadius)
+                  ? BorderRadius.circular(MyTheme.mobileControlRadius)
                   : BorderRadius.only(
                       topLeft: Radius.circular(_tileRadius),
                       bottomLeft: Radius.circular(_tileRadius),
                     ),
-              border: Border(
-                left: BorderSide(
-                  color: peer.online ? MyTheme.accent : Colors.grey.withOpacity(0.4),
-                  width: 3,
-                ),
-              ),
+              border: isPortrait
+                  ? Border.all(
+                      color: peer.online
+                          ? MyTheme.accent.withOpacity(0.3)
+                          : MyTheme.mobileHairline(context),
+                      width: 1,
+                    )
+                  : Border(
+                      left: BorderSide(
+                        color: peer.online
+                            ? MyTheme.accent
+                            : Colors.grey.withOpacity(0.4),
+                        width: 3,
+                      ),
+                    ),
             ),
             alignment: Alignment.center,
-            width: isPortrait ? 50 : 42,
-            height: isPortrait ? 50 : null,
+            width: isPortrait ? 48 : 42,
+            height: isPortrait ? 48 : null,
             child: Stack(
               children: [
-                getPlatformImage(peer.platform, size: isPortrait ? 28 : 22)
+                getPlatformImage(peer.platform, size: isPortrait ? 26 : 22)
                     .paddingAll(6),
                 if (_shouldBuildPasswordIcon(peer))
                   Positioned(
-                    top: 1,
-                    left: 1,
-                    child: Icon(Icons.key, size: 8, color: MyTheme.accent),
+                    top: 2,
+                    right: 2,
+                    child: Icon(Icons.key_rounded,
+                        size: 11, color: MyTheme.statusWol),
                   ),
               ],
             )),
         Expanded(
           child: Container(
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.background,
+              color: isPortrait
+                  ? Colors.transparent
+                  : Theme.of(context).colorScheme.background,
               borderRadius: BorderRadius.only(
                 topRight: Radius.circular(_tileRadius),
                 bottomRight: Radius.circular(_tileRadius),
@@ -198,16 +241,27 @@ class _PeerCardState extends State<_PeerCard>
               children: [
                 Expanded(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(children: [
-                        getOnline(isPortrait ? 4 : 8, peer.online),
+                        getOnline(isPortrait ? 6 : 8, peer.online),
                         Expanded(
                             child: Text(
                           peer.alias.isEmpty ? formatID(peer.id) : peer.alias,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.titleSmall,
+                          style: isPortrait
+                              ? TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: MyTheme.mobilePrimaryText(context),
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures()
+                                  ],
+                                )
+                              : Theme.of(context).textTheme.titleSmall,
                         )),
                       ]).marginOnly(top: isPortrait ? 0 : 2),
+                      if (isPortrait) const SizedBox(height: 2),
                       Row(
                         children: [
                           Flexible(
@@ -218,7 +272,7 @@ class _PeerCardState extends State<_PeerCard>
                                 alignment: Alignment.centerLeft,
                                 child: Text(
                                   name,
-                                  style: isPortrait ? null : greyStyle,
+                                  style: greyStyle,
                                   textAlign: TextAlign.start,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -233,30 +287,32 @@ class _PeerCardState extends State<_PeerCard>
                                 child: Align(
                                   alignment: Alignment.centerLeft,
                                   child: Text(
-                                    peer.note,
-                                    style: isPortrait ? null : greyStyle,
+                                    isPortrait ? ' · ${peer.note}' : peer.note,
+                                    style: greyStyle,
                                     textAlign: TextAlign.start,
                                     overflow: TextOverflow.ellipsis,
                                   ).marginOnly(
                                       left: peerCardUiType.value ==
                                               PeerUiType.list
                                           ? 32
-                                          : 4),
+                                          : (isPortrait ? 0 : 4)),
                                 ),
                               ),
                             )
                         ],
                       ),
                     ],
-                  ).marginOnly(top: 2),
+                  ).marginOnly(top: isPortrait ? 0 : 2),
                 ),
                 if (!isPortrait && !peer.online)
                   IconButton(
-                    icon: const Icon(Icons.power_settings_new_rounded, size: 18),
-                    color: const Color(0xFFF59E0B),
+                    icon:
+                        const Icon(Icons.power_settings_new_rounded, size: 18),
+                    color: MyTheme.statusWol,
                     tooltip: 'Bật máy từ xa (WOL)',
                     padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                    constraints:
+                        const BoxConstraints(minWidth: 28, minHeight: 28),
                     onPressed: () {
                       wakeOnLan(peer.id);
                     },
@@ -265,7 +321,7 @@ class _PeerCardState extends State<_PeerCard>
                     ? checkBoxOrActionMorePortrait(peer)
                     : checkBoxOrActionMoreLandscape(peer, isTile: true),
               ],
-            ).paddingOnly(left: 10.0, top: 3.0),
+            ).paddingOnly(left: 12.0, top: isPortrait ? 0 : 3.0),
           ),
         )
       ],
@@ -504,31 +560,58 @@ class _PeerCardState extends State<_PeerCard>
     final selected = peerTabModel.isPeerSelected(peer.id);
     if (peerTabModel.multiSelectionMode) {
       return Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(10),
         child: selected
-            ? Icon(
-                Icons.check_box,
+            ? const Icon(
+                Icons.check_box_rounded,
                 color: MyTheme.accent,
               )
-            : Icon(Icons.check_box_outline_blank),
+            : Icon(Icons.check_box_outline_blank_rounded,
+                color: MyTheme.mobileMutedText(context)),
       );
     } else {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (!peer.online)
-            IconButton(
-              icon: const Icon(Icons.power_settings_new_rounded, size: 20, color: Color(0xFFF59E0B)),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-              tooltip: 'Bật máy (WOL)',
-              onPressed: () {
-                wakeOnLan(peer.id);
-              },
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: Tooltip(
+                message: 'Bật máy (WOL)',
+                child: Material(
+                  color: MyTheme.statusWol.withOpacity(0.14),
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => wakeOnLan(peer.id),
+                    child: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: MyTheme.statusWol.withOpacity(0.4),
+                          width: 1,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.power_settings_new_rounded,
+                        size: 20,
+                        color: MyTheme.statusWol,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           InkWell(
-              child: const Padding(
-                  padding: EdgeInsets.all(12), child: Icon(Icons.more_vert)),
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 40,
+                height: 40,
+                child: Icon(Icons.more_vert_rounded,
+                    color: MyTheme.mobileMutedText(context)),
+              ),
               onTapDown: (e) {
                 final x = e.globalPosition.dx;
                 final y = e.globalPosition.dy;
@@ -1572,7 +1655,9 @@ Widget getOnline(double rightPadding, bool online) {
       child: Padding(
           padding: EdgeInsets.fromLTRB(0, 4, rightPadding, 4),
           child: CircleAvatar(
-              radius: 3, backgroundColor: online ? Colors.green : kColorWarn)));
+              radius: 4,
+              backgroundColor:
+                  online ? MyTheme.statusOnline : MyTheme.statusOffline)));
 }
 
 Widget build_more(BuildContext context, {bool invert = false}) {
