@@ -505,13 +505,18 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
               ? null
               : FloatingActionButton(
                   mini: !keyboardIsVisible,
+                  elevation: 4,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: const BorderSide(color: MyTheme.border, width: 1),
+                  ),
                   child: Icon(
                     (keyboardIsVisible || _showGestureHelp)
-                        ? Icons.expand_more
-                        : Icons.expand_less,
+                        ? Icons.expand_more_rounded
+                        : Icons.expand_less_rounded,
                     color: Colors.white,
                   ),
-                  backgroundColor: MyTheme.accent,
+                  backgroundColor: MyTheme.mobileDarkSurface.withOpacity(0.92),
                   onPressed: () {
                     setState(() {
                       if (keyboardIsVisible) {
@@ -599,101 +604,180 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
     );
   }
 
+  Widget _dockIconButton({
+    required Widget icon,
+    required VoidCallback? onPressed,
+    Color? color,
+    bool active = false,
+    bool danger = false,
+  }) {
+    final bgColor = danger
+        ? MyTheme.statusDanger.withOpacity(0.18)
+        : active
+            ? MyTheme.accent
+            : Colors.transparent;
+    final fgColor = danger
+        ? MyTheme.statusDanger
+        : active
+            ? Colors.white
+            : (color ?? const Color(0xFFE2E8F0));
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+        color: fgColor,
+        icon: icon,
+        onPressed: onPressed,
+      ),
+    );
+  }
+
   Widget getBottomAppBar() {
     final ffiModel = Provider.of<FfiModel>(context);
-    return BottomAppBar(
-      elevation: 10,
-      color: MyTheme.accent,
-      child: Row(
-        mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: <Widget>[
-          Row(
-              children: <Widget>[
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.clear),
-                      onPressed: () {
-                        clientClose(sessionId, gFFI);
-                      },
-                    ),
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.tv),
-                      onPressed: () {
-                        setState(() => _showEdit = false);
-                        showOptions(context, widget.id, gFFI.dialogManager);
-                      },
-                    )
-                  ] +
-                  (isWebDesktop || ffiModel.viewOnly || !ffiModel.keyboard
-                      ? []
-                      : gFFI.ffiModel.isPeerAndroid
-                          ? [
-                              IconButton(
-                                  color: Colors.white,
-                                  icon: Icon(Icons.keyboard),
-                                  onPressed: openKeyboard),
-                              IconButton(
-                                color: Colors.white,
-                                icon: const Icon(Icons.build),
-                                onPressed: () => gFFI.dialogManager
-                                    .toggleMobileActionsOverlay(ffi: gFFI),
-                              )
-                            ]
-                          : [
-                              IconButton(
-                                  color: Colors.white,
-                                  icon: Icon(Icons.keyboard),
-                                  onPressed: openKeyboard),
-                              IconButton(
-                                color: Colors.white,
-                                icon: Icon(gFFI.ffiModel.touchMode
-                                    ? Icons.touch_app
-                                    : Icons.mouse),
-                                onPressed: () => setState(
-                                    () => _showGestureHelp = !_showGestureHelp),
-                              ),
-                            ]) +
-                  (isWeb
-                      ? []
-                      : <Widget>[
-                          futureBuilder(
-                              future: gFFI.invokeMethod(
-                                  "get_value", "KEY_IS_SUPPORT_VOICE_CALL"),
-                              hasData: (isSupportVoiceCall) => IconButton(
-                                    color: Colors.white,
-                                    icon: isAndroid && isSupportVoiceCall
-                                        ? SvgPicture.asset('assets/chat.svg',
-                                            colorFilter: ColorFilter.mode(
-                                                Colors.white, BlendMode.srcIn))
-                                        : Icon(Icons.message),
-                                    onPressed: () =>
-                                        isAndroid && isSupportVoiceCall
-                                            ? showChatOptions(widget.id)
-                                            : onPressedTextChat(widget.id),
-                                  ))
-                        ]) +
-                  [
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.more_vert),
-                      onPressed: () {
-                        setState(() => _showEdit = false);
-                        showActions(widget.id);
-                      },
-                    ),
-                  ]),
-          Obx(() => IconButton(
-                color: Colors.white,
-                icon: Icon(Icons.expand_more),
-                onPressed: gFFI.ffiModel.waitForFirstImage.isTrue
-                    ? null
-                    : () {
-                        setState(() => _showBar = !_showBar);
-                      },
-              )),
-        ],
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: MyTheme.mobileDarkSurface.withOpacity(0.94),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: MyTheme.border, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.32),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.max,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                      children: <Widget>[
+                            _dockIconButton(
+                              danger: true,
+                              icon: const Icon(Icons.close_rounded, size: 22),
+                              onPressed: () {
+                                clientClose(sessionId, gFFI);
+                              },
+                            ),
+                            _dockIconButton(
+                              icon: const Icon(Icons.tv_rounded, size: 21),
+                              onPressed: () {
+                                setState(() => _showEdit = false);
+                                showOptions(
+                                    context, widget.id, gFFI.dialogManager);
+                              },
+                            )
+                          ] +
+                          (isWebDesktop ||
+                                  ffiModel.viewOnly ||
+                                  !ffiModel.keyboard
+                              ? []
+                              : gFFI.ffiModel.isPeerAndroid
+                                  ? [
+                                      _dockIconButton(
+                                          active: _showEdit,
+                                          icon: const Icon(
+                                              Icons.keyboard_rounded,
+                                              size: 21),
+                                          onPressed: openKeyboard),
+                                      _dockIconButton(
+                                        icon: const Icon(Icons.build_rounded,
+                                            size: 20),
+                                        onPressed: () => gFFI.dialogManager
+                                            .toggleMobileActionsOverlay(
+                                                ffi: gFFI),
+                                      )
+                                    ]
+                                  : [
+                                      _dockIconButton(
+                                          active: _showEdit,
+                                          icon: const Icon(
+                                              Icons.keyboard_rounded,
+                                              size: 21),
+                                          onPressed: openKeyboard),
+                                      _dockIconButton(
+                                        active: _showGestureHelp,
+                                        icon: Icon(
+                                            gFFI.ffiModel.touchMode
+                                                ? Icons.touch_app_rounded
+                                                : Icons.mouse_rounded,
+                                            size: 21),
+                                        onPressed: () => setState(() =>
+                                            _showGestureHelp =
+                                                !_showGestureHelp),
+                                      ),
+                                    ]) +
+                          (isWeb
+                              ? []
+                              : <Widget>[
+                                  futureBuilder(
+                                      future: gFFI.invokeMethod("get_value",
+                                          "KEY_IS_SUPPORT_VOICE_CALL"),
+                                      hasData: (isSupportVoiceCall) =>
+                                          _dockIconButton(
+                                            icon: isAndroid &&
+                                                    isSupportVoiceCall
+                                                ? SvgPicture.asset(
+                                                    'assets/chat.svg',
+                                                    width: 20,
+                                                    height: 20,
+                                                    colorFilter:
+                                                        const ColorFilter.mode(
+                                                            Color(0xFFE2E8F0),
+                                                            BlendMode.srcIn))
+                                                : const Icon(
+                                                    Icons.chat_bubble_outline_rounded,
+                                                    size: 20),
+                                            onPressed: () => isAndroid &&
+                                                    isSupportVoiceCall
+                                                ? showChatOptions(widget.id)
+                                                : onPressedTextChat(widget.id),
+                                          ))
+                                ]) +
+                          [
+                            _dockIconButton(
+                              icon:
+                                  const Icon(Icons.more_vert_rounded, size: 22),
+                              onPressed: () {
+                                setState(() => _showEdit = false);
+                                showActions(widget.id);
+                              },
+                            ),
+                          ]),
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 24,
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                color: MyTheme.border,
+              ),
+              Obx(() => _dockIconButton(
+                    icon: const Icon(Icons.expand_more_rounded, size: 22),
+                    onPressed: gFFI.ffiModel.waitForFirstImage.isTrue
+                        ? null
+                        : () {
+                            setState(() => _showBar = !_showBar);
+                          },
+                  )),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -940,21 +1024,33 @@ class _RemotePageState extends State<RemotePage> with WidgetsBindingObserver {
   }
 
   /// aka changeTouchMode
-  BottomAppBar getGestureHelp() {
-    return BottomAppBar(
+  Widget getGestureHelp() {
+    return Container(
+      decoration: BoxDecoration(
+        color: MyTheme.mobileCard(context),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        border: Border(
+          top: BorderSide(color: MyTheme.mobileHairline(context), width: 1),
+        ),
+      ),
+      child: SafeArea(
+        top: false,
         child: SingleChildScrollView(
-            controller: ScrollController(),
-            padding: EdgeInsets.symmetric(vertical: 10),
-            child: GestureHelp(
-              touchMode: gFFI.ffiModel.touchMode,
-              onTouchModeChange: (t) {
-                gFFI.ffiModel.toggleTouchMode();
-                final v = gFFI.ffiModel.touchMode ? 'Y' : 'N';
-                bind.mainSetLocalOption(key: kOptionTouchMode, value: v);
-              },
-              virtualMouseMode: gFFI.ffiModel.virtualMouseMode,
-              inputModel: gFFI.inputModel,
-            )));
+          controller: ScrollController(),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: GestureHelp(
+            touchMode: gFFI.ffiModel.touchMode,
+            onTouchModeChange: (t) {
+              gFFI.ffiModel.toggleTouchMode();
+              final v = gFFI.ffiModel.touchMode ? 'Y' : 'N';
+              bind.mainSetLocalOption(key: kOptionTouchMode, value: v);
+            },
+            virtualMouseMode: gFFI.ffiModel.virtualMouseMode,
+            inputModel: gFFI.inputModel,
+          ),
+        ),
+      ),
+    );
   }
 
   // * Currently mobile does not enable map mode
@@ -1002,22 +1098,31 @@ class _KeyHelpToolsState extends State<KeyHelpTools> {
 
   Widget wrap(String text, void Function() onPressed,
       {bool? active, IconData? icon}) {
+    final isActive = active == true;
     return TextButton(
         style: TextButton.styleFrom(
-          minimumSize: Size(0, 0),
-          padding: EdgeInsets.symmetric(vertical: 10, horizontal: 9.75),
-          //adds padding inside the button
+          minimumSize: const Size(34, 34),
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          //limits the touch area to the button area
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(5.0),
+            borderRadius: BorderRadius.circular(6.0),
+            side: BorderSide(
+              color: isActive ? MyTheme.accent : MyTheme.border,
+              width: 1,
+            ),
           ),
-          backgroundColor: active == true ? MyTheme.accent80 : null,
+          backgroundColor: isActive
+              ? MyTheme.accent
+              : MyTheme.mobileDarkCard.withOpacity(0.92),
         ),
         child: icon != null
-            ? Icon(icon, size: 14, color: Colors.white)
+            ? Icon(icon, size: 15, color: Colors.white)
             : Text(translate(text),
-                style: TextStyle(color: Colors.white, fontSize: 11)),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                )),
         onPressed: onPressed);
   }
 

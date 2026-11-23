@@ -291,71 +291,116 @@ class _ViewCameraPageState extends State<ViewCameraPage>
     );
   }
 
+  Widget _cameraDockButton({
+    required Widget icon,
+    required VoidCallback? onPressed,
+    bool danger = false,
+  }) {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: danger
+            ? MyTheme.statusDanger.withOpacity(0.18)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+        color: danger ? MyTheme.statusDanger : const Color(0xFFE2E8F0),
+        icon: icon,
+        onPressed: onPressed,
+      ),
+    );
+  }
+
   Widget getBottomAppBar() {
-    return BottomAppBar(
-      elevation: 10,
-      color: MyTheme.accent,
-      child: Row(
-        mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: <Widget>[
-          Row(
-              children: <Widget>[
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.clear),
-                      onPressed: () {
-                        clientClose(sessionId, gFFI);
-                      },
-                    ),
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.tv),
-                      onPressed: () {
-                        setState(() => _showEdit = false);
-                        showOptions(context, widget.id, gFFI.dialogManager);
-                      },
-                    )
-                  ] +
-                  (isWeb
-                      ? []
-                      : <Widget>[
-                          futureBuilder(
-                              future: gFFI.invokeMethod(
-                                  "get_value", "KEY_IS_SUPPORT_VOICE_CALL"),
-                              hasData: (isSupportVoiceCall) => IconButton(
-                                    color: Colors.white,
-                                    icon: isAndroid && isSupportVoiceCall
-                                        ? SvgPicture.asset('assets/chat.svg',
-                                            colorFilter: ColorFilter.mode(
-                                                Colors.white, BlendMode.srcIn))
-                                        : Icon(Icons.message),
-                                    onPressed: () =>
-                                        isAndroid && isSupportVoiceCall
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: MyTheme.mobileDarkSurface.withOpacity(0.94),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: MyTheme.border, width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.32),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.max,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Row(
+                  children: <Widget>[
+                        _cameraDockButton(
+                          danger: true,
+                          icon: const Icon(Icons.close_rounded, size: 22),
+                          onPressed: () {
+                            clientClose(sessionId, gFFI);
+                          },
+                        ),
+                        _cameraDockButton(
+                          icon: const Icon(Icons.tv_rounded, size: 21),
+                          onPressed: () {
+                            setState(() => _showEdit = false);
+                            showOptions(context, widget.id, gFFI.dialogManager);
+                          },
+                        )
+                      ] +
+                      (isWeb
+                          ? []
+                          : <Widget>[
+                              futureBuilder(
+                                  future: gFFI.invokeMethod("get_value",
+                                      "KEY_IS_SUPPORT_VOICE_CALL"),
+                                  hasData: (isSupportVoiceCall) =>
+                                      _cameraDockButton(
+                                        icon: isAndroid && isSupportVoiceCall
+                                            ? SvgPicture.asset(
+                                                'assets/chat.svg',
+                                                width: 20,
+                                                height: 20,
+                                                colorFilter:
+                                                    const ColorFilter.mode(
+                                                        Color(0xFFE2E8F0),
+                                                        BlendMode.srcIn))
+                                            : const Icon(
+                                                Icons.chat_bubble_outline_rounded,
+                                                size: 20),
+                                        onPressed: () => isAndroid &&
+                                                isSupportVoiceCall
                                             ? showChatOptions(widget.id)
                                             : onPressedTextChat(widget.id),
-                                  ))
-                        ]) +
-                  [
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.more_vert),
-                      onPressed: () {
-                        setState(() => _showEdit = false);
-                        showActions(widget.id);
-                      },
-                    ),
-                  ]),
-          Obx(() => IconButton(
-                color: Colors.white,
-                icon: Icon(Icons.expand_more),
-                onPressed: gFFI.ffiModel.waitForFirstImage.isTrue
-                    ? null
-                    : () {
-                        setState(() => _showBar = !_showBar);
-                      },
-              )),
-        ],
+                                      ))
+                            ]) +
+                      [
+                        _cameraDockButton(
+                          icon: const Icon(Icons.more_vert_rounded, size: 22),
+                          onPressed: () {
+                            setState(() => _showEdit = false);
+                            showActions(widget.id);
+                          },
+                        ),
+                      ]),
+              Obx(() => _cameraDockButton(
+                    icon: const Icon(Icons.expand_more_rounded, size: 22),
+                    onPressed: gFFI.ffiModel.waitForFirstImage.isTrue
+                        ? null
+                        : () {
+                            setState(() => _showBar = !_showBar);
+                          },
+                  )),
+            ],
+          ),
+        ),
       ),
     );
   }

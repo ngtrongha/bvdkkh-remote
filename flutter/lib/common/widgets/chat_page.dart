@@ -113,19 +113,37 @@ class ChatPage extends StatelessWidget implements PageShape {
                         isDense: true,
                         hintText: translate('Write a message'),
                         filled: true,
-                        fillColor: Theme.of(context).colorScheme.background,
-                        contentPadding: EdgeInsets.all(10),
+                        fillColor: MyTheme.mobileCard(context),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10.0),
-                          borderSide: const BorderSide(
+                          borderRadius: BorderRadius.circular(
+                              MyTheme.mobileControlRadius),
+                          borderSide: BorderSide(
                             width: 1,
-                            style: BorderStyle.solid,
+                            color: MyTheme.mobileHairline(context),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(
+                              MyTheme.mobileControlRadius),
+                          borderSide: BorderSide(
+                            width: 1,
+                            color: MyTheme.mobileHairline(context),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(
+                              MyTheme.mobileControlRadius),
+                          borderSide: const BorderSide(
+                            width: 1.5,
+                            color: MyTheme.accent,
                           ),
                         ),
                       ),
                       sendButtonBuilder: defaultSendButton(
                         padding:
-                            EdgeInsets.symmetric(horizontal: 6, vertical: 0),
+                            const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
                         color: MyTheme.accent,
                         icon: Icons.send_rounded,
                       ),
@@ -134,23 +152,33 @@ class ChatPage extends StatelessWidget implements PageShape {
                       showOtherUsersAvatar: false,
                       showOtherUsersName: false,
                       textColor: Colors.white,
-                      maxWidth: constraints.maxWidth * 0.7,
+                      maxWidth: constraints.maxWidth * 0.72,
                       messageTextBuilder: (message, _, __) {
                         final isOwnMessage = message.user.id.isBlank!;
+                        final textColor = isOwnMessage
+                            ? Colors.white
+                            : MyTheme.mobilePrimaryText(context);
+                        final timeColor = isOwnMessage
+                            ? Colors.white70
+                            : MyTheme.mobileMutedText(context);
                         return Column(
                           crossAxisAlignment: isOwnMessage
                               ? CrossAxisAlignment.end
                               : CrossAxisAlignment.start,
                           children: <Widget>[
                             Text(message.text,
-                                style: TextStyle(color: Colors.white)),
+                                style:
+                                    TextStyle(color: textColor, fontSize: 14)),
                             Text(
                               "${message.createdAt.hour}:${message.createdAt.minute.toString().padLeft(2, '0')}",
                               style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 8,
+                                color: timeColor,
+                                fontSize: 11,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures()
+                                ],
                               ),
-                            ).marginOnly(top: 3),
+                            ).marginOnly(top: 4),
                           ],
                         );
                       },
@@ -158,12 +186,13 @@ class ChatPage extends StatelessWidget implements PageShape {
                           (message, previousMessage, nextMessage) {
                         final isOwnMessage = message.user.id.isBlank!;
                         return defaultMessageDecoration(
-                          color:
-                              isOwnMessage ? MyTheme.accent : Colors.blueGrey,
-                          borderTopLeft: 8,
-                          borderTopRight: 8,
-                          borderBottomRight: isOwnMessage ? 2 : 8,
-                          borderBottomLeft: isOwnMessage ? 8 : 2,
+                          color: isOwnMessage
+                              ? MyTheme.accent
+                              : MyTheme.mobileCard(context),
+                          borderTopLeft: 12,
+                          borderTopRight: 12,
+                          borderBottomRight: isOwnMessage ? 4 : 12,
+                          borderBottomLeft: isOwnMessage ? 12 : 4,
                         );
                       },
                     ),

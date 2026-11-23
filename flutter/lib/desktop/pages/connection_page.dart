@@ -271,14 +271,19 @@ class _ConnectionPageState extends State<ConnectionPage>
       color: Theme.of(context).scaffoldBackgroundColor,
       child: Column(
         children: [
+          // Keep OnlineStatusWidget mounted invisibly so periodic polling
+          // continues updating stateGlobal.svcStatus for the Header & Footer
+          // without duplicating the status bar at the bottom of the right pane.
+          if (!isOutgoingOnly)
+            const Offstage(offstage: true, child: OnlineStatusWidget()),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildStitchConnectionCard(context),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
                   Expanded(
                     child: _buildStitchDirectoryCard(context),
                   ),
@@ -286,8 +291,6 @@ class _ConnectionPageState extends State<ConnectionPage>
               ),
             ),
           ),
-          if (!isOutgoingOnly) const Divider(height: 1),
-          if (!isOutgoingOnly) const OnlineStatusWidget(),
         ],
       ),
     );
@@ -323,61 +326,66 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   Widget _buildStitchConnectionCard(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final headerBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9);
-    final borderColor = Theme.of(context).dividerColor.withOpacity(0.15);
+    final cardBg = isDark ? MyTheme.mobileDarkCard : Colors.white;
+    final headerBg =
+        isDark ? MyTheme.mobileDarkSurface : MyTheme.mobileLightCanvas;
+    final hairline = MyTheme.mobileHairline(context);
+    final primaryText = MyTheme.mobilePrimaryText(context);
+    final mutedText = MyTheme.mobileMutedText(context);
 
     return Container(
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: hairline, width: 1),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: const Color(0xFF0F172A).withOpacity(0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
               color: headerBg,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
-              border: Border(bottom: BorderSide(color: borderColor)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(11)),
+              border: Border(bottom: BorderSide(color: hairline, width: 1)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.screen_share_rounded, size: 18, color: MyTheme.accent),
+                const Icon(Icons.screen_share_rounded,
+                    size: 16, color: MyTheme.accent),
                 const SizedBox(width: 8),
                 Text(
-                  'KẾT NỐI ĐẾN MÁY TRẠM KHÁC / REMOTE CONNECTION',
+                  'Kết nối máy trạm từ xa',
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).textTheme.titleLarge?.color,
-                    letterSpacing: 0.2,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: primaryText,
                   ),
                 ),
               ],
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'NHẬP MÃ ĐỊNH DANH ĐỐI TÁC (PARTNER ID)',
+                  'Nhập mã định danh đối tác (ID)',
                   style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).textTheme.bodySmall?.color?.withOpacity(0.65),
-                    letterSpacing: 0.3,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: mutedText,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -606,19 +614,18 @@ class _ConnectionPageState extends State<ConnectionPage>
       style: ElevatedButton.styleFrom(
         backgroundColor: MyTheme.accent,
         foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8),
         ),
-        elevation: 2,
+        elevation: 0,
       ),
-      icon: const Icon(Icons.play_arrow_rounded, size: 20),
+      icon: const Icon(Icons.play_arrow_rounded, size: 18),
       label: const Text(
-        'BẮT ĐẦU KẾT NỐI',
+        'Kết nối',
         style: TextStyle(
           fontSize: 13,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.3,
+          fontWeight: FontWeight.w600,
         ),
       ),
       onPressed: () {
@@ -631,23 +638,23 @@ class _ConnectionPageState extends State<ConnectionPage>
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return OutlinedButton.icon(
       style: OutlinedButton.styleFrom(
-        foregroundColor: const Color(0xFF0D9488),
-        side: const BorderSide(color: Color(0xFF0D9488), width: 1.2),
+        foregroundColor: MyTheme.statusWol,
+        side: BorderSide(color: MyTheme.statusWol.withOpacity(0.55), width: 1),
         backgroundColor: isDark
-            ? const Color(0xFF0D9488).withOpacity(0.12)
-            : const Color(0xFF0D9488).withOpacity(0.06),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            ? MyTheme.statusWol.withOpacity(0.12)
+            : MyTheme.statusWol.withOpacity(0.08),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(8),
         ),
       ),
-      icon: const Icon(Icons.power_settings_new_rounded, size: 18, color: Color(0xFF0D9488)),
+      icon: const Icon(Icons.power_settings_new_rounded,
+          size: 16, color: MyTheme.statusWol),
       label: const Text(
-        'BẬT MÁY (WOL)',
+        'Bật máy (WOL)',
         style: TextStyle(
           fontSize: 12,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.2,
+          fontWeight: FontWeight.w600,
         ),
       ),
       onPressed: _onTriggerWol,
@@ -665,47 +672,52 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   Widget _buildStitchDirectoryCard(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final headerBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9);
-    final borderColor = Theme.of(context).dividerColor.withOpacity(0.15);
+    final cardBg = isDark ? MyTheme.mobileDarkCard : Colors.white;
+    final headerBg =
+        isDark ? MyTheme.mobileDarkSurface : MyTheme.mobileLightCanvas;
+    final hairline = MyTheme.mobileHairline(context);
+    final primaryText = MyTheme.mobilePrimaryText(context);
 
     return Container(
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: hairline, width: 1),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: const Color(0xFF0F172A).withOpacity(0.04),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
               color: headerBg,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
-              border: Border(bottom: BorderSide(color: borderColor)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(11)),
+              border: Border(bottom: BorderSide(color: hairline, width: 1)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.lan_rounded, size: 18, color: MyTheme.accent),
+                    const Icon(Icons.lan_rounded,
+                        size: 16, color: MyTheme.accent),
                     const SizedBox(width: 8),
                     Text(
-                      'DANH SÁCH MÁY TRẠM & PHIÊN LÀM VIỆC / WORKSTATION DIRECTORY',
+                      'Danh sách máy trạm',
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).textTheme.titleLarge?.color,
-                        letterSpacing: 0.2,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: primaryText,
                       ),
                     ),
                   ],
@@ -715,16 +727,21 @@ class _ConnectionPageState extends State<ConnectionPage>
                     _allPeersLoader.getAllPeers();
                     setState(() {});
                   },
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(6),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: Row(
                       children: const [
-                        Icon(Icons.refresh_rounded, size: 14, color: MyTheme.accent),
+                        Icon(Icons.refresh_rounded,
+                            size: 14, color: MyTheme.accent),
                         SizedBox(width: 4),
                         Text(
                           'Làm mới',
-                          style: TextStyle(fontSize: 11, color: MyTheme.accent, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: MyTheme.accent,
+                              fontWeight: FontWeight.w600),
                         ),
                       ],
                     ),
@@ -735,7 +752,8 @@ class _ConnectionPageState extends State<ConnectionPage>
           ),
           Expanded(
             child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(11)),
+              borderRadius:
+                  const BorderRadius.vertical(bottom: Radius.circular(11)),
               child: PeerTabPage(),
             ),
           ),
