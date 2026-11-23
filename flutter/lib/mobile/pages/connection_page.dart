@@ -97,7 +97,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           child: PeerTabPage(),
         )
       ],
-    ).marginOnly(top: 2, left: 10, right: 10);
+    ).marginOnly(top: 8, left: 12, right: 12);
   }
 
   /// Callback for the connect button.
@@ -126,236 +126,360 @@ class _ConnectionPageState extends State<ConnectionPage> {
   Widget _buildUpdateUI(String updateUrl) {
     return updateUrl.isEmpty
         ? const SizedBox(height: 0)
-        : InkWell(
-            onTap: () async {
-              if (updateUrl.isNotEmpty) {
-                await launchUrl(Uri.parse(updateUrl));
-              }
-            },
-            child: Container(
-                alignment: AlignmentDirectional.center,
+        : Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(MyTheme.mobileCardRadius),
+              onTap: () async {
+                if (updateUrl.isNotEmpty) {
+                  await launchUrl(Uri.parse(updateUrl));
+                }
+              },
+              child: Container(
                 width: double.infinity,
-                color: Colors.pinkAccent,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text(translate('Download new version'),
-                    style: const TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold))));
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: MyTheme.statusWol.withOpacity(0.14),
+                  borderRadius:
+                      BorderRadius.circular(MyTheme.mobileCardRadius),
+                  border: Border.all(
+                    color: MyTheme.statusWol.withOpacity(0.45),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.system_update_rounded,
+                        color: MyTheme.statusWol, size: 18),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        translate('Download new version'),
+                        style: const TextStyle(
+                          color: MyTheme.statusWol,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
   }
 
   /// UI for the remote ID TextField.
   /// Search for a peer and connect to it if the id exists.
   Widget _buildRemoteIDTextField() {
-    final w = SizedBox(
-      height: 84,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
-        child: Ink(
-          decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
-            borderRadius: BorderRadius.all(Radius.circular(13)),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = MyTheme.mobileCard(context);
+    final hairline = MyTheme.mobileHairline(context);
+    final mutedText = MyTheme.mobileMutedText(context);
+    final primaryText = MyTheme.mobilePrimaryText(context);
+
+    final w = Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(MyTheme.mobileOuterRadius),
+        border: Border.all(color: hairline, width: 1),
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: const Color(0xFF0F172A).withOpacity(0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Text(
+                translate('Remote ID'),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: mutedText,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: MyTheme.accent.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'LAN · 172.16.3.28',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: MyTheme.accent,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
           ),
-          child: Row(
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: <Widget>[
               Expanded(
-                child: Container(
-                  padding: const EdgeInsets.only(left: 16, right: 16),
-                  child: RawAutocomplete<Peer>(
-                    optionsBuilder: (TextEditingValue textEditingValue) {
-                      if (textEditingValue.text == '') {
-                        _autocompleteOpts = const Iterable<Peer>.empty();
-                      } else if (_allPeersLoader.peers.isEmpty &&
-                          !_allPeersLoader.isPeersLoaded) {
-                        Peer emptyPeer = Peer(
-                          id: '',
-                          username: '',
-                          hostname: '',
-                          alias: '',
-                          platform: '',
-                          tags: [],
-                          hash: '',
-                          password: '',
-                          forceAlwaysRelay: false,
-                          rdpPort: '',
-                          rdpUsername: '',
-                          loginName: '',
-                          device_group_name: '',
-                          note: '',
-                        );
-                        _autocompleteOpts = [emptyPeer];
-                      } else {
-                        String textWithoutSpaces =
-                            textEditingValue.text.replaceAll(" ", "");
-                        if (int.tryParse(textWithoutSpaces) != null) {
-                          textEditingValue = TextEditingValue(
-                            text: textWithoutSpaces,
-                            selection: textEditingValue.selection,
-                          );
-                        }
-                        String textToFind = textEditingValue.text.toLowerCase();
-
-                        _autocompleteOpts = _allPeersLoader.peers
-                            .where((peer) =>
-                                peer.id.toLowerCase().contains(textToFind) ||
-                                peer.username
-                                    .toLowerCase()
-                                    .contains(textToFind) ||
-                                peer.hostname
-                                    .toLowerCase()
-                                    .contains(textToFind) ||
-                                peer.alias.toLowerCase().contains(textToFind))
-                            .toList();
-                        _allPeersLoader.queryOnlines(_autocompleteOpts);
-                      }
-                      return _autocompleteOpts;
-                    },
-                    focusNode: _idFocusNode,
-                    textEditingController: _idEditingController,
-                    fieldViewBuilder: (BuildContext context,
-                        TextEditingController fieldTextEditingController,
-                        FocusNode fieldFocusNode,
-                        VoidCallback onFieldSubmitted) {
-                      updateTextAndPreserveSelection(
-                          fieldTextEditingController, _idController.text);
-                      return AutoSizeTextField(
-                        controller: fieldTextEditingController,
-                        focusNode: fieldFocusNode,
-                        minFontSize: 18,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        keyboardType: TextInputType.visiblePassword,
-                        // keyboardType: TextInputType.number,
-                        onChanged: (String text) {
-                          _idController.id = text;
-                        },
-                        style: const TextStyle(
-                          fontFamily: 'WorkSans',
-                          fontWeight: FontWeight.bold,
-                          fontSize: 30,
-                          color: MyTheme.idColor,
-                        ),
-                        decoration: InputDecoration(
-                          labelText: translate('Remote ID'),
-                          // hintText: 'Enter your remote ID',
-                          border: InputBorder.none,
-                          helperStyle: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                            color: MyTheme.darkGray,
-                          ),
-                          labelStyle: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                            letterSpacing: 0.2,
-                            color: MyTheme.darkGray,
-                          ),
-                        ),
-                        inputFormatters: [IDTextInputFormatter()],
-                        onSubmitted: (_) {
-                          onConnect();
-                        },
+                child: RawAutocomplete<Peer>(
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text == '') {
+                      _autocompleteOpts = const Iterable<Peer>.empty();
+                    } else if (_allPeersLoader.peers.isEmpty &&
+                        !_allPeersLoader.isPeersLoaded) {
+                      Peer emptyPeer = Peer(
+                        id: '',
+                        username: '',
+                        hostname: '',
+                        alias: '',
+                        platform: '',
+                        tags: [],
+                        hash: '',
+                        password: '',
+                        forceAlwaysRelay: false,
+                        rdpPort: '',
+                        rdpUsername: '',
+                        loginName: '',
+                        device_group_name: '',
+                        note: '',
                       );
-                    },
-                    onSelected: (option) {
-                      setState(() {
-                        _idController.id = option.id;
-                        FocusScope.of(context).unfocus();
-                      });
-                    },
-                    optionsViewBuilder: (BuildContext context,
-                        AutocompleteOnSelected<Peer> onSelected,
-                        Iterable<Peer> options) {
-                      options = _autocompleteOpts;
-                      double maxHeight = options.length * 50;
-                      if (options.length == 1) {
-                        maxHeight = 52;
-                      } else if (options.length == 3) {
-                        maxHeight = 146;
-                      } else if (options.length == 4) {
-                        maxHeight = 193;
+                      _autocompleteOpts = [emptyPeer];
+                    } else {
+                      String textWithoutSpaces =
+                          textEditingValue.text.replaceAll(" ", "");
+                      if (int.tryParse(textWithoutSpaces) != null) {
+                        textEditingValue = TextEditingValue(
+                          text: textWithoutSpaces,
+                          selection: textEditingValue.selection,
+                        );
                       }
-                      maxHeight = maxHeight.clamp(0, 200);
-                      return Align(
-                          alignment: Alignment.topLeft,
-                          child: Container(
-                              decoration: BoxDecoration(
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.3),
-                                    blurRadius: 5,
-                                    spreadRadius: 1,
-                                  ),
-                                ],
+                      String textToFind = textEditingValue.text.toLowerCase();
+
+                      _autocompleteOpts = _allPeersLoader.peers
+                          .where((peer) =>
+                              peer.id.toLowerCase().contains(textToFind) ||
+                              peer.username
+                                  .toLowerCase()
+                                  .contains(textToFind) ||
+                              peer.hostname
+                                  .toLowerCase()
+                                  .contains(textToFind) ||
+                              peer.alias.toLowerCase().contains(textToFind))
+                          .toList();
+                      _allPeersLoader.queryOnlines(_autocompleteOpts);
+                    }
+                    return _autocompleteOpts;
+                  },
+                  focusNode: _idFocusNode,
+                  textEditingController: _idEditingController,
+                  fieldViewBuilder: (BuildContext context,
+                      TextEditingController fieldTextEditingController,
+                      FocusNode fieldFocusNode,
+                      VoidCallback onFieldSubmitted) {
+                    updateTextAndPreserveSelection(
+                        fieldTextEditingController, _idController.text);
+                    return AutoSizeTextField(
+                      controller: fieldTextEditingController,
+                      focusNode: fieldFocusNode,
+                      minFontSize: 16,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      keyboardType: TextInputType.visiblePassword,
+                      onChanged: (String text) {
+                        _idController.id = text;
+                      },
+                      style: TextStyle(
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.w600,
+                        fontSize: 24,
+                        letterSpacing: 0.8,
+                        color: primaryText,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                      decoration: InputDecoration(
+                        hintText: '000 000 000',
+                        hintStyle: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 22,
+                          fontWeight: FontWeight.w500,
+                          color: mutedText.withOpacity(0.45),
+                        ),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                        border: InputBorder.none,
+                      ),
+                      inputFormatters: [IDTextInputFormatter()],
+                      onSubmitted: (_) {
+                        onConnect();
+                      },
+                    );
+                  },
+                  onSelected: (option) {
+                    setState(() {
+                      _idController.id = option.id;
+                      FocusScope.of(context).unfocus();
+                    });
+                  },
+                  optionsViewBuilder: (BuildContext context,
+                      AutocompleteOnSelected<Peer> onSelected,
+                      Iterable<Peer> options) {
+                    options = _autocompleteOpts;
+                    double maxHeight = options.length * 52;
+                    if (options.length == 1) {
+                      maxHeight = 56;
+                    } else if (options.length == 3) {
+                      maxHeight = 156;
+                    } else if (options.length == 4) {
+                      maxHeight = 204;
+                    }
+                    maxHeight = maxHeight.clamp(0, 220);
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 6),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(
+                              MyTheme.mobileCardRadius),
+                          border: Border.all(color: hairline, width: 1),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.24),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(
+                              MyTheme.mobileCardRadius),
+                          child: Material(
+                            color: cardColor,
+                            elevation: 0,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxHeight: maxHeight,
+                                maxWidth: 320,
                               ),
-                              child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(5),
-                                  child: Material(
-                                      elevation: 4,
-                                      child: ConstrainedBox(
-                                          constraints: BoxConstraints(
-                                            maxHeight: maxHeight,
-                                            maxWidth: 320,
-                                          ),
-                                          child: _allPeersLoader
-                                                      .peers.isEmpty &&
-                                                  !_allPeersLoader.isPeersLoaded
-                                              ? Container(
-                                                  height: 80,
-                                                  child: Center(
-                                                      child:
-                                                          CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                  )))
-                                              : ListView(
-                                                  padding:
-                                                      EdgeInsets.only(top: 5),
-                                                  children: options
-                                                      .map((peer) =>
-                                                          AutocompletePeerTile(
-                                                              onSelect: () =>
-                                                                  onSelected(
-                                                                      peer),
-                                                              peer: peer))
-                                                      .toList(),
-                                                ))))));
-                    },
-                  ),
+                              child: _allPeersLoader.peers.isEmpty &&
+                                      !_allPeersLoader.isPeersLoaded
+                                  ? const SizedBox(
+                                      height: 80,
+                                      child: Center(
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    )
+                                  : ListView(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 4),
+                                      children: options
+                                          .map((peer) => AutocompletePeerTile(
+                                              onSelect: () => onSelected(peer),
+                                              peer: peer))
+                                          .toList(),
+                                    ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
               Obx(() => Offstage(
                     offstage: _idEmpty.value,
                     child: IconButton(
-                        onPressed: () {
-                          setState(() {
-                            _idController.clear();
-                          });
-                        },
-                        icon: Icon(Icons.clear, color: MyTheme.darkGray)),
+                      constraints:
+                          const BoxConstraints(minWidth: 40, minHeight: 40),
+                      padding: EdgeInsets.zero,
+                      onPressed: () {
+                        setState(() {
+                          _idController.clear();
+                        });
+                      },
+                      icon: Icon(Icons.close_rounded,
+                          color: mutedText, size: 20),
+                    ),
                   )),
-              IconButton(
-                icon: const Icon(Icons.power_settings_new_rounded,
-                    color: Color(0xFF0D9488), size: 28),
-                tooltip: 'Bật máy (WOL)',
-                onPressed: () {
-                  final id = _idController.id.trim();
-                  if (id.isEmpty) {
-                    showToast('Vui lòng nhập ID hoặc địa chỉ MAC cần bật');
-                    return;
-                  }
-                  wakeOnLan(id);
-                },
+              const SizedBox(width: 4),
+              Tooltip(
+                message: 'Bật máy (WOL)',
+                child: Material(
+                  color: MyTheme.statusWol.withOpacity(0.14),
+                  borderRadius:
+                      BorderRadius.circular(MyTheme.mobileControlRadius),
+                  child: InkWell(
+                    borderRadius:
+                        BorderRadius.circular(MyTheme.mobileControlRadius),
+                    onTap: () {
+                      final id = _idController.id.trim();
+                      if (id.isEmpty) {
+                        showToast('Vui lòng nhập ID hoặc địa chỉ MAC cần bật');
+                        return;
+                      }
+                      wakeOnLan(id);
+                    },
+                    child: Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(
+                            MyTheme.mobileControlRadius),
+                        border: Border.all(
+                          color: MyTheme.statusWol.withOpacity(0.4),
+                          width: 1,
+                        ),
+                      ),
+                      child: const Icon(
+                        Icons.power_settings_new_rounded,
+                        color: MyTheme.statusWol,
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                ),
               ),
-              SizedBox(
-                width: 50,
-                height: 50,
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_forward,
-                      color: MyTheme.darkGray, size: 36),
-                  onPressed: onConnect,
+              const SizedBox(width: 8),
+              Tooltip(
+                message: translate('Connect'),
+                child: Material(
+                  color: MyTheme.accent,
+                  borderRadius:
+                      BorderRadius.circular(MyTheme.mobileControlRadius),
+                  child: InkWell(
+                    borderRadius:
+                        BorderRadius.circular(MyTheme.mobileControlRadius),
+                    onTap: onConnect,
+                    child: const SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Icon(
+                        Icons.arrow_forward_rounded,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
-        ),
+        ],
       ),
     );
     final child = Column(children: [

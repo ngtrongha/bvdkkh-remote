@@ -114,10 +114,10 @@ class _PeerTabPageState extends State<PeerTabPage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Obx(() => SizedBox(
-              height: 32,
+              height: isMobile ? 44 : 32,
               child: Container(
                 padding: stateGlobal.isPortrait.isTrue
-                    ? EdgeInsets.symmetric(horizontal: 2)
+                    ? const EdgeInsets.symmetric(horizontal: 2)
                     : null,
                 child: selectionWrap(Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
@@ -141,17 +141,26 @@ class _PeerTabPageState extends State<PeerTabPage>
   Widget _createSwitchBar(BuildContext context) {
     final model = Provider.of<PeerTabModel>(context);
     var counter = -1;
+    final hairline = MyTheme.mobileHairline(context);
+    final mutedText = MyTheme.mobileMutedText(context);
+
     return ReorderableListView(
         buildDefaultDragHandles: false,
         onReorder: model.reorder,
         scrollDirection: Axis.horizontal,
-        physics: NeverScrollableScrollPhysics(),
+        physics: isMobile
+            ? const BouncingScrollPhysics()
+            : const NeverScrollableScrollPhysics(),
         children: model.visibleEnabledOrderedIndexs.map((t) {
           final selected = model.currentTab == t;
           final color = selected
-              ? MyTheme.tabbar(context).selectedTextColor
-              : MyTheme.tabbar(context).unSelectedTextColor
-            ?..withOpacity(0.5);
+              ? (isMobile
+                  ? MyTheme.accent
+                  : MyTheme.tabbar(context).selectedTextColor)
+              : (isMobile
+                  ? mutedText
+                  : MyTheme.tabbar(context).unSelectedTextColor
+                    ?..withOpacity(0.5));
           final hover = false.obs;
           final deco = BoxDecoration(
               color: Theme.of(context).colorScheme.background,
@@ -160,6 +169,16 @@ class _PeerTabPageState extends State<PeerTabPage>
               border: Border(
             bottom: BorderSide(width: 2, color: color!),
           ));
+          final mobilePillDeco = BoxDecoration(
+            color: selected
+                ? MyTheme.accent.withOpacity(0.14)
+                : MyTheme.mobileCard(context),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: selected ? MyTheme.accent.withOpacity(0.55) : hairline,
+              width: 1,
+            ),
+          );
           counter += 1;
           return ReorderableDragStartListener(
               key: ValueKey(t),
@@ -169,30 +188,41 @@ class _PeerTabPageState extends State<PeerTabPage>
                     message: model.tabTooltip(t),
                     onTriggered: isMobile ? mobileShowTabVisibilityMenu : null,
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(6),
+                      borderRadius: BorderRadius.circular(isMobile ? 999 : 6),
                       child: Container(
-                        decoration: (hover.value
-                            ? (selected ? decoBorder : deco)
-                            : (selected ? decoBorder : null)),
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        alignment: Alignment.center,
+                        decoration: isMobile
+                            ? mobilePillDeco
+                            : (hover.value
+                                ? (selected ? decoBorder : deco)
+                                : (selected ? decoBorder : null)),
+                        padding: isMobile
+                            ? const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6)
+                            : const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                        margin: isMobile
+                            ? const EdgeInsets.symmetric(vertical: 4)
+                            : EdgeInsets.zero,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(model.tabIcon(t), color: color, size: 16),
-                            if (!isMobile) ...[
-                              const SizedBox(width: 6),
-                              Text(
-                                model.tabTooltip(t),
-                                style: TextStyle(
-                                  color: color,
-                                  fontSize: 12,
-                                  fontWeight: selected ? FontWeight.bold : FontWeight.w500,
-                                ),
+                            Icon(model.tabIcon(t),
+                                color: color, size: isMobile ? 16 : 16),
+                            const SizedBox(width: 6),
+                            Text(
+                              model.tabTooltip(t),
+                              style: TextStyle(
+                                color: color,
+                                fontSize: isMobile ? 12 : 12,
+                                fontWeight: selected
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
                               ),
-                            ],
+                            ),
                           ],
                         ),
-                      ).paddingSymmetric(horizontal: 2),
+                      ).paddingSymmetric(horizontal: isMobile ? 3 : 2),
                       onTap: isOptionFixed(kOptionPeerTabIndex)
                           ? null
                           : () async {
@@ -716,10 +746,17 @@ class _PeerSearchBarState extends State<PeerSearchBar> {
           extentOffset: peerSearchTextController.value.text.length);
     });
     return Obx(() => Container(
-          width: stateGlobal.isPortrait.isTrue ? 120 : 140,
+          width: stateGlobal.isPortrait.isTrue ? 136 : 148,
+          height: isMobile ? 36 : null,
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.background,
-            borderRadius: BorderRadius.circular(6),
+            color: isMobile
+                ? MyTheme.mobileCard(context)
+                : Theme.of(context).colorScheme.background,
+            borderRadius:
+                BorderRadius.circular(isMobile ? MyTheme.mobileControlRadius : 6),
+            border: isMobile
+                ? Border.all(color: MyTheme.mobileHairline(context), width: 1)
+                : null,
           ),
           child: Row(
             children: [

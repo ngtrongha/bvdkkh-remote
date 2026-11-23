@@ -283,27 +283,31 @@ class _FileManagerPageState extends State<FileManagerPage> {
       child: Scaffold(
         // backgroundColor: MyTheme.grayBg,
         appBar: AppBar(
+          elevation: 0,
+          backgroundColor: MyTheme.mobileSurface(context),
+          foregroundColor: MyTheme.mobilePrimaryText(context),
           leading: Row(children: [
             IconButton(
-                icon: Icon(Icons.close),
+                icon: const Icon(Icons.close_rounded),
                 onPressed: () => clientClose(gFFI.sessionId, gFFI)),
           ]),
           centerTitle: true,
           title: ToggleSwitch(
             initialLabelIndex: showLocal ? 0 : 1,
-            activeBgColor: [MyTheme.idColor],
-            inactiveBgColor: Theme.of(context).brightness == Brightness.light
-                ? MyTheme.grayBg
-                : null,
-            inactiveFgColor: Theme.of(context).brightness == Brightness.light
-                ? Colors.black54
-                : null,
+            activeBgColor: const [MyTheme.accent],
+            activeFgColor: Colors.white,
+            inactiveBgColor: MyTheme.mobileCard(context),
+            inactiveFgColor: MyTheme.mobileMutedText(context),
+            borderColor: [MyTheme.mobileHairline(context)],
+            borderWidth: 1,
+            cornerRadius: 10,
             totalSwitches: 2,
             minWidth: 100,
-            fontSize: 15,
-            iconSize: 18,
+            minHeight: 36,
+            fontSize: 13,
+            iconSize: 16,
             labels: [translate("Local"), translate("Remote")],
-            icons: [Icons.phone_android_sharp, Icons.screen_share],
+            icons: const [Icons.phone_android_rounded, Icons.desktop_windows_rounded],
             onToggle: (index) {
               final current = showLocal ? 0 : 1;
               if (index != current) {
