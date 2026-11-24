@@ -183,56 +183,87 @@ class _PeerTabPageState extends State<PeerTabPage>
           return ReorderableDragStartListener(
               key: ValueKey(t),
               index: counter,
-              child: Obx(() => Tooltip(
-                    preferBelow: false,
-                    message: model.tabTooltip(t),
-                    onTriggered: isMobile ? mobileShowTabVisibilityMenu : null,
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(isMobile ? 999 : 6),
-                      child: Container(
-                        alignment: Alignment.center,
-                        decoration: isMobile
-                            ? mobilePillDeco
-                            : (hover.value
-                                ? (selected ? decoBorder : deco)
-                                : (selected ? decoBorder : null)),
-                        padding: isMobile
-                            ? const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6)
-                            : const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4),
-                        margin: isMobile
-                            ? const EdgeInsets.symmetric(vertical: 4)
-                            : EdgeInsets.zero,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(model.tabIcon(t),
-                                color: color, size: isMobile ? 16 : 16),
-                            const SizedBox(width: 6),
-                            Text(
-                              model.tabTooltip(t),
-                              style: TextStyle(
-                                color: color,
-                                fontSize: isMobile ? 12 : 12,
-                                fontWeight: selected
-                                    ? FontWeight.w600
-                                    : FontWeight.w500,
+              child: isMobile
+                  ? Tooltip(
+                      preferBelow: false,
+                      message: model.tabTooltip(t),
+                      onTriggered: mobileShowTabVisibilityMenu,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(999),
+                        onTap: isOptionFixed(kOptionPeerTabIndex)
+                            ? null
+                            : () async {
+                                await handleTabSelection(t);
+                                await bind.setLocalFlutterOption(
+                                    k: kOptionPeerTabIndex, v: t.toString());
+                              },
+                        child: Container(
+                          alignment: Alignment.center,
+                          decoration: mobilePillDeco,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 6),
+                          margin: const EdgeInsets.symmetric(
+                              horizontal: 3, vertical: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(model.tabIcon(t), color: color, size: 16),
+                              const SizedBox(width: 6),
+                              Text(
+                                model.tabTooltip(t),
+                                style: TextStyle(
+                                  color: color,
+                                  fontSize: 12,
+                                  fontWeight: selected
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ).paddingSymmetric(horizontal: isMobile ? 3 : 2),
-                      onTap: isOptionFixed(kOptionPeerTabIndex)
-                          ? null
-                          : () async {
-                              await handleTabSelection(t);
-                              await bind.setLocalFlutterOption(
-                                  k: kOptionPeerTabIndex, v: t.toString());
-                            },
-                      onHover: (value) => hover.value = value,
-                    ),
-                  )));
+                      ),
+                    )
+                  : Obx(() => Tooltip(
+                        preferBelow: false,
+                        message: model.tabTooltip(t),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(6),
+                          child: Container(
+                            alignment: Alignment.center,
+                            decoration: hover.value
+                                ? (selected ? decoBorder : deco)
+                                : (selected ? decoBorder : null),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(model.tabIcon(t), color: color, size: 16),
+                                const SizedBox(width: 6),
+                                Text(
+                                  model.tabTooltip(t),
+                                  style: TextStyle(
+                                    color: color,
+                                    fontSize: 12,
+                                    fontWeight: selected
+                                        ? FontWeight.w600
+                                        : FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ).paddingSymmetric(horizontal: 2),
+                          onTap: isOptionFixed(kOptionPeerTabIndex)
+                              ? null
+                              : () async {
+                                  await handleTabSelection(t);
+                                  await bind.setLocalFlutterOption(
+                                      k: kOptionPeerTabIndex, v: t.toString());
+                                },
+                          onHover: (value) => hover.value = value,
+                        ),
+                      )));
         }).toList());
   }
 
