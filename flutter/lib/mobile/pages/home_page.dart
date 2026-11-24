@@ -231,20 +231,29 @@ class HomePageState extends State<HomePage> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 30,
-          height: 30,
+          width: 32,
+          height: 32,
           decoration: BoxDecoration(
-            color: MyTheme.accent.withOpacity(0.14),
-            borderRadius: BorderRadius.circular(8),
+            color: Colors.white,
+            shape: BoxShape.circle,
             border: Border.all(
-              color: MyTheme.accent.withOpacity(0.35),
+              color: MyTheme.mobileHairline(context),
               width: 1,
             ),
           ),
-          child: const Icon(
-            Icons.health_and_safety_rounded,
-            size: 18,
-            color: MyTheme.accent,
+          padding: const EdgeInsets.all(2),
+          child: ClipOval(
+            child: Image.asset(
+              'assets/logo.png',
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Center(
+                child: Icon(
+                  Icons.local_hospital_rounded,
+                  size: 18,
+                  color: MyTheme.accent,
+                ),
+              ),
+            ),
           ),
         ),
         const SizedBox(width: 10),
